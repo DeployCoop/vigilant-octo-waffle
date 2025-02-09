@@ -26,16 +26,16 @@ server:
     ingressClassName: "nginx"
     activeService: true
     hosts:
-      - host: bao.${THIS_DOMAIN}
+      - host: ${THIS_BAO_HOST}.${THIS_DOMAIN}
         paths: []
     tls:
       - secretName: chart-${THIS_NAMESPACE}-openbao-tls
         hosts:
-          - bao.${THIS_DOMAIN}
+          - ${THIS_BAO_HOST}.${THIS_DOMAIN}
   hostAliases:
     - ip: 127.0.0.1
       hostnames:
-        - bao.${THIS_DOMAIN}
+        - ${THIS_BAO_HOST}.${THIS_DOMAIN}
   authDelegator:
     enabled: true
   # This configures the OpenBao Statefulset to create a PVC for data

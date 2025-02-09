@@ -17,7 +17,7 @@ spec:
   ingressClassName: nginx
   #ingressClassName: traefik
   rules:
-  - host: baoui.${THIS_DOMAIN}
+  - host: ${THIS_BAOUI_HOST}.${THIS_DOMAIN}
     http:
       paths:
       - backend:
@@ -29,5 +29,5 @@ spec:
         pathType: Prefix
   tls:
   - hosts:
-    - baoui.${THIS_DOMAIN}
-    secretName: chart-${THIS_NAMESPACE}-baoui-tls
+    - ${THIS_BAOUI_HOST}.${THIS_DOMAIN}
+    secretName: chart-${THIS_NAMESPACE}-${THIS_BAOUI_HOST}-tls

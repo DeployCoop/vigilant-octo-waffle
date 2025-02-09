@@ -29,7 +29,7 @@ main () {
   #set +e
   w8_ingress argocd argocd-server-ingress 
   set -x
-  sleep 5
+  sleep 15
 
   cd $this_cwd
   ./src/argocd-init-pass.sh
