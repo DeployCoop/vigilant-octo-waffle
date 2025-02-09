@@ -1,5 +1,5 @@
 #!/bin/bash
-source ./w8.bash
+source ./src/w8.bash
 this_cwd=$(pwd)
 
 main () {

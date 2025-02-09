@@ -51,7 +51,7 @@ spec:
          LDAPTLS_REQCERT: "never"
          LDAP_ENABLE_TLS: "yes"
          LDAP_SKIP_DEFAULT_TREE: "no"
-         LDAP_ORGANISATION: "example org"
+         LDAP_ORGANISATION: "${THIS_NAME} ${THIS_TLD}"
            #LDAP_EXTRA_SCHEMAS: "cosine,dyngroup,inetorgperson,nis"
          # LDAP_CUSTOM_SCHEMA_DIR: "/opt/bitnami/openldap/etc/schema"
         pdb:
@@ -85,31 +85,31 @@ spec:
         customLdifFiles:
           00-root.ldif: |-
             # Root creation
-            dn: dc=example,dc=com
+            dn: dc=${THIS_NAME},dc=${THIS_TLD}
             objectClass: dcObject
             objectClass: organization
-            o: Example, Inc
+            o: ${THIS_NAME}
           01-default-group.ldif: |-
-            dn: cn=myGroup,dc=example,dc=com
+            dn: cn=myGroup,dc=${THIS_NAME},dc=${THIS_TLD}
             cn: myGroup
             gidnumber: 500
             objectclass: posixGroup
             objectclass: top
           03-default-users.ldif: |-
-            dn: ou=users,dc=example,dc=com
+            dn: ou=users,dc=${THIS_NAME},dc=${THIS_TLD}
             objectClass: organizationalUnit
             ou: users
           04-default-readers.ldif: |-
-            dn: cn=readers,ou=users,dc=example,dc=com
+            dn: cn=readers,ou=users,dc=${THIS_NAME},dc=${THIS_TLD}
             cn: readers
             objectClass: groupOfNames
-            member: cn=Jean Dupond,dc=example,dc=com
+            member: cn=Jean Dupond,dc=${THIS_NAME},dc=${THIS_TLD}
         persistence:
           enabled: true
           accessModes:
             - ReadWriteOnce
           size: 8Gi
-          storageClass: "example-hostpath"
+          storageClass: "${THIS_NAME}-hostpath"
         serviceAccount:
           create: true
           name: ""
@@ -131,11 +131,11 @@ spec:
             path: /
             pathType: Prefix
             hosts:
-            - "ltb.${THIS_DOMAIN}"
+            - "${THIS_LTB_HOST}.${THIS_DOMAIN}"
             tls: 
-              - secretName: ltb.${THIS_DOMAIN}
+              - secretName: ${THIS_LTB_HOST}.${THIS_DOMAIN}
                 hosts:
-                - ltb.${THIS_DOMAIN}
+                - ${THIS_LTB_HOST}.${THIS_DOMAIN}
         phpldapadmin:
           enabled: true
           image:
@@ -153,8 +153,8 @@ spec:
             path: /
             pathType: Prefix
             hosts:
-            - phpldapadmin.${THIS_DOMAIN}
+            - ${THIS_PHPLDAPADMIN_HOST}.${THIS_DOMAIN}
             tls:
-              - secretName: phpldapadmin.${THIS_DOMAIN}
+              - secretName: ${THIS_PHPLDAPADMIN_HOST}.${THIS_DOMAIN}
                 hosts:
-                - phpldapadmin.${THIS_DOMAIN}
+                - ${THIS_PHPLDAPADMIN_HOST}.${THIS_DOMAIN}

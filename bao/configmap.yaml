@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+ name: openbao-config
+ namespace: example
+data:
+ openbao-values.yaml: |
+   {{ .Values.additionalConfig | indent 4 }}
+ config.yaml: |
+    security:
+      barrier:
+        enabled: true
+    seal:
+      enabled: true
+      key: ${seal_key}
+
