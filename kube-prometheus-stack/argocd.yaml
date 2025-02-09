@@ -1,0 +1,21 @@
+metadata:
+  name: prometheus
+  namespace: argocd
+spec:
+  destination:
+    namespace: monitoring
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: kube-prometheus-stack
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      valueFiles:
+        - ./values.yaml
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=true

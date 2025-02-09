@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${THIS_NAMESPACE}nc-postgres-conf
+  namespace: ${THIS_NAMESPACE}
+data:
+  primary_init_script.sh: |
+    #!/bin/bash
+    set -e
+    echo primary_init_script.sh
+
+    # This script assumes that the env-var  contains the password of the custom user to create.
+    # You can add any env-var in your Kubegres resource config YAML.
+
+    dt=$(date '+%d/%m/%Y %H:%M:%S');
+    echo " - Running init script the 1st time Primary PostgreSql container is created...";
+    make_db () {
+    customDatabaseName="$1"
+    customUserName="$2"
+    customPassword="$3"
+    echo " - Running: psql -v ON_ERROR_STOP=1 --username $POSTGRES_USER --dbname $POSTGRES_DB ...";
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    CREATE DATABASE $customDatabaseName;
+    CREATE USER $customUserName WITH PASSWORD '$customPassword';
+    GRANT ALL PRIVILEGES ON DATABASE "$customDatabaseName" to $customUserName;
+    ALTER DATABASE "$customDatabaseName" SET bytea_output = 'escape';
+    EOSQL
+    }
+
+    make_db ${THIS_NAMESPACE}ncdb ${THIS_NAMESPACE}nc $POSTGRES_TEKROMANCY_DB_PASSWORD
+    echo "$dt - Init script is completed";
+---
+apiVersion: kubegres.reactive-tech.io/v1
+kind: Kubegres
+metadata:
+  name: ${THIS_NAMESPACE}nc-postgres
+  namespace: ${THIS_NAMESPACE}
+
+spec:
+
+   replicas: 1
+   image: postgres:14-alpine
+
+   database:
+      size: 8000Mi
+      storageClassName: ${THIS_NAMESPACE}-hostpath
+
+   customConfig: ${THIS_NAMESPACE}nc-postgres-conf
+
+   env:
+      - name: POSTGRES_PASSWORD
+        valueFrom:
+           secretKeyRef:
+              name: ${THIS_NAMESPACE}nc-secrets
+              key: db-admin-pass
+      - name: POSTGRES_REPLICATION_PASSWORD
+        valueFrom:
+           secretKeyRef:
+              name: ${THIS_NAMESPACE}nc-secrets
+              key: replicationUserPassword
+      - name: POSTGRES_TEKROMANCY_DB_PASSWORD
+        valueFrom:
+            secretKeyRef:
+              name: ${THIS_NAMESPACE}nc-secrets
+              key: db-password 

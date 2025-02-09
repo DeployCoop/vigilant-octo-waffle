@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: ${THIS_NAMESPACE}
+  syncPolicy:
+    # Equivalent to `--sync-policy automated`
+    automated:
+      prune: true      # (Optional) cleans up removed resources
+      selfHeal: true   # (Optional) attempts to revert out-of-sync resources
+  source:
+    path: openbao
+    repoURL: https://github.com/joshuacox/argocd-tests.git
+    targetRevision: HEAD 
+    helm:
+      releaseName: "openbao"
+      # Reference your custom values file
+      #valueFiles:
+        #- "./openbao-values.yaml"
+      # Replicate `--helm-set` flags using Helm parameters
+      parameters:
+      - name: replicaCount
+        value: "2"
+      - name: image.repository
+        value: "openbao/openbao"
+      valueFiles:
+        - ../bao/values.yaml
+      values: |
+        global:
+          enabled: true
