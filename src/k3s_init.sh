@@ -8,7 +8,7 @@ export THIS_IP=$(curl icanhazip.com)
 
 echo "export K3S_TOKEN=${SECRET}" >> ${THIS_FILE}
 
-curl -sfL https://get.k3s.io | sh -s - server \
+echo 'curl -sfL https://get.k3s.io | sh -s - server \
     --cluster-init \' >> ${THIS_FILE}
 
 echo '    --tls-san=${THIS_IP}
