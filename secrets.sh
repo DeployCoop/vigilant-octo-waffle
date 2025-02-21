@@ -1,8 +1,15 @@
 #!/bin/bash
-source .env
-
 KEY_FILE=./.${THIS_NAME}nc-plain-secrets.yaml
 SECRET_FILE=./${THIS_NAME}nc-secrets.yaml 
+
+cmd_check () {
+  CMD_2_CHECK=$1
+  if ! command -v ${CMD_2_CHECK} 2>&1 >/dev/null; then
+    echo "${CMD_2_CHECK} could not be found!"
+    exit 1
+  fi
+}
+
 
 phile_checkr () {
 if [[ $# -eq 1 ]]; then
@@ -37,10 +44,12 @@ munger () {
     PASS_LENGTH=$2
     RANDO_METHOD=$3
     if [[ ${RANDO_METHOD} == 'tr' ]]; then
+      cmd_check tr
       SECRET=$(< /dev/random tr -dc _A-Z-a-z-0-9 | head -c${PASS_LENGTH})
     elif [[ ${RANDO_METHOD} == 'pwgen' ]]; then
       SECRET=pwgen ${PASS_LENGTH} 1
     elif [[ ${RANDO_METHOD} == 'openssl' ]]; then
+      cmd_check openssl
       SECRET=$(openssl rand -base64 ${PASS_LENGTH})
     else
       echo 'ERROR: unrecognized method!'; exit 1
@@ -53,6 +62,14 @@ munger () {
   liner ${KEY_NAME} $based ${SECRET}
 }
 
+
+main () {
+if [[ -f .env ]]; then
+source .env
+else
+  echo ".env file does not exist, copy .env.example to .env and start there"
+fi
+cmd_check pwgen
 # make the headers
 cat << EOF > $SECRET_FILE
 apiVersion: v1
@@ -89,3 +106,6 @@ munger "replicationUserPassword:"
 munger "smtp-username:" "mailadmin@${THIS_NAME}.com"
 munger "smtp-password:" 
 munger "smtp-host:" "mail.${THIS_NAME}.com"
+}
+
+time main $@
