@@ -16,11 +16,8 @@ main () {
   envsubst < openldap/argocd.yaml | argocd app create --name example-openldap --grpc-web -f -
   envsubst < nc/argocd.yaml | argocd app create --name examplenc --grpc-web -f -
   envsubst < bao/openbao-argo-deployment.yaml | argocd app create --name openbao --grpc-web -f -
-  cd ${this_cwd}/bao
-  ./openbao.sh
   #kubectl apply -f openbaoui-ingress.yaml
   initializer ${this_cwd}/src/bao_init
-  cd ${this_cwd}
 }
 
 time main
