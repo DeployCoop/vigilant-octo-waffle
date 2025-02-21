@@ -5,9 +5,22 @@ source ./src/initializer.bash
 this_cwd=$(pwd)
 
 main () {
-  set -eu
   ./secrets.sh
-  kind create cluster --config=./src/kind-config.yaml
+  if [[ $K8S_TYPE == "kind" ]]; then
+    ./kindup.sh
+  elif [[ $K8S_TYPE == "k3s" ]]; then
+    kubectl get nodes
+    if [[ $? == 0 ]]; then
+      echo "kube cluster is installed, proceeding"
+    else
+      echo "kube cluster is not installed, exiting"
+      exit 1
+    fi
+  else
+    echo "K8S_TYPE is not set, aborting!"
+    exit 1
+  fi
+  set -eu
   #kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
   cd $this_cwd/src
   ./nginx.sh
@@ -28,7 +41,7 @@ main () {
   #sleep 3
   #set +e
   w8_ingress argocd argocd-server-ingress 
-  set -x
+  set -xn
   sleep 15
 
   cd $this_cwd
