@@ -6,7 +6,8 @@ echo '#!/bin/bash
 export THIS_IP=$(curl icanhazip.com)
 ' >> ${THIS_FILE}
 
-echo 'export K3S_TOKEN=${SECRET}
+echo "export K3S_TOKEN=${SECRET}" >> ${THIS_FILE}
+
 curl -sfL https://get.k3s.io | sh -s - server \
     --cluster-init \' >> ${THIS_FILE}
 
