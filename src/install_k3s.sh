@@ -1,4 +1,4 @@
 #!/bin/sh
-THIS_IP=$(curl icanhazip.com)
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --tls-san $THIS_IP" sh -s - \
-	--flannel-backend=wireguard-native
+export THIS_IP=$(curl icanhazip.com)
+export INSTALL_K3S_EXEC="server --tls-san $THIS_IP --cluster-init --flannel-backend=wireguard-native"
+curl -sfL https://get.k3s.io | sh -s -
