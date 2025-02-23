@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 KEY_FILE=./.${THIS_NAME}nc-plain-secrets.yaml
 SECRET_FILE=./${THIS_NAME}nc-secrets.yaml 
 

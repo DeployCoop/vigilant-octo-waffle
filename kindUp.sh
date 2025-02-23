@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 source ./.env
 source ./src/w8.bash
 source ./src/initializer.bash

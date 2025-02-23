@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -eux
 source ./initializer.bash
 helm upgrade --install \

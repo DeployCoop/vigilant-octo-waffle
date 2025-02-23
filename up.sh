@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 source ./.env
 source ./src/w8.bash
 source ./src/initializer.bash
@@ -7,7 +7,9 @@ this_cwd=$(pwd)
 main () {
   ./secrets.sh
   if [[ $K8S_TYPE == "kind" ]]; then
-    ./kindup.sh
+    ./kindDown.sh
+    sleep 1
+    ./kindUp.sh
   elif [[ $K8S_TYPE == "k3s" ]]; then
     kubectl get nodes
     if [[ $? == 0 ]]; then
