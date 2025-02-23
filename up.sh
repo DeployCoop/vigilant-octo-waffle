@@ -25,7 +25,11 @@ main () {
   set -eu
   #kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
   cd $this_cwd/src
-  ./nginx.sh
+  if [[ $K8S_TYPE == "kind" ]]; then
+    ./nginx.sh
+  else
+    echo 'k3s uses traefik'
+  fi
   ./openebs.sh
   ./certmanager.sh
   ./argocd.sh
