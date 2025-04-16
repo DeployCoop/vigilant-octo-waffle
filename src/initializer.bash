@@ -22,3 +22,11 @@ initializer () {
     envsubst < ${f} | kubectl apply -f -
   done
 }
+
+check_docker () {
+docker ps
+if [[ ! $? -eq 0 ]]; then
+  sudo systemctl restart docker
+  sleep 2
+fi
+}
