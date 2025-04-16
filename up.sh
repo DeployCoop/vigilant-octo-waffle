@@ -48,7 +48,11 @@ main () {
   kubectl_native_wait kubegres-system $(kubectl get po -n kubegres-system|grep kubegres-controller-manager|cut -f1 -d ' ')
   set -e
   echo "Deploying DeployCoop components:"
+  cd $this_cwd
   initializer $this_cwd/src/cluster_init
+  cd $this_cwd
+  ./src/keycloak.sh
+  initializer $this_cwd/src/keycloak_init
 
   echo 'w8 argocd'
   w8_ingress argocd argocd-server-ingress 
@@ -56,7 +60,6 @@ main () {
   echo 'init argo pass'
   cd $this_cwd
   ./src/argocd-init-pass.sh
-
   ./src/part2.sh
 }
 
