@@ -5,6 +5,7 @@ source ./src/initializer.bash
 this_cwd=$(pwd)
 
 main () {
+  set -e
   ./secrets.sh
   if [[ $K8S_TYPE == "kind" ]]; then
     ./kindDown.sh
@@ -34,22 +35,25 @@ main () {
   ./certmanager.sh
   ./argocd.sh
   ./kubegres.sh
+
+  # no stop error block for the w8s which might have errant errors as they wait
   set +e
+  # kubegres
   w8_pod kubegres-system kubegres-controller-manager
+  #openEBS
   w8_pod openebs openebs-localpv-provisioner
   w8_pod openebs openebs-lvm-localpv-controller
   w8_pod openebs openebs-lvm-localpv-node
+  # wait on kubegres to settle
   kubectl_native_wait kubegres-system $(kubectl get po -n kubegres-system|grep kubegres-controller-manager|cut -f1 -d ' ')
   set -e
   echo "Deploying DeployCoop components:"
   initializer $this_cwd/src/cluster_init
 
-  #sleep 3
-  #set +e
+  echo 'w8 argocd'
   w8_ingress argocd argocd-server-ingress 
-  set -xn
   sleep 15
-
+  echo 'init argo pass'
   cd $this_cwd
   ./src/argocd-init-pass.sh
 
