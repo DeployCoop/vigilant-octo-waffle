@@ -16,7 +16,6 @@ initializer () {
   these_files=$(find ${THIS_INIT} -iname '*.yaml')
   for f in ${these_files[@]}; do
     echo "subbing ${f}"
-    #export DEBUG=true
     if [[ "${DEBUG}" == "true" ]]; then
       envsubst < ${f}
     fi
