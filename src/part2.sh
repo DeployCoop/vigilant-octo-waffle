@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 source ./src/w8.bash
 source ./src/initializer.bash
 this_cwd=$(pwd)

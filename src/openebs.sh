@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -eux
 source ./initializer.bash
 #helm repo add openebs https://openebs.github.io/openebs

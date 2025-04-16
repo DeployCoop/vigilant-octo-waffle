@@ -5,7 +5,7 @@ metadata:
   namespace: ${THIS_NAMESPACE}
 data:
   primary_init_script.sh: |
-    #!/bin/bash
+    #!/usr/bin/env bash
     set -e
     echo primary_init_script.sh
 
