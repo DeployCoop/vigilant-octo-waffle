@@ -15,6 +15,7 @@ spec:
   tls:
     - hosts:
         - ${THIS_KEYCLOAK_HOST}.${THIS_DOMAIN}
+    secretName: chart-${THIS_NAMESPACE}-${THIS_KEYCLOAK_HOST}-tls
   rules:
     - host: ${THIS_KEYCLOAK_HOST}.${THIS_DOMAIN}
       http:
