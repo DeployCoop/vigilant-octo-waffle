@@ -51,7 +51,6 @@ main () {
   cd $this_cwd
   initializer $this_cwd/src/cluster_init
   cd $this_cwd
-  ./src/keycloak.sh
   initializer $this_cwd/src/keycloak_init
 
   echo 'w8 argocd'
