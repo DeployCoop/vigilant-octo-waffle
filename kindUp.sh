@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-source ./.env
-source ./src/w8.bash
 source ./src/check_cmd.bash
 check_cmd kind
+source ./.env
+source ./src/w8.bash
 source ./src/initializer.bash
 this_cwd=$(pwd)
 

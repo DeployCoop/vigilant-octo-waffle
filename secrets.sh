@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 source ./src/check_cmd.bash
+check_cmd pwgen
 KEY_FILE=./.${THIS_NAME}nc-plain-secrets.yaml
 SECRET_FILE=./${THIS_NAME}nc-secrets.yaml 
 
@@ -61,7 +62,6 @@ source .env
 else
   echo ".env file does not exist, copy .env.example to .env and start there"
 fi
-check_cmd pwgen
 # make the headers
 cat << EOF > $SECRET_FILE
 apiVersion: v1
