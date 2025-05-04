@@ -57,10 +57,10 @@ spec:
             ingressClassName: ${THIS_CLUSTER_INGRESS}
             activeService: true
             hosts:
-              - ${THIS_BAO_HOST}.${THIS_DOMAIN}
+              - host: ${THIS_BAO_HOST}.${THIS_DOMAIN}
                 paths: []
             tls:
-              - secretName: chart-${THIS_BAO_HOST}.${THIS_DOMAIN}-tls
+              - secretName: chart-${THIS_BAO_HOST}-${THIS_DOMAIN}-tls
                 hosts:
                   - ${THIS_BAO_HOST}.${THIS_DOMAIN}
           hostAliases:
