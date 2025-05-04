@@ -19,11 +19,11 @@ server:
     enabled: true
     annotations:
       nginx.ingress.kubernetes.io/rewrite-target: /
-      cert-manager.io/cluster-issuer: mkcert-issuer
-      spec.ingressClassName: nginx
+      cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+      spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
     # Optionally use ingressClassName instead of deprecated annotation.
     # See: https://kubernetes.io/docs/concepts/services-networking/ingress/#deprecated-annotation
-    ingressClassName: "nginx"
+    ingressClassName: ${THIS_CLUSTER_INGRESS}
     activeService: true
     hosts:
       - host: ${THIS_BAO_HOST}.${THIS_DOMAIN}

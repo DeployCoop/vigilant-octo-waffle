@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source .env
 source ./src/w8.bash
 this_cwd=$(pwd)
 
@@ -17,7 +18,7 @@ main () {
   PASSWORD_ARGO=$(argocd admin initial-password -n argocd|head -n 1)
 
   set -x
-  argocd login argocd.example.com \
+  argocd login ${THIS_ARGO_HOST}.${THIS_DOMAIN} \
     --password ${PASSWORD_ARGO} \
     --username admin \
     --grpc-web
@@ -30,7 +31,7 @@ main () {
     --new-password  ${admin_pass} \
     --grpc-web
 
-  argocd login argocd.example.com \
+  argocd login ${THIS_ARGO_HOST}.${THIS_DOMAIN} \
     --password  ${admin_pass} \
     --username admin \
     --grpc-web

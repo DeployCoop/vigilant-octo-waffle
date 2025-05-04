@@ -126,8 +126,8 @@ spec:
               nginx.ingress.kubernetes.io/ssl-passthrough: "true"
               nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
               nginx.ingress.kubernetes.io/rewrite-target: /
-              cert-manager.io/cluster-issuer: mkcert-issuer
-            ingressClassName: nginx
+              cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+            ingressClassName: ${THIS_CLUSTER_INGRESS}
             path: /
             pathType: Prefix
             hosts:
@@ -148,8 +148,8 @@ spec:
               nginx.ingress.kubernetes.io/ssl-passthrough: "true"
               nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
               nginx.ingress.kubernetes.io/rewrite-target: /
-              cert-manager.io/cluster-issuer: mkcert-issuer
-            ingressClassName: nginx
+              cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+            ingressClassName: ${THIS_CLUSTER_INGRESS}
             path: /
             pathType: Prefix
             hosts:

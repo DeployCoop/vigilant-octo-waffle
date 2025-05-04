@@ -15,6 +15,7 @@ main () {
   envsubst < kube-prometheus-stack/argocd.yaml | argocd app create --name example-prometheus-stack --grpc-web -f - 
   envsubst < openldap/argocd.yaml | argocd app create --name example-openldap --grpc-web -f -
   envsubst < nc/argocd.yaml | argocd app create --name examplenc --grpc-web -f -
+  envsubst < supabase/argocd.yaml | argocd app create --name supabase --grpc-web -f -
   envsubst < bao/openbao-argo-deployment.yaml | argocd app create --name openbao --grpc-web -f -
   #kubectl apply -f openbaoui-ingress.yaml
   initializer ${this_cwd}/src/bao_init
