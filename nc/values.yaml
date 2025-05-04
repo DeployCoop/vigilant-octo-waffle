@@ -94,7 +94,7 @@ nextcloud:
   containerPort: 80
   datadir: /var/www/html/data
   persistence:
-    storageClass: "example-hostpath"
+    storageClass:  "${THIS_STORAGECLASS}"
     subPath:
   # if set, we'll template this list to the NEXTCLOUD_TRUSTED_DOMAINS env var
   trustedDomains:
@@ -142,7 +142,7 @@ nextcloud:
       # autocreate the bucket
       autoCreate: false
       # optonal parameter: you probably want to keep this as default
-      storageClass: "STANDARD"
+      storageClass:  "${THIS_STORAGECLASS}"
       # server side encryption key. learn more: https://docs.nextcloud.com/server/latest/admin_manual/configuration_files/primary_storage.html#s3-sse-c-encryption-support
       sse_c_key: ""
       # use an existingSecret for S3 credentials. If set, we ignore the following under nextcloud.objectStore.s3
@@ -364,7 +364,7 @@ externalDatabase:
     databaseKey: db-name
 
   global:
-    defaultStorageClass: "example-hostpath"
+    defaultStorageClass:  "${THIS_STORAGECLASS}"
 
   auth:
     database: nextcloud
@@ -378,7 +378,7 @@ externalDatabase:
     persistence:
       enabled: false
       existingClaim: ""
-      storageClass: ""
+      storageClass:  "${THIS_STORAGECLASS}"
       accessMode: ReadWriteOnce
       size: 8Gi
 postgresql:
@@ -396,7 +396,7 @@ postgresql:
   primary:
     persistence:
       enabled: true
-      storageClass: "example-hostpath"
+      storageClass:  "${THIS_STORAGECLASS}"
 redis:
   enabled: false
   auth:
@@ -404,7 +404,7 @@ redis:
     existingSecret: "examplenc-secrets"
     existingSecretPasswordKey: "redis-pass"
   global:
-    storageClass: "example-hostpath"
+    storageClass:  "${THIS_STORAGECLASS}"
   master:
     persistence:
       enabled: true
@@ -465,8 +465,8 @@ service:
 persistence:
   enabled: true
   annotations:
-  storageClass: "example-hostpath"
-  storageClassName: "example-hostpath"
+  storageClass:   "${THIS_STORAGECLASS}"
+  storageClassName:  "${THIS_STORAGECLASS}"
 
   accessMode: ReadWriteOnce
   size: 8Gi
@@ -475,9 +475,7 @@ persistence:
     enabled: true
     subPath:
     annotations: {}
-    # storageClass: "-"
-    # storageClass: "example-hostpath"
-    storageClass: "example-hostpath"
+    storageClass:  "${THIS_STORAGECLASS}"
     # existingClaim:
     accessMode: ReadWriteOnce
     size: 8Gi

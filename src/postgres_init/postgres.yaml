@@ -44,7 +44,7 @@ spec:
 
    database:
       size: 8000Mi
-      storageClassName: ${THIS_NAMESPACE}-hostpath
+      storageClassName:  "${THIS_STORAGECLASS}"
 
    customConfig: ${THIS_NAMESPACE}nc-postgres-conf
 

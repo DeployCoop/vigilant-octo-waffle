@@ -49,7 +49,7 @@ spec:
             initialDelaySeconds: 3
           persistence:
             enabled: true
-            storageClassName: "openebs-lvmpv"
+            storageClassName:  "${THIS_STORAGECLASS}"
             annotations: {}
             size: 8Gi
             accessModes:
@@ -110,7 +110,7 @@ spec:
             initialDelaySeconds: 3
           persistence:
             enabled: true
-            storageClassName: "openebs-lvmpv"
+            storageClassName:  "${THIS_STORAGECLASS}"
             annotations: {}
             size: 8Gi
             accessModes:
@@ -130,7 +130,7 @@ spec:
             initialDelaySeconds: 3
           persistence:
             enabled: true
-            storageClassName: "openebs-lvmpv"
+            storageClassName:  "${THIS_STORAGECLASS}"
             annotations: {}
             size: 8Gi
             accessModes:

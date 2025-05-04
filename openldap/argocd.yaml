@@ -109,7 +109,7 @@ spec:
           accessModes:
             - ReadWriteOnce
           size: 8Gi
-          storageClass: "${THIS_NAME}-hostpath"
+          storageClass:  "${THIS_STORAGECLASS}"
         serviceAccount:
           create: true
           name: ""
