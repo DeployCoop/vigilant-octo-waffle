@@ -5,7 +5,7 @@ check_cmd argocd
 source ./.env
 source ./src/w8.bash
 source ./src/initializer.bash
-this_cwd=$(pwd)
+export this_cwd=$(pwd)
 
 main () {
   set -e
@@ -51,10 +51,10 @@ main () {
   kubectl_native_wait kubegres-system $(kubectl get po -n kubegres-system|grep kubegres-controller-manager|cut -f1 -d ' ')
   set -e
   echo "Deploying DeployCoop components:"
-  cd $this_cwd
-  initializer $this_cwd/src/cluster_init
-  cd $this_cwd
-  initializer $this_cwd/src/keycloak_init
+  cd "$this_cwd"
+  initializer "$this_cwd/init/cluster"
+  cd "$this_cwd"
+  initializer "$this_cwd/init/keycloak"
 
   echo 'w8 argocd'
   w8_ingress argocd argocd-server-ingress 

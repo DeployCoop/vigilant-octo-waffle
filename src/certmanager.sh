@@ -14,7 +14,7 @@ kubectl -n cert-manager get pod
 set +e
 ./mkcert.sh
 set -e
-initializer ./certmanager_init
+initializer "${this_cwd}/init/certmanager"
 kubectl get ClusterIssuer -A
 kubectl describe clusterissuer letsencrypt-staging
 kubectl describe clusterissuer letsencrypt-production

@@ -1,16 +1,14 @@
-# Static table lookup for hostnames.
-# See hosts(5) for details.
-127.0.0.1 localhost
-127.0.0.1 example.com
-127.0.0.1 alertmanager.example.com
-127.0.0.1 argocd.example.com
-127.0.0.1 bao.example.com
-127.0.0.1 baoui.example.com
-127.0.0.1 collabora.example.com
-127.0.0.1 grafana.example.com
-127.0.0.1 keycloak.example.com
-127.0.0.1 ltb.example.com
-127.0.0.1 nextcloud.example.com
-127.0.0.1 phpldapadmin.example.com
-127.0.0.1 prometheus.example.com
-127.0.0.1 supa.example.com
+127.0.0.1 ${THIS_DOMAIN}
+127.0.0.1 alertmanager.${THIS_DOMAIN}
+127.0.0.1 argocd.${THIS_DOMAIN}
+127.0.0.1 bao.${THIS_DOMAIN}
+127.0.0.1 baoui.${THIS_DOMAIN}
+127.0.0.1 collabora.${THIS_DOMAIN}
+127.0.0.1 grafana.${THIS_DOMAIN}
+127.0.0.1 harbor.${THIS_DOMAIN}
+127.0.0.1 keycloak.${THIS_DOMAIN}
+127.0.0.1 ltb.${THIS_DOMAIN}
+127.0.0.1 nextcloud.${THIS_DOMAIN}
+127.0.0.1 phpldapadmin.${THIS_DOMAIN}
+127.0.0.1 prometheus.${THIS_DOMAIN}
+127.0.0.1 supa.${THIS_DOMAIN}

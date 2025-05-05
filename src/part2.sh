@@ -7,7 +7,7 @@ main () {
   #set -eux
   set -eu
   kubectl apply -f examplenc-secrets.yaml
-  initializer $this_cwd/src/postgres_init
+  initializer "$this_cwd/init/postgres"
   ./src/continue.sh
 }
 
