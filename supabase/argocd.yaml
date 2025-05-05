@@ -146,7 +146,7 @@ spec:
             KONG_LOG_LEVEL: info
           ingress:
             enabled: true
-            className: "traefik"
+            className: ${THIS_CLUSTER_INGRESS}
             annotations:
               nginx.ingress.kubernetes.io/rewrite-target: /
               traefik.ingress.kubernetes.io/router.middlewares: tekromancy-mw-stripper@kubernetescrd

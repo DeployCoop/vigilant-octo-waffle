@@ -122,7 +122,7 @@ spec:
           ingress:
             enabled: true
             annotations:
-              kubernetes.io/ingress.class: nginx
+              spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
               nginx.ingress.kubernetes.io/ssl-passthrough: "true"
               nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
               nginx.ingress.kubernetes.io/rewrite-target: /
