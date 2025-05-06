@@ -36,7 +36,7 @@ spec:
             # The tls certificate can be generated manually or by cert manager
             # 3) none: configure no tls certificate for the ingress. If the default
             # tls certificate is configured in the ingress controller, choose this option
-            certSource: auto
+            certSource: secret
             auto:
               # The common name used to generate the certificate, it's necessary
               # when the type isn't "ingress"
@@ -60,10 +60,11 @@ spec:
             kubeVersionOverride: ""
             className: "${THIS_CLUSTER_INGRESS}"
             annotations:
-              cert-manager.io/cluster-issuer: $"{THIS_CLUSTER_ISSUER}"
+              cert-manager.io/cluster-issuer: "${THIS_CLUSTER_ISSUER}"
               spec.ingressClassName: "${THIS_CLUSTER_INGRESS}"
               # note different ingress controllers may require a different ssl-redirect annotation
               # for Envoy, use ingress.kubernetes.io/force-ssl-redirect: "true" and remove the nginx lines below
+              nginx.ingress.kubernetes.io/rewrite-target: /
               ingress.kubernetes.io/ssl-redirect: "true"
               ingress.kubernetes.io/proxy-body-size: "0"
               nginx.ingress.kubernetes.io/ssl-redirect: "true"
