@@ -52,15 +52,15 @@ spec:
       - name: POSTGRES_PASSWORD
         valueFrom:
            secretKeyRef:
-              name: ${THIS_NAMESPACE}nc-secrets
+              name: ${THIS_SECRETS}
               key: db-admin-pass
       - name: POSTGRES_REPLICATION_PASSWORD
         valueFrom:
            secretKeyRef:
-              name: ${THIS_NAMESPACE}nc-secrets
+              name: ${THIS_SECRETS}
               key: replicationUserPassword
       - name: POSTGRES_TEKROMANCY_DB_PASSWORD
         valueFrom:
             secretKeyRef:
-              name: ${THIS_NAMESPACE}nc-secrets
+              name: ${THIS_SECRETS}
               key: db-password 

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+source .env
 source ./src/check_cmd.bash
 check_cmd pwgen
-KEY_FILE=./.${THIS_NAME}nc-plain-secrets.yaml
-SECRET_FILE=./${THIS_NAME}nc-secrets.yaml 
+KEY_FILE=./.${THIS_NAME}-plain-secrets.yaml
+SECRET_FILE=./${THIS_SECRETS}.yaml 
 
 phile_checkr () {
 if [[ $# -eq 1 ]]; then
@@ -67,7 +68,7 @@ cat << EOF > $SECRET_FILE
 apiVersion: v1
 kind: Secret
 metadata:
-  name: ${THIS_NAME}nc-secrets
+  name: ${THIS_SECRETS}
   namespace: ${THIS_NAME}
 type: Opaque
 data:
@@ -76,7 +77,7 @@ cat << EOF > $KEY_FILE
 apiVersion: v1
 kind: Secret
 metadata:
-  name: ${THIS_NAME}nc-secrets
+  name: ${THIS_SECRETS}
   namespace: ${THIS_NAME}
 type: Opaque
 stringData:
@@ -98,6 +99,7 @@ munger "replicationUserPassword:"
 munger "smtp-username:" "mailadmin@${THIS_NAME}.com"
 munger "smtp-password:" 
 munger "smtp-host:" "mail.${THIS_NAME}.com"
+munger "HARBOR_ADMIN_PASSWORD:" "31" "tr"
 }
 
 time main $@

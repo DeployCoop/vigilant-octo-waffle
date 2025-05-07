@@ -21,11 +21,11 @@ spec:
         global:
           ldapDomain: "${THIS_DOMAIN}"
           imageRegistry: ""
-          adminUser: "${THIS_ADMIN_USER}"
-          adminPassword: "${THIS_ADMIN_PASSWD}" 
+          adminUser: "${THIS_NC_ADMIN_USER}"
+          adminPassword: "${THIS_NC_ADMIN_PASSWD}" 
           configUserEnabled: true
           configUser: "configadmin"
-          configPassword: "${THIS_CONFIG_PASSWD}" 
+          configPassword: "${THIS_NC_CONFIG_PASSWD}" 
           ldapPort: 389
           sslLdapPort: 636
         clusterDomain: cluster.local

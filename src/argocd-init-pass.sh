@@ -23,7 +23,7 @@ main () {
     --username admin \
     --grpc-web
 
-  admin_pass=$(yq '.stringData|."argocdadmin-password"' .examplenc-plain-secrets.yaml|sed 's/"//g')
+  admin_pass=$(yq '.stringData|."argocdadmin-password"' .${THIS_NAME}-plain-secrets.yaml|sed 's/"//g')
   admin_pass=${admin_pass//$'\n'/}
 
   argocd account update-password \

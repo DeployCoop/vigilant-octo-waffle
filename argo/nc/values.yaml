@@ -82,7 +82,7 @@ nextcloud:
   ## Use an existing secret
   existingSecret:
     enabled: true
-    secretName: examplenc-secrets
+    secretName: ${THIS_SECRETS}
     usernameKey: nextcloud-username
     passwordKey: nextcloud-password
     tokenKey: nextcloud-token
@@ -357,7 +357,7 @@ externalDatabase:
   type: postgresql
   existingSecret:
     enabled: true
-    secretName: examplenc-secrets 
+    secretName: ${THIS_SECRETS} 
     usernameKey: db-username
     passwordKey: db-password
     hostKey: db-hostname
@@ -386,9 +386,9 @@ postgresql:
   global:
     postgresql:
       auth:
-        username: examplenc
-        database: examplenc
-        existingSecret: "examplenc-secrets"
+        username: ${THIS_NC_PG_USER}
+        database: ${THIS_NC_PG_DB}
+        existingSecret: "${THIS_SECRETS}"
         secretKeys:
           adminPasswordKey: "db-admin-pass"
           userPasswordKey: "db-password"
@@ -401,7 +401,7 @@ redis:
   enabled: false
   auth:
     enabled: true
-    existingSecret: "examplenc-secrets"
+    existingSecret: "${THIS_SECRETS}"
     existingSecretPasswordKey: "redis-pass"
   global:
     storageClass:  "${THIS_STORAGECLASS}"
@@ -418,15 +418,15 @@ collabora:
     enabled: false
   collabora:
     aliasgroups:
-      - host: "https://nextcloud.example.com:443"
+      - host: "https://${THIS_NC_FQDN}:443"
     extra_params: --o:ssl.enable=false
-    server_name: collabora.example.com
+    server_name: ${THIS_NC_COLLABORA_FQDN}
     existingSecret:
       # set to true to to get collabora admin credentials from an existin secret
       # if set, ignores collabora.collabora.username and password
       enabled: true
       # name of existing Kubernetes Secret with collboara admin credentials
-      secretName: "examplenc-secrets"
+      secretName: "${THIS_SECRETS}"
       usernameKey: "collabora-username"
       passwordKey: "collabora-password"
   ingress:
@@ -438,14 +438,14 @@ collabora:
       nginx.ingress.kubernetes.io/rewrite-target: /
       cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
     hosts:
-      - host: collabora.example.com
+      - host: ${THIS_NC_COLLABORA_FQDN}
         paths:
         - path: /
           pathType: ImplementationSpecific
     tls:
       - secretName: collabora-example-ingress-tls
         hosts:
-          - collabora.example.com
+          - ${THIS_NC_COLLABORA_FQDN}
 
 cronjob:
   enabled: true
