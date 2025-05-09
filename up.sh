@@ -14,6 +14,9 @@ main () {
     ./kindDown.sh
     sleep 1
     ./kindUp.sh
+    if [[ ${THIS_REG_ENABLE} -eq 'true' ]]; then
+      src/registry-proxy.sh
+    fi
   elif [[ $K8S_TYPE == "k3s" ]]; then
     kubectl get nodes
     if [[ $? == 0 ]]; then

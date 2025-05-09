@@ -14,6 +14,7 @@ main () {
   echo "run this script ($0) again after a slight rest if this fails"
   sleep 5
 
+  ${this_cwd}/src/harbor.sh
   envsubst < argo/goharbor/argocd.yaml | argocd app create --name supabase --grpc-web -f -
   envsubst < argo/kube-prometheus-stack/argocd.yaml | argocd app create --name example-prometheus-stack --grpc-web -f - 
   envsubst < argo/openldap/argocd.yaml | argocd app create --name example-openldap --grpc-web -f -

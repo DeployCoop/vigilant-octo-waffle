@@ -99,7 +99,7 @@ munger "replicationUserPassword:"
 munger "smtp-username:" "mailadmin@${THIS_NAME}.com"
 munger "smtp-password:" 
 munger "smtp-host:" "mail.${THIS_NAME}.com"
-munger "HARBOR_ADMIN_PASSWORD:" "31" "tr"
+munger "HARBOR_ADMIN_PASSWORD:" "12" "tr"
 }
 
 time main $@

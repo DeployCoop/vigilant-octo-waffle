@@ -1,0 +1,37 @@
+#!/bin/bash
+. .env
+reg_cid=${THIS_REG_DIR}/registry.cid
+if [[ -f ${reg_cid} ]]; then
+  docker stop "$(cat ${reg_cid})"
+  #docker rm   "$(cat ${reg_cid})"
+  rm ${reg_cid}
+fi
+
+set -eux
+docker run \
+  --rm \
+  --name docker_registry_proxy \
+  -it \
+  -d \
+  --cidfile "${reg_cid}" \
+  --net kind \
+  --hostname docker-registry-proxy \
+  -p 0.0.0.0:3128:3128 \
+  -e ENABLE_MANIFEST_CACHE=true \
+  -v ${THIS_REG_DIR}/docker_mirror_cache:/docker_mirror_cache \
+  -v ${THIS_REG_DIR}/docker_mirror_certs:/ca \
+  rpardini/docker-registry-proxy:0.6.5
+
+sleep 5
+
+KIND_NAME=vigilant-octo-waffle
+SETUP_URL=http://docker-registry-proxy:3128/setup/systemd
+pids=""
+for NODE in $(kind get nodes --name "$KIND_NAME"); do
+  docker exec "$NODE" sh -c "\
+      curl $SETUP_URL \
+      | sed s/docker\.service/containerd\.service/g \
+      | sed '/Environment/ s/$/ \"NO_PROXY=127.0.0.0\/8,10.0.0.0\/8,172.16.0.0\/12,192.168.0.0\/16\"/' \
+      | bash" & pids="$pids $!" # Configure every node in background
+done
+wait "$pids" # Wait for all configurations to end

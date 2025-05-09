@@ -49,6 +49,7 @@ spec:
           ingress:
             hosts:
               core: "${THIS_HARBOR_HOST}.${THIS_DOMAIN}"
+              notary: "notary.${THIS_DOMAIN}"
             # set to the type of ingress controller if it has specific requirements.
             # leave as `default` for most ingress controllers.
             # set to `gce` if using the GCE ingress controller
@@ -64,7 +65,7 @@ spec:
               spec.ingressClassName: "${THIS_CLUSTER_INGRESS}"
               # note different ingress controllers may require a different ssl-redirect annotation
               # for Envoy, use ingress.kubernetes.io/force-ssl-redirect: "true" and remove the nginx lines below
-              nginx.ingress.kubernetes.io/rewrite-target: /
+              #nginx.ingress.kubernetes.io/rewrite-target: /
               ingress.kubernetes.io/ssl-redirect: "true"
               ingress.kubernetes.io/proxy-body-size: "0"
               nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -296,7 +297,7 @@ spec:
         # existingSecretAdminPassword:
         existingSecretAdminPassword: ${THIS_SECRET}
         existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
-        #harborAdminPassword: "gh829p12PhWnvC7ttfmxvQuGF8o"
+        #harborAdminPassword: "secret123"
         
         # The internal TLS used for harbor components secure communicating. In order to enable https
         # in each component tls cert files need to provided in advance.
