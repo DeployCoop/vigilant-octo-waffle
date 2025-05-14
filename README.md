@@ -6,11 +6,11 @@ You can use this repo to spin up example.com and a bunch of related services in 
 
 It's main use is so i can replicate issues I'm having on internal infrastructure and use as an example when requesting support through github issues and that sort of thing.
 
-Maybe the coolest part is that I got mkcert and installed the certs so that https://example.com and bunch of other hostnames pass the TLS checks in the browser.
+Maybe the coolest part is that I got mkcert and installed the certs so that https://example.com and many other hostnames pass the TLS checks in the browser.
 
 So I can verify that everything is done securely even in my examples.
 
-# configuration 
+### Configuration 
 
 `make .env`
 
@@ -20,7 +20,7 @@ There is also a convenience script to populate your local hosts file:
 
 `src/hostr.sh`
 
-# Useage
+### Useage
 
 `./up.sh`
 
@@ -47,6 +47,18 @@ example     harborishel1234018730248971   True    harborishel1234018730248971   
 example     supatekro-ingress-tls         True    supatekro-ingress-tls         4h27m
 ```
 
+### Deplying to the local harbor registry:
 
 Start in https://harbor.example.com/ and make a new user and a project to push into.
 
+Add that user to the project, and then login using
+
+```bash
+docker login harbor.example.com
+```
+
+And then push into it:
+
+```bash
+docker push harbor.example.com/demo/mydockerthing:latest
+```
