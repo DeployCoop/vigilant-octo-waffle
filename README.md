@@ -6,8 +6,7 @@ You can use this repo to spin up example.com and a bunch of related services in 
 
 It's main use is so i can replicate issues I'm having on internal infrastructure and use as an example when requesting support through github issues and that sort of thing.
 
-Maybe the coolest part is that I got mkcert and installed the certs so that https://example.com and many other hostnames pass the TLS checks in the browser.
-
+Maybe the coolest part is that I got [mkcert](https://mkcert.org) working and installed the certs so that https://example.com and many other hostnames pass the TLS checks in the browser.
 So I can verify that everything is done securely even in my examples.
 
 ### Configuration 
@@ -20,7 +19,19 @@ There is also a convenience script to populate your local hosts file:
 
 `src/hostr.sh`
 
+### [mkcert](https://mkcert.org)
+
+Install [mkcert](https://mkcert.org) and ensure it is in your path then:
+
+`mkcert -install`
+
+And your browser should then accept the certs from certificate-manager within KinD.  
+
+For further help on [mkcert](https://mkcert.org), check their [github](https://github.com/Lukasa/mkcert).
+
 ### Useage
+
+To start the cluster:
 
 `./up.sh`
 
