@@ -9,6 +9,18 @@ It's main use is so i can replicate issues I'm having on internal infrastructure
 Maybe the coolest part is that I got [mkcert](https://mkcert.org) working and installed the certs so that https://example.com and many other hostnames pass the TLS checks in the browser.
 So I can verify that everything is done securely even in my examples.
 
+### Requirements
+
+bash  # much of this was written in bash
+python # there is at least one python script in here for now to update the password for harbor
+kubectl
+argocd
+tr
+pwgen
+openssl
+[mkcert](https://mkcert.org)
+[KinD](https://kind.sigs.k8s.io)
+
 ### Configuration 
 
 `make .env`
@@ -84,4 +96,4 @@ kindDown.sh
 
 # Roadmap
 
-I am trying to make this more useful by variabilizing example.com so someone could conceivably use this on a k3s instance as something other than example.com possibly in production, but that is not recommended at this point in time.  At this point it is for running an example.com and related services on your local laptop to test things out.
+I am trying to make this more useful by variabilizing example.com so someone could conceivably use this on a k3s instance as something other than example.com possibly in production, but that is not recommended at this point in time.  At this point it is for running an example.com and related services on your local laptop to test things out.  K3D might be considered as well once the k3s stuff is worked out.
