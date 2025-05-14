@@ -18,7 +18,7 @@ for NODE in $(kind get nodes --name "$KIND_NAME"); do
   docker exec "$NODE" sh -c "\
       curl $SETUP_URL \
       | sed s/docker\.service/containerd\.service/g \
-      | sed '/Environment/ s/$/ \"NO_PROXY=127.0.0.0\/8,10.0.0.0\/8,172.16.0.0\/12,192.168.0.0\/16\"/' \
+      | sed '/Environment/ s/$/ \"NO_PROXY=gcr.io,127.0.0.0\/8,10.0.0.0\/8,172.16.0.0\/12,192.168.0.0\/16\"/' \
       | bash"
 done
 }

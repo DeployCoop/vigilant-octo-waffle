@@ -9,7 +9,7 @@ main () {
   #set -eux
   set -eu
 
-  envsubst < argo/goharbor/argocd.yaml | argocd app create --name supabase --grpc-web -f -
+  envsubst < argo/goharbor/argocd.yaml | argocd app create --name goharbor --grpc-web -f -
   sleep 3
   # no stop error block for the w8s which might have errant errors as they wait
   set +e

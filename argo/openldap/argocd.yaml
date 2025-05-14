@@ -29,15 +29,6 @@ spec:
           ldapPort: 389
           sslLdapPort: 636
         clusterDomain: cluster.local
-        image:
-          # From repository https://hub.docker.com/r/bitnami/openldap/
-          #repository: bitnami/openldap
-          #tag: 2.6.3
-          # Temporary fix
-          repository: jpgouin/openldap
-          tag: 2.6.8-fix
-          pullPolicy: Always
-          pullSecrets: []
         replicaCount: 1
         service:
           annotations:
@@ -52,8 +43,8 @@ spec:
          LDAP_ENABLE_TLS: "yes"
          LDAP_SKIP_DEFAULT_TREE: "no"
          LDAP_ORGANISATION: "${THIS_NAME} ${THIS_TLD}"
-           #LDAP_EXTRA_SCHEMAS: "cosine,dyngroup,inetorgperson,nis"
-         # LDAP_CUSTOM_SCHEMA_DIR: "/opt/bitnami/openldap/etc/schema"
+         #LDAP_EXTRA_SCHEMAS: "cosine,dyngroup,inetorgperson,nis"
+         #LDAP_CUSTOM_SCHEMA_DIR: "/opt/bitnami/openldap/etc/schema"
         pdb:
           enabled: false
           minAvailable: 1
@@ -123,7 +114,7 @@ spec:
             enabled: true
             annotations:
               spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
-              nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+              #nginx.ingress.kubernetes.io/ssl-passthrough: "true"
               nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
               nginx.ingress.kubernetes.io/rewrite-target: /
               cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
@@ -145,7 +136,8 @@ spec:
           ingress:
             enabled: true
             annotations:
-              nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+              spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+              #nginx.ingress.kubernetes.io/ssl-passthrough: "true"
               nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
               nginx.ingress.kubernetes.io/rewrite-target: /
               cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
