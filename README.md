@@ -21,11 +21,11 @@ There is also a convenience script to populate your local hosts file:
 
 ### [mkcert](https://mkcert.org)
 
-Install [mkcert](https://mkcert.org) and ensure it is in your path then:
+Install [mkcert](https://mkcert.org) and ensure it is in your path and then:
 
 `mkcert -install`
 
-And your browser should then accept the certs from certificate-manager within KinD.  
+And your browser should then accept the certs from certificate-manager within KinD.  The configuration of KinD and certificate-manager are completely automated from here on out.
 
 For further help on [mkcert](https://mkcert.org), check their [github](https://github.com/Lukasa/mkcert).
 
@@ -73,3 +73,15 @@ And then push into it:
 ```bash
 docker push harbor.example.com/demo/mydockerthing:latest
 ```
+
+# Down
+
+To tear it all down:
+
+```bash
+kindDown.sh
+```
+
+# Roadmap
+
+I am trying to make this more useful by variabilizing example.com so someone could conceivably use this on a k3s instance as something other than example.com possibly in production, but that is not recommended at this point in time.  At this point it is for running an example.com and related services on your local laptop to test things out.
