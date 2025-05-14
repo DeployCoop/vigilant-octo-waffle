@@ -12,13 +12,21 @@ So I can verify that everything is done securely even in my examples.
 ### Requirements
 
 bash  # much of this was written in bash
+
 python # there is at least one python script in here for now to update the password for harbor
+
 kubectl
+
 argocd
+
 tr
+
 pwgen
+
 openssl
+
 [mkcert](https://mkcert.org)
+
 [KinD](https://kind.sigs.k8s.io)
 
 ### Configuration 
