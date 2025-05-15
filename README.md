@@ -1,10 +1,10 @@
 # vigilant-octo-waffle
 
-This is a repo that templatizes the necessary yaml to apply to the [urban-disco](https://github.com/DeployCoop/urban-disco).  Which is a collection of helm charts.
+This is a repo builds a kubernetes cluster in KinD or K3S, and then templatizes the necessary yaml to apply the [urban-disco](https://github.com/DeployCoop/urban-disco) as argoCD applications.  
 
-You can use this repo to spin up example.com and a bunch of related services in KinD (kubernetes in docker).
+You can use this repo to spin up a domain of your choice and a bunch of related services in KinD (kubernetes in docker).
 
-It's main use is so i can replicate issues I'm having on internal infrastructure and use as an example when requesting support through github issues and that sort of thing.
+It's main use is so I can replicate issues I'm having on internal infrastructure and use this an example when requesting support through github issues and that sort of thing.
 
 Maybe the coolest part is that I got [mkcert](https://mkcert.org) working and installed the certs so that https://example.com and many other hostnames pass the TLS checks in the browser.
 So I can verify that everything is done securely even in my examples.
