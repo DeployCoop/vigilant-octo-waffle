@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-dns
+data:
+  NodeIP: "${your-node-ip}"
+  HOSTNAME: "${your-hostname}"

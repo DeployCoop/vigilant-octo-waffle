@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: harbor-ingress-svc
+spec:
+  type: ExternalName
+  externalName: goharbor-example-ingress.harbor.svc.cluster.local
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80

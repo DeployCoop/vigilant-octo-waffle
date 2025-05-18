@@ -1,0 +1,66 @@
+metadata:
+  name: sass-starter-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: sass-starter
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      values: |
+        web:
+          imagePullPolicy: IfNotPresent
+          imagePullSecrets: 'harborexamplecomcred' # must be present in namespace
+          image: 'harbor.example.com/demo/nextjs-docker:latest'
+          terminationGracePeriodSeconds: 0
+          replicaCount: 1
+          runtimeClassName:
+        cachePersistentVolume:
+          enabled: true # If set to true, a PersistentVolumeClaim (PVC) will be created for caching
+          storageClass:  "${THIS_STORAGECLASS}"
+          existingClaim: '' # If set, this existing PVC will be used instead of creating a new one
+          accessModes:
+            - ReadWriteOnce # The access modes for the PVC. Can be ReadWriteOnce, ReadOnlyMany, or ReadWriteMany. If cachePersistentVolume is enabled and replicaCount is more than 1, this should be set to ReadWriteMany
+          annotations: {} # Annotations to add to the PVC
+          size: 1Gi # The requested storage size for the PVC
+          volumeMode: '' # The volume mode for the PVC. Can be either "Filesystem" (default) or "Block"
+          mountPath: /app/.next/cache # The path to mount the volume in the container
+      
+        dataVolume:
+          enabled: true # If set to true, a PersistentVolumeClaim (PVC) will be created
+          storageClass:  "${THIS_STORAGECLASS}"
+          existingClaim: '' # If set, this existing PVC will be used instead of creating a new one
+          accessModes:
+            - ReadWriteOnce # The access modes for the PVC. Can be ReadWriteOnce, ReadOnlyMany, or ReadWriteMany. If dataVolume is enabled and replicaCount is more than 1, this should be set to ReadWriteMany
+          annotations: {} # Annotations to add to the PVC
+          size: 1Gi # The requested storage size for the PVC
+          volumeMode: '' # The volume mode for the PVC. Can be either "Filesystem" (default) or "Block"
+          mountPath: /app/data # The path to mount the volume in the container
+        ingress:
+          enabled: true
+          ingressClassName: ${THIS_CLUSTER_INGRESS}
+          className: ${THIS_CLUSTER_INGRESS}
+          annotations:
+            nginx.ingress.kubernetes.io/rewrite-target: /
+            traefik.ingress.kubernetes.io/router.middlewares: tekromancy-mw-stripper@kubernetescrd
+            cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+            spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+          tls:
+            - secretName: supatekro-ingress-tls
+              hosts:
+                - ${THIS_SUPA_HOST}.${THIS_DOMAIN}
+          hosts:
+            - host: ${THIS_SUPA_HOST}.${THIS_DOMAIN}
+              paths:
+                - path: /
+                  pathType: Prefix
