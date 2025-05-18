@@ -17,7 +17,7 @@ main () {
   kubectl_native_wait ${THIS_NAMESPACE} goharbor-${THIS_NAME}-database-0
   set -e
   sleep 3
-  ./src/set_harbor_admin_pass.sh
+  #./src/set_harbor_admin_pass.sh
 }
 
 time main

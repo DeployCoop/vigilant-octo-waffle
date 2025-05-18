@@ -15,6 +15,7 @@ main () {
   sleep 5
 
   ${this_cwd}/src/harbor.sh
+  exit 0
   envsubst < argo/kube-prometheus-stack/argocd.yaml | argocd app create --name example-prometheus-stack --grpc-web -f - 
   ${this_cwd}/src/openldap.sh
   envsubst < argo/nc/argocd.yaml | argocd app create --name examplenc --grpc-web -f -
