@@ -58,13 +58,6 @@ main () {
   initializer "$this_cwd/init/cluster"
   cd "$this_cwd"
   initializer "$this_cwd/init/keycloak"
-
-  echo 'w8 argocd'
-  w8_ingress argocd argocd-server-ingress 
-  sleep 15
-  echo 'init argo pass'
-  cd $this_cwd
-  ./src/argocd-init-pass.sh
   ./src/part2.sh
 }
 

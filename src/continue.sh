@@ -14,6 +14,15 @@ main () {
   echo "run this script ($0) again after a slight rest if this fails"
   sleep 5
 
+
+  echo 'w8 argocd'
+  w8_ingress argocd argocd-server-ingress 
+  sleep 15
+  echo 'init argo pass'
+  cd $this_cwd
+  ./src/argocd-init-pass.sh
+
+  set -u
   ${this_cwd}/src/harbor.sh
   envsubst < argo/kube-prometheus-stack/argocd.yaml | argocd app create --name example-prometheus-stack --grpc-web -f - 
   ${this_cwd}/src/openldap.sh

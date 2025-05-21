@@ -1,0 +1,33 @@
+metadata:
+  name: openproject-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: openproject
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      values: |
+        ingress:
+          enabled: true
+          ingressClassName: ${THIS_CLUSTER_INGRESS}
+          annotations:
+            nginx.ingress.kubernetes.io/rewrite-target: /
+            cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+            spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+          host: "${THIS_OPENPROJECT_HOST}.${THIS_DOMAIN}"
+          path: /
+          pathType: "Prefix"
+          tls:
+            enabled: true
+            secretName: "openproject-ingress-tls"
