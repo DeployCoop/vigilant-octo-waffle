@@ -16,7 +16,12 @@ main () {
 
 
   echo 'w8 argocd'
-  w8_ingress argocd argocd-server-ingress 
+  if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
+    w8_ingress argocd argocd-server-ingress 
+  elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
+    echo 'w8 wip'
+    sleep 5
+  fi
   sleep 15
   echo 'init argo pass'
   cd $this_cwd
