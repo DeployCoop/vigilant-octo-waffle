@@ -13,11 +13,11 @@ main () {
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
     ./kindDown.sh
     sleep 1
-    if [[ ${THIS_REG_ENABLE} -eq 'true' ]]; then
+    if [[ ${THIS_REG_ENABLE} == "true" ]]; then
       src/localregistry_start.sh
     fi
     ./kindUp.sh
-    if [[ ${THIS_REG_ENABLE} -eq 'true' ]]; then
+    if [[ ${THIS_REG_ENABLE} == "true" ]]; then
       #src/registry-proxy.sh
       src/localregistry_setupnodes.sh
     fi
@@ -60,9 +60,9 @@ main () {
   echo "Deploying DeployCoop components:"
   cd "$this_cwd"
   initializer "$this_cwd/init/cluster"
-  if [[ ${THIS_CLUSTER_INGRESS} -eq 'nginx' ]]; then
+  if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     initializer "$this_cwd/init/argocd_nginx"
-  elif [[ ${THIS_CLUSTER_INGRESS} -eq 'traefik' ]]; then
+  elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
     initializer "$this_cwd/init/argocd_traefik"
   fi
   initializer "$this_cwd/init/openebs"
