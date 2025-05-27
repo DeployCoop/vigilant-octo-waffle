@@ -60,7 +60,8 @@ main () {
   echo "Deploying DeployCoop components:"
   cd "$this_cwd"
   initializer "$this_cwd/init/cluster"
-  cd "$this_cwd"
+  initializer "$this_cwd/init/argocd"
+  initializer "$this_cwd/init/openebs"
   initializer "$this_cwd/init/keycloak"
   ./src/part2.sh
 }
