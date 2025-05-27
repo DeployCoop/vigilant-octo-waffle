@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+: ${VERBOSITY:=100}
 squawk () {
   # This function simplifies error reporting and verbosity
   # and it always prints its message along with anything in $error_report_log

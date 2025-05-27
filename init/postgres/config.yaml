@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${THIS_NAMESPACE}-postgres-conf
+  namespace: ${THIS_NAMESPACE}
+data:
+  primary_init_script.sh: |
+    #!/usr/bin/env bash
+    set -e
+    echo primary_init_script.sh
+
+    # This script assumes that the env-var  contains the password of the custom user to create.
+    # You can add any env-var in your Kubegres resource config YAML.
+
+    dt=$(date '+%d/%m/%Y %H:%M:%S');
+    echo " - Running init script the 1st time Primary PostgreSql container is created...";
+    make_db () {
+    customDatabaseName="$1"
+    customUserName="$2"
+    customPassword="$3"
+    echo " - Running: psql -v ON_ERROR_STOP=1 --username $POSTGRES_USER --dbname $POSTGRES_DB ...";
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    CREATE DATABASE $customDatabaseName;
+    CREATE USER $customUserName WITH PASSWORD '$customPassword';
+    GRANT ALL PRIVILEGES ON DATABASE "$customDatabaseName" to $customUserName;
+    ALTER DATABASE "$customDatabaseName" SET bytea_output = 'escape';
+    EOSQL
+    }
+
+    make_db ${THIS_NAMESPACE}ncdb ${THIS_NAMESPACE}nc $POSTGRES_NC_DB_PASSWORD
+    make_db ${THIS_NAMESPACE}opdb ${THIS_NAMESPACE}op $POSTGRES_OPENPROJECT_DB_PASSWORD
+    echo "$dt - Init script is completed";

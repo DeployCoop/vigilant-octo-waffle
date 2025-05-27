@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
+THIS_THING=openldap
 set -e 
-source .env
+set -a && source .env && set +a
 source ./src/w8.bash
 source ./src/initializer.bash
+source ./src/argoRunner.sh
 this_cwd=$(pwd)
 
 main () {
   #set -eux
   set -eu
-
-  envsubst < argo/openldap/argocd.yaml | argocd app create --name example-openldap --grpc-web -f -
+  argoRunner "$THIS_THING"
 }
 
 time main

@@ -9,7 +9,7 @@ else
   exit 1
 fi
 set -eu
-source .env
+set -a && source ./.env && set +a
 set -x
 envsubst < argo/${THIS_THING}/argocd.yaml | argocd app create --name ${THIS_THING} --grpc-web -f -
 

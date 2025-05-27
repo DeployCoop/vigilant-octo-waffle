@@ -1,5 +1,5 @@
 #!/bin/bash
-. .env
+set -a && source .env && set +a
 
 registry_from_template () {
   TMP=$(mktemp -d)

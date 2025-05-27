@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eu
-source .env
+set -a && source .env && set +a
 
 HARBOR_ADMIN_PASSWORD=$(kubectl get secret -n example example-secrets -o json|jq -r '.data.HARBOR_ADMIN_PASSWORD'|base64 -d)
 UPDATE_CMD=$(./src/harbor_pass.py ${HARBOR_ADMIN_PASSWORD})

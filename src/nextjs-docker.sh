@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 THIS_THING=nextjs-docker
 set -eu
-source .env
-set -x
+set -a && source ./.env && set +a
+source ./src/argoRunner.sh
 
 main () {
-  envsubst < argo/${THIS_THING}/argocd.yaml | argocd app create --name ${THIS_THING} --grpc-web -f -
+  argoRunner "$THIS_THING"
 }
 
 time main

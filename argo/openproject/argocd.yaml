@@ -20,7 +20,8 @@ spec:
       values: |
         ingress:
           enabled: true
-          ingressClassName: ${THIS_CLUSTER_INGRESS}
+          ingressClassName: "${THIS_CLUSTER_INGRESS}"
+          ingressClassName: 
           annotations:
             nginx.ingress.kubernetes.io/rewrite-target: /
             cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
@@ -31,3 +32,42 @@ spec:
           tls:
             enabled: true
             secretName: "openproject-ingress-tls"
+        persistence:
+          enabled: true
+          ## Define the volume access modes:
+          ## "ReadWriteOnce" => The volume can be mounted as read-write by a single node. ReadWriteOnce access mode still can
+          ##                    allow multiple pods to access the volume when the pods are running on the same node.
+          ## "ReadOnlyMany" => The volume can be mounted as read-only by many nodes.
+          ## "ReadWriteMany" => The volume can be mounted as read-write by many nodes.
+          ## "ReadWriteOncePod" => The volume can be mounted as read-write by a single Pod. Use Rea25sdWriteOncePod access mode if
+          ##                       you want to ensure that only one pod across whole cluster can read that PVC or write to it.
+          accessModes:
+            - "ReadWriteOnce"
+          annotations: {}
+          size: "${THIS_OPENPROJECT_STORAGE_SIZE}"
+          storageClassName: "${THIS_STORAGECLASS}"
+        postgresql:
+          ## When set to true, a postgres server will be deployed into current namespace, when false you have to provide your
+          ## own database instance.
+          bundled: false
+          global:
+            containerSecurityContext:
+              enabled: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - "ALL"
+              seccompProfile:
+                type: "RuntimeDefault"
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+          connection:
+            host: "${THIS_NAME}-postgres"
+            port: 5432
+          auth:
+            existingSecret: "${THIS_SECRETS}"
+            secretKeys:
+              adminPasswordKey: "db-admin-pass"
+              userPasswordKey: "op-db-password"
+            username: "${THIS_OPENPROJECT_POSTGRES_USER}"
+            database: "${THIS_OPENPROJECT_POSTGRES_DB}"

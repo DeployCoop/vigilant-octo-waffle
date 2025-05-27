@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 : ${KUBECONFIG:=$HOME/.kube/config}
+: ${VERBOSITY:=100}
 source ./src/squawk.bash
 
 kubectl_native_wait () {

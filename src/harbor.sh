@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
+THIS_THING=goharbor
 set -e 
-source .env
+set -a && source ./.env && set +a
 source ./src/w8.bash
 source ./src/initializer.bash
+source ./src/argoRunner.sh
 this_cwd=$(pwd)
+
 
 main () {
   #set -eux
   set -eu
 
-  envsubst < argo/goharbor/argocd.yaml | argocd app create --name goharbor --grpc-web -f -
+  argoRunner "$THIS_THING"
   sleep 3
   # no stop error block for the w8s which might have errant errors as they wait
   set +e

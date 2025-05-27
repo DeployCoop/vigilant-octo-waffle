@@ -26,7 +26,7 @@ replicaCount: 1
 ##
 ingress:
   enabled: true
-  className: nginx
+  className: ${THIS_CLUSTER_INGRESS}
   tls:
     - secretName: nextcloud-example-tls
       hosts:
@@ -358,10 +358,10 @@ externalDatabase:
   existingSecret:
     enabled: true
     secretName: ${THIS_SECRETS} 
-    usernameKey: db-username
-    passwordKey: db-password
-    hostKey: db-hostname
-    databaseKey: db-name
+    usernameKey: nc-db-username
+    passwordKey: nc-db-password
+    hostKey: nc-db-hostname
+    databaseKey: nc-db-name
 
   global:
     defaultStorageClass:  "${THIS_STORAGECLASS}"
@@ -391,7 +391,7 @@ postgresql:
         existingSecret: "${THIS_SECRETS}"
         secretKeys:
           adminPasswordKey: "db-admin-pass"
-          userPasswordKey: "db-password"
+          userPasswordKey: "nc-db-password"
           replicationPasswordKey: "db-replication-key"
   primary:
     persistence:
@@ -431,7 +431,7 @@ collabora:
       passwordKey: "collabora-password"
   ingress:
     enabled: true
-    className: "nginx"
+    className: "${THIS_CLUSTER_INGRESS}"
     annotations:
       spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
       nginx.ingress.kubernetes.io/ssl-passthrough: "true"

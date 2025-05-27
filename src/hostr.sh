@@ -2,7 +2,7 @@
 : "${DEBUG:=0}"
 set -eu
 if [[ -f ./.env ]]; then
-source ./.env
+set -a && source ./.env && set +a
 else
   echo 'no env'
   exit 1

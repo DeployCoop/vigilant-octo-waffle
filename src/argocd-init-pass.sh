@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-source .env
+set -a && source ./.env && set +a
 source ./src/w8.bash
 this_cwd=$(pwd)
 

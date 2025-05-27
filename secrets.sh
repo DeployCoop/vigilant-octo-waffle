@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-source .env
+set -a && source ./.env && set +a
 source ./src/check_cmd.bash
 check_cmd pwgen
 KEY_FILE=./.${THIS_NAME}-plain-secrets.yaml
@@ -59,7 +59,9 @@ munger () {
 
 main () {
 if [[ -f .env ]]; then
+set -a
 source .env
+set +a
 else
   echo ".env file does not exist, copy .env.example to .env and start there"
 fi
@@ -83,17 +85,18 @@ type: Opaque
 stringData:
 EOF
 # munge the date
-munger  "argocdadmin-password:" "31" "tr"
-munger  "collabora-username:" "collabadmin"
+munger "argocdadmin-password:" "31" "tr"
+munger "collabora-username:" "collabadmin"
 munger "collabora-password:" 
-munger "db-password:" 
-munger "db-hostname:" "${THIS_NAME}nc-postgres:5432"
-munger "db-name:" "${THIS_NAME}ncdb"
-munger "db-username:" "${THIS_NAME}nc"
 munger "db-admin-pass:" 
+munger "nc-db-password:" 
+munger "nc-db-hostname:" "${THIS_NAME}-postgres:5432"
+munger "nc-db-name:" "${THIS_NAME}ncdb"
+munger "nc-db-username:" "${THIS_NAME}nc"
 munger "nextcloud-username:" "ncadmin"
 munger "nextcloud-password:" 
 munger "nextcloud-token:" 
+munger "op-db-password:" 
 munger "redis-pass:" 
 munger "replicationUserPassword:"
 munger "smtp-username:" "mailadmin@${THIS_NAME}.com"

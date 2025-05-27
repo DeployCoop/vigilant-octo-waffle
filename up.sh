@@ -2,7 +2,7 @@
 source ./src/check_cmd.bash
 check_cmd kubectl
 check_cmd argocd
-source ./.env
+set -a && source ./.env && set +a
 source ./src/w8.bash
 source ./src/initializer.bash
 export this_cwd=$(pwd)
@@ -10,14 +10,18 @@ export this_cwd=$(pwd)
 main () {
   set -e
   ./secrets.sh
-  if [[ $K8S_TYPE == "kind" ]]; then
+  if [[ $THIS_K8S_TYPE == "kind" ]]; then
     ./kindDown.sh
     sleep 1
+    if [[ ${THIS_REG_ENABLE} -eq 'true' ]]; then
+      src/localregistry_start.sh
+    fi
     ./kindUp.sh
     if [[ ${THIS_REG_ENABLE} -eq 'true' ]]; then
-      src/registry-proxy.sh
+      #src/registry-proxy.sh
+      src/localregistry_setupnodes.sh
     fi
-  elif [[ $K8S_TYPE == "k3s" ]]; then
+  elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
     kubectl get nodes
     if [[ $? == 0 ]]; then
       echo "kube cluster is installed, proceeding"
@@ -26,13 +30,13 @@ main () {
       exit 1
     fi
   else
-    echo "K8S_TYPE is not set, aborting!"
+    echo "THIS_K8S_TYPE is not set, aborting!"
     exit 1
   fi
   set -eu
   #kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
   cd $this_cwd/src
-  if [[ $K8S_TYPE == "kind" ]]; then
+  if [[ $THIS_K8S_TYPE == "kind" ]]; then
     ./nginx.sh
   else
     echo 'k3s uses traefik'

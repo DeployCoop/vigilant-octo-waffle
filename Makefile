@@ -1,2 +1,2 @@
 .env:
-	`cp .env.example .env`
+	`cp -iv example.env .env`

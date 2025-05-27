@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source ./src/check_cmd.bash
 check_cmd kind
-source ./.env
+set -a && source ./.env && set +a
 source ./src/w8.bash
 source ./src/initializer.bash
 this_cwd=$(pwd)
