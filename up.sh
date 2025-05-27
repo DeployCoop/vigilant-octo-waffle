@@ -60,7 +60,11 @@ main () {
   echo "Deploying DeployCoop components:"
   cd "$this_cwd"
   initializer "$this_cwd/init/cluster"
-  initializer "$this_cwd/init/argocd"
+  if [[ ${THIS_CLUSTER_INGRESS} -eq 'nginx' ]]; then
+    initializer "$this_cwd/init/argocd_nginx"
+  elif [[ ${THIS_CLUSTER_INGRESS} -eq 'traefik' ]]; then
+    initializer "$this_cwd/init/argocd_traefik"
+  fi
   initializer "$this_cwd/init/openebs"
   initializer "$this_cwd/init/keycloak"
   ./src/part2.sh
