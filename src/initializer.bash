@@ -14,6 +14,7 @@ initializer () {
   fi
 
   these_files=$(find ${THIS_INIT} -iname '*.yaml'|sort)
+  these_files+=$(find ${THIS_INIT} -iname '*.yml'|sort)
   for f in ${these_files[@]}; do
     echo "subbing ${f}"
     if [[ "${DEBUG}" == "true" ]]; then
