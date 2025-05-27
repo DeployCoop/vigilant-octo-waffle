@@ -1,2 +1,2 @@
 .env:
-	`cp -iv example.env .env`
+	cp -iv example.env .env
