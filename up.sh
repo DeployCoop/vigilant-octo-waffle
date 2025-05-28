@@ -43,9 +43,10 @@ main () {
   fi
   ./openebs.sh
   ./certmanager.sh
-  ./argocd.sh
   ./kubegres.sh
 
+  cd "$this_cwd"
+  ./src/argocd.sh
   # no stop error block for the w8s which might have errant errors as they wait
   set +e
   # kubegres
