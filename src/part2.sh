@@ -11,7 +11,7 @@ main () {
   kubectl apply -f ${THIS_SECRETS}.yaml
   ./src/dockerCreds.sh
   initializer "$this_cwd/init/postgres"
-  ./src/continue.sh
+  ./src/prepargo.sh
 }
 
 time main

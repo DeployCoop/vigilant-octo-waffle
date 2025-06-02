@@ -18,9 +18,9 @@ main () {
   set +e
   w8_pod ${THIS_NAMESPACE}  ${THIS_THING}-${THIS_NAME}-database-0
   kubectl_native_wait ${THIS_NAMESPACE} ${THIS_THING}-${THIS_NAME}-database-0
-  set -e
-  sleep 3
+  sleep 2
   ./src/test_harbor_db.sh
+  set -e
   ./src/set_harbor_admin_pass.sh
 }
 

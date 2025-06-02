@@ -14,19 +14,6 @@ main () {
   echo "run this script ($0) again after a slight rest if this fails"
   sleep 5
 
-
-  echo 'w8 argocd'
-  if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
-    w8_ingress argocd argocd-server-ingress 
-  elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
-    echo 'w8 wip'
-    sleep 5
-  fi
-  sleep 15
-  echo 'init argo pass'
-  cd $this_cwd
-  ./src/argocd-init-pass.sh
-
   set -u
   ${this_cwd}/src/harbor.sh
   ${this_cwd}/src/kube-prometheus-stack.sh
