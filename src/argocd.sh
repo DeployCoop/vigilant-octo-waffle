@@ -3,7 +3,7 @@ TMP=$(mktemp -d)
 trap 'rm -Rf $TMP' EXIT
 set -eu
 set -a && source ./.env && set +a
-set -x
+#set -x
 envsubst < argo/argo-cd/values.yaml > "${TMP}/values.yaml"
 if [[ ${THIS_ARGO_METHOD} == 'helm' ]]; then
   helm repo add argo https://argoproj.github.io/argo-helm

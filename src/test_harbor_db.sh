@@ -2,14 +2,15 @@
 # how long to sleep
 : "${SLEEP_TIME:=3}"
 # how many waits before giving up
-: "${WAITS:=5}"
-set -eu
+: "${WAITS:=30}"
+set -u
 set -a && source .env && set +a
 
 checkerrr () {
   countzero=0
   STILL_ERRORING=1
   while [[ $STILL_ERRORING -gt 0 ]]; do
+    set +e
     kubectl exec -it -n "${THIS_NAMESPACE}" "goharbor-${THIS_NAME}-database-0" -c database -- /usr/bin/psql -d 'registry' -c "SELECT 1 FROM harbor_user where user_id = 1;"
     if [[ $? -eq 0 ]]; then
       if [[ $countzero -eq 0 ]]; then
@@ -32,7 +33,9 @@ checkerrr () {
       ((countzero++))
       sleep "$SLEEP_TIME"
     fi
+    set -e
   done
 }
 
 checkerrr
+sleep 3
