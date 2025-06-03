@@ -102,6 +102,22 @@ To tear it all down:
 kindDown.sh
 ```
 
+# Architecture
+
+Envsubst is the simple templating method that I started this repo.  Most of the functionality in this repo comes from envsubst interpolating variables from .env into the various files in the argo and init directory.
+
+### src
+
+This was the original directory I started dumping scripts into.  Many of the projects have a named script in here, e.g. supabase.sh
+
+### argo
+
+This is a directory of argocd applications.  Each directoriy will be named after the intended application and will contain the yaml file for argo, and possibly a helm values file.
+
+### init
+
+This directory is for yaml that gets applied to the cluster, usually an ingress or something that was not included in the argo install.  There is a script `src/initializer.bash` that uses envsubst to apply the env vars and then apply them.
+
 # Roadmap
 
 I am trying to make this more useful by variabilizing example.com so someone could conceivably use this on a k3s instance as something other than example.com possibly in production, but that is not recommended at this point in time.  At this point it is for running an example.com and related services on your local laptop to test things out.  K3D might be considered as well once the k3s stuff is worked out.

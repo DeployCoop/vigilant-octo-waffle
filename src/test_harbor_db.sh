@@ -14,17 +14,25 @@ checkerrr () {
     kubectl exec -it -n "${THIS_NAMESPACE}" "goharbor-${THIS_NAME}-database-0" -c database -- /usr/bin/psql -d 'registry' -c "SELECT 1 FROM harbor_user where user_id = 1;"
     if [[ $? -eq 0 ]]; then
       if [[ $countzero -eq 0 ]]; then
-        printf "DB ready\n"
+        if [[ ${VERBOSITY} -gt 1 ]]; then
+          printf "DB ready\n"
+        fi
       else
-        printf "\nDB ready\n"
+        if [[ ${VERBOSITY} -gt 1 ]]; then
+          printf "\nDB ready\n"
+        fi
       fi
       STILL_ERRORING=0
       break
     else 
       if [[ $countzero -eq 0 ]]; then
-        echo -n 'db not ready waiting.'
+        if [[ ${VERBOSITY} -gt 1 ]]; then
+          echo -n 'db not ready waiting.'
+        fi
       else
-        echo -n '.'
+        if [[ ${VERBOSITY} -gt 1 ]]; then
+          echo -n '.'
+        fi
       fi
       if [[ $countzero -gt $WAITS ]]; then
         echo 'giving up check on harborDB'

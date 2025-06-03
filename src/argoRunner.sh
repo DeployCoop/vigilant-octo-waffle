@@ -10,7 +10,9 @@ else
 fi
 set -eu
 set -a && source ./.env && set +a
-#set -x
+if [[ ${VERBOSITY} -gt 10 ]]; then
+ set -x
+fi
 envsubst < argo/${THIS_THING}/argocd.yaml | argocd app create --name ${THIS_THING} --grpc-web -f -
 
 }
