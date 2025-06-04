@@ -1,5 +1,5 @@
 # vigilant-octo-waffle
-![Vigilant Octo Waffle](relative%20src/vigilantoctowaffle.png?raw=true "Title")
+![Vigilant Octo Waffle](src/vigilantoctowaffle.png?raw=true "Title")
 
 This is a repo builds a kubernetes cluster in KinD or K3S, and then templatizes the necessary yaml to apply the [urban-disco](https://github.com/DeployCoop/urban-disco) as argoCD applications.  
 
