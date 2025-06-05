@@ -22,7 +22,6 @@ main () {
   ${this_cwd}/src/nextcloud.sh
   ${this_cwd}/src/supabase.sh
   ${this_cwd}/src/bao.sh
-  initializer "${this_cwd}/init/bao"
   ${this_cwd}/src/nextjs-docker.sh
   ${this_cwd}/src/FOSSBilling.sh
 }

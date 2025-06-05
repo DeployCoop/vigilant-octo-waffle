@@ -9,9 +9,12 @@ this_cwd=$(pwd)
 
 
 main () {
-  #set -eux
+  if [[ ${VERBOSITY} -gt 99 ]]; then
+    set -x
+  fi
   set -eu
 
+  initializer "${this_cwd}/init/bao"
   argoRunner "$THIS_THING"
 }
 
