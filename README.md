@@ -128,6 +128,12 @@ This file is being used to unify the application scripts themselves where argo i
 envsubst < argo/${THIS_THING}/argocd.yaml | argocd app create --name ${THIS_THING} --grpc-web -f -
 ```
 
+and in [src/bao.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/bao.sh) you can see an example of how I am unifying the applications with the above shell scripts:
+
+```
+  initializer "${this_cwd}/init/bao"
+  argoRunner "$THIS_THING"
+```
 
 ### argo
 
