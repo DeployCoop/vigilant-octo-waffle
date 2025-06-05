@@ -1,0 +1,29 @@
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+  labels:
+    app.kubernetes.io/instance: fossbilling
+  name: fossbilling
+  namespace: ${THIS_NAMESPACE}
+spec:
+  ingressClassName: ${THIS_CLUSTER_INGRESS}
+  rules:
+  - host: ${THIS_FOSSBILLING_HOST}.${THIS_DOMAIN}
+    http:
+      paths:
+      - backend:
+          service:
+            name: fossbilling
+            port:
+              number: 8200
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - ${THIS_FOSSBILLING_HOST}.${THIS_DOMAIN}
+    secretName: chart-${THIS_NAMESPACE}-${THIS_FOSSBILLING_HOST}-tls

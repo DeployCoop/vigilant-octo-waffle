@@ -119,6 +119,21 @@ This is a directory of argocd applications.  Each directoriy will be named after
 
 This directory is for yaml that gets applied to the cluster, usually an ingress or something that was not included in the argo install.  There is a script `src/initializer.bash` that uses envsubst to apply the env vars and then apply them.
 
+# Contributing
+
+The easiest way to contribute is to add more applications.  Here are the steps to add another helm chart.
+
+1. Fetch and untar a chart e.g. `helm fetch --repo https://jp-gouin.github.io/helm-openldap/ openldap --untar`
+1. Add the chart to [urban-disco](https://github.com/DeployCoop/urban-disco) or your own chart repo.
+1. Create a directory with your apps name in the `argo` directory.  Take the values.yaml and place it here.
+1. Take the values.yaml from your chart and place it in the `argo/YOURAPP` directory.
+1. Add the argo yaml file `argocd.yaml`in the `argo/YOURAPP` directory.
+1. Add any more yaml like ingresses to the `init/YOURAPP` directory.
+1. Add host for your application to `src/hosts`.
+1. Add env vars to `example.env`.
+1. Create a script in `src` that installs your application. e.g. `src/openldap.sh`
+1. Add this script to `continue.sh`
+
 # Roadmap
 
 I am trying to make this more useful by variabilizing example.com so someone could conceivably use this on a k3s instance as something other than example.com possibly in production, but that is not recommended at this point in time.  At this point it is for running an example.com and related services on your local laptop to test things out.  K3D might be considered as well once the k3s stuff is worked out.

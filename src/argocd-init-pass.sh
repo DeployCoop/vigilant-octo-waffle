@@ -4,24 +4,38 @@ source ./src/w8.bash
 this_cwd=$(pwd)
 
 main () {
-  #set -eux
-  set -eu
+  if [[ ${VERBOSITY} -gt 99 ]]; then
+    set -x
+  fi
+  set -u
   countzero=0
   result=1
+  set +e
   while [[ ! $result -eq 0 ]]; do
     argocd admin initial-password -n argocd
     result=$?
     if [[ $countzero -gt 9 ]]; then
       break
     fi
+    sleep 3
   done
   PASSWORD_ARGO=$(argocd admin initial-password -n argocd|head -n 1)
 
   #set -x
-  argocd login ${THIS_ARGO_HOST}.${THIS_DOMAIN} \
-    --password ${PASSWORD_ARGO} \
-    --username admin \
-    --grpc-web
+  countzero=0
+  result=1
+  while [[ ! $result -eq 0 ]]; do
+    argocd login ${THIS_ARGO_HOST}.${THIS_DOMAIN} \
+      --password ${PASSWORD_ARGO} \
+      --username admin \
+      --grpc-web
+    result=$?
+    if [[ $countzero -gt 9 ]]; then
+      break
+    fi
+    sleep 3
+  done
+  set -e
 
   admin_pass=$(yq '.stringData|."argocdadmin-password"' .${THIS_NAME}-plain-secrets.yaml|sed 's/"//g')
   admin_pass=${admin_pass//$'\n'/}

@@ -2,7 +2,9 @@
 set -a && source ./.env && set +a
 source ./src/check_cmd.bash
 check_cmd pwgen
-KEY_FILE=./.${THIS_NAME}-plain-secrets.yaml
+if [[ ${THIS_ENABLE_PLAIN_SECRETS_FILE} == 'true' ]]; then
+  KEY_FILE=./.${THIS_NAME}-plain-secrets.yaml
+fi
 SECRET_FILE=./${THIS_SECRETS}.yaml 
 
 phile_checkr () {
@@ -19,12 +21,16 @@ fi
 
 if [[ ! $1 == '--force' ]]; then
   phile_checkr $SECRET_FILE
-  phile_checkr $KEY_FILE
+  if [[ ${THIS_ENABLE_PLAIN_SECRETS_FILE} == 'true' ]]; then
+    phile_checkr $KEY_FILE
+  fi
 fi
 
 liner () {
   echo "  $1 $2" >> $SECRET_FILE
-  echo "  $1 $3" >> $KEY_FILE
+  if [[ ${THIS_ENABLE_PLAIN_SECRETS_FILE} == 'true' ]]; then
+    echo "  $1 $3" >> $KEY_FILE
+  fi
 }
 
 munger () {
@@ -75,6 +81,7 @@ metadata:
 type: Opaque
 data:
 EOF
+if [[ ${THIS_ENABLE_PLAIN_SECRETS_FILE} == 'true' ]]; then
 cat << EOF > $KEY_FILE
 apiVersion: v1
 kind: Secret
@@ -84,6 +91,7 @@ metadata:
 type: Opaque
 stringData:
 EOF
+fi
 # munge the date
 munger "argocdadmin-password:" "31" "tr"
 munger "collabora-username:" "collabadmin"

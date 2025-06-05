@@ -20,7 +20,7 @@ main () {
   fi
   sleep 15
   echo 'init argo pass'
-  cd $this_cwd
+  cd "${this_cwd}"
   ./src/argocd-init-pass.sh
   ./src/continue.sh
 }
