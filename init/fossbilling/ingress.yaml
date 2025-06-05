@@ -18,9 +18,9 @@ spec:
       paths:
       - backend:
           service:
-            name: fossbilling
+            name: ${THIS_FOSSBILLING_HOST}-${THIS_NAMESPACE}-fossbilling
             port:
-              number: 8200
+              number: 80
         path: /
         pathType: Prefix
   tls:

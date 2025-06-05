@@ -33,7 +33,7 @@ fossbilling:
       accessMode:
         - ReadWriteOnce
       # key: fossbilling.persistence.fossbilling.enabled
-      enabled: true
+      enabled: "${THIS_FOSSBILLING_PERSISTENCE_ENABLED}"
   # key: fossbilling.replicas
   replicas: 1
   # key: fossbilling.nodeSelector
