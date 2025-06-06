@@ -28,3 +28,16 @@ check_enabler () {
     sleep 1
   fi
 }
+
+para_runner () {
+: "${PARALLEL_JOBS:=5}"
+  TARGET=$1
+  if [[ "${VERBOSITY}" -gt "9" ]] ; then
+    cat "${TARGET}"
+  fi
+  if [[ "${PARALLEL_JOBS}" -gt "1" ]] ; then
+    parallel -j ${PARALLEL_JOBS} -- < "${TARGET}"
+  else
+    bash "${TARGET}"
+  fi
+}

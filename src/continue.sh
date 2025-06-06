@@ -1,30 +1,28 @@
 #!/usr/bin/env bash
+: "${BIG_LIST:=./src/big_list}"
 set -e 
 set -a && source ./.env && set +a
 source ./src/w8.bash
 source ./src/initializer.bash
+source ./src/util.bash
 this_cwd=$(pwd)
 
 main () {
-  #set -eux
+  if [[ ${VERBOSITY} -gt 99 ]]; then
+    set -x
+  fi
   set -eu
 
   echo 'sometimes github.com fails to resolve if these creates hit too quick'
   echo 'still investigating as to what is causing it'
   echo "run this script ($0) again after a slight rest if this fails"
-  sleep 5
+  sleep 1
 
   set -u
-  ${this_cwd}/src/harbor.sh
-  ${this_cwd}/src/kube-prometheus-stack.sh
-  ${this_cwd}/src/openldap.sh
-  ${this_cwd}/src/openproject.sh
-  ${this_cwd}/src/nextcloud.sh
-  ${this_cwd}/src/supabase.sh
-  ${this_cwd}/src/bao.sh
-  ${this_cwd}/src/nextjs-docker.sh
-  ${this_cwd}/src/FOSSBilling.sh
-  ${this_cwd}/src/drupal.sh
+  cd "${this_cwd}"
+
+
+  para_runner "${BIG_LIST}"
 }
 
 time main
