@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 THIS_THING=supabase
-set -e 
-source ./src/util.bash
-check_enabler
-set -a && source ./.env && set +a
-source ./src/w8.bash
-source ./src/initializer.bash
-source ./src/argoRunner.sh
-this_cwd=$(pwd)
+source ./src/common.sh
 
 
 main () {
