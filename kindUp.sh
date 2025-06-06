@@ -3,7 +3,7 @@ source ./src/check_cmd.bash
 check_cmd kind
 set -a && source ./.env && set +a
 source ./src/w8.bash
-source ./src/initializer.bash
+source ./src/util.bash
 this_cwd=$(pwd)
 
 main () {

@@ -3,6 +3,7 @@
 127.0.0.1 argocd.${THIS_DOMAIN}
 127.0.0.1 bao.${THIS_DOMAIN}
 127.0.0.1 baoui.${THIS_DOMAIN}
+127.0.0.1 drupal.${THIS_DOMAIN}
 127.0.0.1 collabora.${THIS_DOMAIN}
 127.0.0.1 fossbilling.${THIS_DOMAIN}
 127.0.0.1 grafana.${THIS_DOMAIN}

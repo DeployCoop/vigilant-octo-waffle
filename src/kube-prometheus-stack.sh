@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 THIS_THING=kube-prometheus-stack
+source ./src/util.bash
+check_enabler
 set -e 
 set -a && source ./.env && set +a
 source ./src/w8.bash

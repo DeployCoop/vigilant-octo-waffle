@@ -24,6 +24,7 @@ main () {
   ${this_cwd}/src/bao.sh
   ${this_cwd}/src/nextjs-docker.sh
   ${this_cwd}/src/FOSSBilling.sh
+  ${this_cwd}/src/drupal.sh
 }
 
 time main

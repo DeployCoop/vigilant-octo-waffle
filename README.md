@@ -103,6 +103,16 @@ To tear it all down:
 kindDown.sh
 ```
 
+# Enabler
+
+You can make the default `.env.enabler` file with:
+
+```
+make .env.enabler
+```
+
+Then simply delete any service you don't want to start from that file, or change its value into anything other than true.
+
 # Architecture
 
 Envsubst is the simple templating method that I started this repo.  Most of the functionality in this repo comes from envsubst interpolating variables from .env into the various files in the argo and init directory.
@@ -155,6 +165,7 @@ The easiest way to contribute is to add more applications.  Here are the steps t
 1. Add any more yaml like ingresses to the `init/YOURAPP` directory.
 1. Add host for your application to `src/hosts`.
 1. Add env vars to `example.env`.
+1. Add YOURAPP_ENABLED=true to `example.env.enabler` must match ${THIS_THING}_ENABLED as set in the `src/YOUR_APP.sh` script and you must convert all lower to upper case and replace all dashes with underscores and 
 1. Create a script in `src` that installs your application. e.g. `src/openldap.sh`
 1. Add this script to `continue.sh`
 
