@@ -38,7 +38,7 @@ checkerrr () {
         echo 'giving up check on harborDB'
         exit 1
       fi
-      ((countzero++))
+      ((++countzero))
       sleep "$SLEEP_TIME"
     fi
     set -e

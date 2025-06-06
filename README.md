@@ -176,3 +176,26 @@ I am trying to make this more useful by variabilizing example.com so someone cou
 # bash or sh or python?
 
 Well it started out as `#!/bin/sh` but complications arose from dash being linked as sh on some systems, so I converted all shellscripts to `#!/usr/bin/env bash` to accomodate for weirdOS like NixOS.  Why not move all .sh scripts to be .bash? Why not convert them to python too?  We'll see.
+
+# Style
+
+So for the moment the style is decidedly bash with variables wrapped in curl brackets `${this_var}`, 
+and with tests being in double brackets to avoid forking out to `test`, e.g.
+
+```bash
+if [[ ${this_var} -gt 99 ]]; then
+  echo "greater than 99"
+fi
+```
+
+And math in double parenthesis, e.g.
+
+```bash
+countzero=0
+while [[ ${countzero} -lt 99 ]]; do
+  echo "${countzero}"
+  ((++countzero))
+done
+```
+
+But I'm open to suggestions, and maybe converting many things to python or rust etc.
