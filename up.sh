@@ -49,7 +49,6 @@ main () {
   src/certmanager.sh
   # kubegres
   src/kubegres.sh
-  exit 0
   # argoCD
   cd "$this_cwd"
   src/argocd.sh
