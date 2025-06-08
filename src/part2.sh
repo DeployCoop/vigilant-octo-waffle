@@ -10,7 +10,6 @@ main () {
   set -eu
   kubectl apply -f ${THIS_SECRETS}.yaml
   ./src/dockerCreds.sh
-  initializer "$this_cwd/init/postgres"
   ./src/prepargo.sh
 }
 
