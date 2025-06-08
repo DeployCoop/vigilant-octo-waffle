@@ -11,12 +11,12 @@ main () {
   set -e
   ./secrets.sh
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    ./kindDown.sh
+    src/kindDown.sh
     sleep 1
     if [[ ${THIS_REG_ENABLE} == "true" ]]; then
       src/localregistry_start.sh
     fi
-    ./kindUp.sh
+    src/kindUp.sh
     if [[ ${THIS_REG_ENABLE} == "true" ]]; then
       #src/registry-proxy.sh
       src/localregistry_setupnodes.sh
@@ -34,39 +34,33 @@ main () {
     exit 1
   fi
   set -eu
+  initializer "$this_cwd/init/cluster"
+  kubectl apply -f ${THIS_SECRETS}.yaml
   #kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
-  cd $this_cwd/src
+  #cd $this_cwd/src
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    ./nginx.sh
+    src/nginx.sh
   else
     echo 'k3s uses traefik'
   fi
-  ./openebs.sh
-  ./certmanager.sh
-  ./kubegres.sh
-
-  cd "$this_cwd"
-  ./src/argocd.sh
-  # no stop error block for the w8s which might have errant errors as they wait
-  set +e
-  # kubegres
-  w8_pod kubegres-system kubegres-controller-manager
   #openEBS
-  w8_pod openebs openebs-localpv-provisioner
-  w8_pod openebs openebs-lvm-localpv-controller
-  w8_pod openebs openebs-lvm-localpv-node
-  # wait on kubegres to settle
-  kubectl_native_wait kubegres-system $(kubectl get po -n kubegres-system|grep kubegres-controller-manager|cut -f1 -d ' ')
-  set -e
+  src/openebs.sh
+  # certmanager
+  src/certmanager.sh
+  # kubegres
+  src/kubegres.sh
+  exit 0
+  # argoCD
+  cd "$this_cwd"
+  src/argocd.sh
+  # no stop error block for the w8s which might have errant errors as they wait
   echo "Deploying DeployCoop components:"
   cd "$this_cwd"
-  initializer "$this_cwd/init/cluster"
   if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     initializer "$this_cwd/init/argocd_nginx"
   elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
     initializer "$this_cwd/init/argocd_traefik"
   fi
-  initializer "$this_cwd/init/openebs"
   initializer "$this_cwd/init/keycloak"
   ./src/part2.sh
 }

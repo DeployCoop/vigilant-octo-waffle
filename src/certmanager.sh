@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eux
-source ./initializer.bash
+source ./src/initializer.bash
 helm upgrade --install \
   cert-manager cert-manager \
   --repo https://charts.jetstack.io \
