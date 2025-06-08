@@ -20,7 +20,7 @@ spec:
       values: |
         web:
           imagePullPolicy: IfNotPresent
-          imagePullSecrets:  "${THIS_EXTERNAL_REGISTRY_SECRET} -o yaml" # must be present in namespace
+          imagePullSecrets:  "${THIS_EXTERNAL_REGISTRY_SECRET}" # must be present in namespace
           image: 'harbor.twindogfinancial.com/example/nextjs-docker:latest'
           terminationGracePeriodSeconds: 0
           replicaCount: 1
