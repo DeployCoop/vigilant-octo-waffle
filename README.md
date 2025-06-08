@@ -167,7 +167,7 @@ The easiest way to contribute is to add more applications.  Here are the steps t
 1. Add env vars to [example.env](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/example.env).
 1. Add YOURAPP_ENABLED=true to [example.env.enabler](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/example.env.enabler) must match ${THIS_THING}_ENABLED as set in the `src/YOUR_APP.sh` script and you must convert all lower to upper case and replace all dashes with underscores and 
 1. Create a script in `src` that installs your application. e.g. [src/bao.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/bao.sh)
-1. Add this script to [src/continue.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/continue.sh)
+1. Add this script to [src/big_list](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/big_list)
 
 # Roadmap
 
