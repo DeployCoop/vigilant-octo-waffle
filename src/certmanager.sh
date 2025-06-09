@@ -12,9 +12,9 @@ helm upgrade --install \
 #kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml
 kubectl -n cert-manager get pod
 set +e
-./mkcert.sh
+src/mkcert.sh
 set -e
-initializer "${this_cwd}/init/certmanager"
+initializer "init/certmanager"
 kubectl get ClusterIssuer -A
 kubectl describe clusterissuer letsencrypt-staging
 kubectl describe clusterissuer letsencrypt-production

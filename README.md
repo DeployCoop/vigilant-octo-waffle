@@ -155,7 +155,11 @@ This directory is for yaml that gets applied to the cluster, usually an ingress 
 
 # Contributing
 
-The easiest way to contribute is to add more applications.  Here are the steps to add another helm chart.
+## Adding applications
+
+Perhaps the easiest way to contribute is to add more applications.  
+
+Here are the steps to add another helm chart:
 
 1. Fetch and untar a chart e.g. `helm fetch --repo https://jp-gouin.github.io/helm-openldap/ openldap --untar`
 1. Add the chart to [urban-disco](https://github.com/DeployCoop/urban-disco) or your own chart repo.
@@ -169,9 +173,34 @@ The easiest way to contribute is to add more applications.  Here are the steps t
 1. Create a script in `src` that installs your application. e.g. [src/bao.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/bao.sh)
 1. Add this script to [src/big_list](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/big_list)
 
+## Updating charts in the urban-disco repo
+
+I usually just delete the chart and `helm fetch --untar` it again, and then do `git diff` to study mainly the differences in the values.yaml file to see if the structure has changed and values need to be updated or moved, for example an ingress might be move to a subordinate service:
+
+```yaml
+ingress:
+  enabled: false
+  className: nginx
+```
+
+to:
+
+```yaml
+web:
+  ingress:
+    enabled: false
+    className: nginx
+```
+
+Then those values must be updated in the `argo` directory as well.
+
 # Roadmap
 
 I am trying to make this more useful by variabilizing example.com so someone could conceivably use this on a k3s instance as something other than example.com possibly in production, but that is not recommended at this point in time.  At this point it is for running an example.com and related services on your local laptop to test things out.  K3D might be considered as well once the k3s stuff is worked out.
+
+## Secrets
+
+On the roadmap is a route to getting all secrets sync'd with openbao, and for all charts to use secrets instead of values in the values viles (typo but I'll keep it).  However, that ideally involves PRs upstream to the various charts repos themselves
 
 # bash or sh or python?
 
@@ -197,5 +226,14 @@ while [[ ${countzero} -lt 99 ]]; do
   ((++countzero))
 done
 ```
+
+All execution should be at the base of this repo. 
+i.e. All scripts etc should be put in the `src` directory and should be invoked like so:
+
+```bash
+src/argocd.sh
+```
+
+`cd` should be avoided, be sure to return to the root after you are done.
 
 But I'm open to suggestions, and maybe converting many things to python or rust etc.

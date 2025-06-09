@@ -9,7 +9,7 @@ export this_cwd=$(pwd)
 
 main () {
   set -e
-  ./secrets.sh
+  src/secrets.sh
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
     src/kindDown.sh
     sleep 1
@@ -37,7 +37,6 @@ main () {
   initializer "$this_cwd/init/cluster"
   kubectl apply -f ${THIS_SECRETS}.yaml
   #kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
-  #cd $this_cwd/src
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
     src/nginx.sh
   else
@@ -50,16 +49,7 @@ main () {
   # kubegres
   src/kubegres.sh
   # argoCD
-  cd "$this_cwd"
   src/argocd.sh
-  # no stop error block for the w8s which might have errant errors as they wait
-  echo "Deploying DeployCoop components:"
-  cd "$this_cwd"
-  if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
-    initializer "$this_cwd/init/argocd_nginx"
-  elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
-    initializer "$this_cwd/init/argocd_traefik"
-  fi
   initializer "$this_cwd/init/keycloak"
   ./src/part2.sh
 }

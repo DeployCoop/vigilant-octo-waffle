@@ -6,7 +6,9 @@ source ./src/initializer.bash
 this_cwd=$(pwd)
 
 main () {
-  #set -eux
+  if [[ ${VERBOSITY} -gt 99 ]]; then
+    set -x
+  fi
   set -eu
   kubectl apply -f ${THIS_SECRETS}.yaml
   ./src/dockerCreds.sh
