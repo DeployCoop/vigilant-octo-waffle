@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -eu
-set -a && source .env && set +a
-source ./src/w8.bash
-source ./src/initializer.bash
+source ./src/sourceror.bash
 this_cwd=$(pwd)
 
 main () {
@@ -12,8 +10,6 @@ main () {
   set -eu
   kubectl apply -f ${THIS_SECRETS}.yaml
   ./src/dockerCreds.sh
-  # argoCD
-  src/argocd.sh
 }
 
 time main

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-set -a && source ./.env && set +a
-source ./src/check_cmd.bash
-check_cmd pwgen
+source ./src/sourceror.bash
 if [[ ${THIS_ENABLE_PLAIN_SECRETS_FILE} == 'true' ]]; then
   KEY_FILE=./.${THIS_NAME}-plain-secrets.yaml
 fi
@@ -64,13 +62,6 @@ munger () {
 
 
 main () {
-if [[ -f .env ]]; then
-set -a
-source .env
-set +a
-else
-  echo ".env file does not exist, copy .env.example to .env and start there"
-fi
 # make the headers
 cat << EOF > $SECRET_FILE
 apiVersion: v1

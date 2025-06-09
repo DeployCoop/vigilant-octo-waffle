@@ -1,5 +1,5 @@
 #!/bin/bash
-set -a && source .env && set +a
+source ./src/sourceror.bash
 
 registry_from_template () {
   TMP=$(mktemp -d)

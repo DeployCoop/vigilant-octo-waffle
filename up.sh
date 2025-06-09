@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-source ./src/check_cmd.bash
-check_cmd kubectl
-check_cmd argocd
-set -a && source ./.env && set +a
-source ./src/w8.bash
-source ./src/initializer.bash
+source ./src/sourceror.bash
 export this_cwd=$(pwd)
 
 main () {
@@ -48,6 +43,8 @@ main () {
   src/certmanager.sh
   # kubegres
   src/kubegres.sh
+  # argoCD
+  src/argocd.sh
   initializer "$this_cwd/init/keycloak"
   ./src/part2.sh
 }
