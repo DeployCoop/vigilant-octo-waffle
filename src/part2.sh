@@ -12,7 +12,8 @@ main () {
   set -eu
   kubectl apply -f ${THIS_SECRETS}.yaml
   ./src/dockerCreds.sh
-  ./src/prepargo.sh
+  # argoCD
+  src/argocd.sh
 }
 
 time main

@@ -19,7 +19,6 @@ else
   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 fi
 
-echo argocd admin initial-password -n argocd
 
 # no stop error block for the w8s which might have errant errors as they wait
 echo "Deploying DeployCoop components:"
@@ -28,3 +27,5 @@ if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
 elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
   initializer "$this_cwd/init/argocd_traefik"
 fi
+
+src/prepargo.sh

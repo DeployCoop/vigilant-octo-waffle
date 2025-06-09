@@ -48,8 +48,6 @@ main () {
   src/certmanager.sh
   # kubegres
   src/kubegres.sh
-  # argoCD
-  src/argocd.sh
   initializer "$this_cwd/init/keycloak"
   ./src/part2.sh
 }

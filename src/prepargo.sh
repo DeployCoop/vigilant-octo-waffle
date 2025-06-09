@@ -6,11 +6,13 @@ source ./src/initializer.bash
 this_cwd=$(pwd)
 
 main () {
-  #set -eux
+  if [[ ${VERBOSITY} -gt 99 ]]; then
+    set -x
+  fi
   set -eu
   sleep 5
 
-
+  echo "argocd admin initial-password -n argocd"
   echo 'w8 argocd'
   if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     w8_ingress argocd argocd-server-ingress 
