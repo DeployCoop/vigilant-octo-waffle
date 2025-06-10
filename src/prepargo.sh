@@ -2,7 +2,7 @@
 set -e 
 set -a && source ./.env && set +a
 source ./src/w8.bash
-source ./src/initializer.bash
+source ./src/util.bash
 this_cwd=$(pwd)
 
 main () {
@@ -23,8 +23,7 @@ main () {
   sleep 15
   echo 'init argo pass'
   cd "${this_cwd}"
-  ./src/argocd-init-pass.sh
-  ./src/continue.sh
+  src/argocd-init-pass.sh
 }
 
 time main

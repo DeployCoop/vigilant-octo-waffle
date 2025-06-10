@@ -41,3 +41,26 @@ para_runner () {
     bash "${TARGET}"
   fi
 }
+
+initializer () {
+  if [[ ! $# -eq 1 ]]; then
+    echo "useage: $0 INIT_DIR"
+    exit 1
+  else
+    THIS_INIT=$1
+  fi
+  if [[ ! -d ${THIS_INIT} ]]; then
+    echo "${THIS_INIT} is not a directory!"
+    exit 1
+
+  fi
+
+  these_files=$(find ${THIS_INIT} -regex '.*.ya?ml'|sort)
+  for f in ${these_files[@]}; do
+    echo "subbing ${f}"
+    if [[ "${DEBUG}" == "true" ]]; then
+      envsubst < ${f}
+    fi
+    envsubst < ${f} | kubectl apply -f -
+  done
+}

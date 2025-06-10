@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source ./src/w8.bash
-source ./src/initializer.bash
+source ./src/util.bash
 initializer "$this_cwd/init/kubegres"
 sleep 1
 kubectl apply -f https://raw.githubusercontent.com/reactive-tech/kubegres/v1.19/kubegres.yaml

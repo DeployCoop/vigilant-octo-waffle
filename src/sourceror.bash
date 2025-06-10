@@ -4,7 +4,7 @@ check_cmd pwgen
 check_cmd kubectl
 check_cmd argocd
 source ./src/w8.bash
-source ./src/initializer.bash
+source ./src/util.bash
 
 # load our env file
 if [[ -f .env ]]; then

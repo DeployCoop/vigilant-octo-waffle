@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eux
-source ./src/initializer.bash
+source ./src/util.bash
 #helm repo add openebs https://openebs.github.io/openebs
 helm upgrade --install \
   openebs openebs \

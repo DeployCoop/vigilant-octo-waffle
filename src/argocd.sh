@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-source ./src/initializer.bash
+source ./src/util.bash
 export this_cwd=$(pwd)
 TMP=$(mktemp -d)
 trap 'rm -Rf $TMP' EXIT

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+: "${BIG_LIST:=./src/big_list}"
 source ./src/sourceror.bash
 export this_cwd=$(pwd)
 
@@ -31,7 +32,6 @@ main () {
   set -eu
   initializer "$this_cwd/init/cluster"
   kubectl apply -f ${THIS_SECRETS}.yaml
-  #kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
     src/nginx.sh
   else
@@ -46,7 +46,8 @@ main () {
   # argoCD
   src/argocd.sh
   initializer "$this_cwd/init/keycloak"
-  ./src/part2.sh
+  src/dockerCreds.sh
+  para_runner "${BIG_LIST}"
 }
 
 time main
