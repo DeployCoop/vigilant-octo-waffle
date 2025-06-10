@@ -8,6 +8,6 @@ main () {
   fi
   set -eu
   argoRunner "${THIS_THING}"
-  #initializer "${this_cwd}/init/${THIS_THING}"
+  initializer "${this_cwd}/init/${THIS_THING}"
 }
 time main
