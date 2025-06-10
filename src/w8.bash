@@ -173,7 +173,8 @@ w8_pod () {
   : ${VERBOSITY:=0}
 
   echo -n "wait on $TARGET_POD to become available"
+  sleep 2
   while_loop_wait
-
+  sleep 2
   echo "$TARGET_POD is now up and running"
 }

@@ -14,7 +14,7 @@ metadata:
 spec:
   ingressClassName: ${THIS_CLUSTER_INGRESS}
   rules:
-  - host: ${THIS_BAOUI_HOST}.${THIS_DOMAIN}
+  - host: ${THIS_OPENSEARCH_HOST}.${THIS_DOMAIN}
     http:
       paths:
       - backend:

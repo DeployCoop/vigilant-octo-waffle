@@ -8,6 +8,7 @@ main () {
   fi
   set -eu
   argoRunner "${THIS_THING}"
+  w8_pod "${THIS_NAMESPACE}" "opensearch-operator-${THIS_NAME}-controller-manager"
   initializer "${this_cwd}/init/${THIS_THING}"
 }
 time main
