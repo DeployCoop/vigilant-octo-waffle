@@ -1,10 +1,11 @@
-  ./src/harbor.sh
-  ./src/kube-prometheus-stack.sh
-  ./src/openldap.sh
-  ./src/openproject.sh
-  ./src/nextcloud.sh
-  ./src/supabase.sh
-  ./src/bao.sh
-  ./src/nextjs-docker.sh
-  ./src/FOSSBilling.sh
-  ./src/drupal.sh
+./src/harbor.sh
+./src/kube-prometheus-stack.sh
+./src/openldap.sh
+./src/openproject.sh
+./src/nextcloud.sh
+./src/supabase.sh
+./src/bao.sh
+./src/nextjs-docker.sh
+./src/FOSSBilling.sh
+./src/drupal.sh
+./src/kubeshark.sh

@@ -1,0 +1,21 @@
+metadata:
+  name: kubeshark-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: kubeshark
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      valueFiles:
+        - ./values.yaml

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-THIS_THING=drupal
+THIS_THING=kubeshark
 source ./src/common.sh
 
 main () {
