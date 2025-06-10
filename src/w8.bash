@@ -148,7 +148,9 @@ while_loop_wait () {
   while [ $countone -lt 151 ]
   do
     echo -n '.'
+    set +e
     RESULT=$(kubectl get po --namespace=$TARGET_NAMESPACE | grep $TARGET_POD | grep Running)
+    set -e
     if [ "$RESULT" ]; then
         echo '.'
         echo "$RESULT"
