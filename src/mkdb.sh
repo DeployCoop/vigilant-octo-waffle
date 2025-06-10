@@ -12,7 +12,8 @@ cleanup () {
 trap cleanup EXIT
 
 sqlrrr () {
-  kubectl get secret -n "${THIS_NAMESPACE}" example-secrets -o json|jq -r '.data."db-admin-pass"'|base64 -d 1> "${TMP}/pass"
+  kubectl get secret -n "${THIS_NAMESPACE}" "${THIS_SECRETS}" -o json|jq -r '.data."db-admin-pass"'|base64 -d 1> "${TMP}/pass"
+
   db_admin_password=$(cat ${TMP}/pass)
   THIS_CMD=$1
   #UPDATE_CMD="PGPASSWORD=${db_admin_password} /usr/bin/psql -u postgres -d "${POSTGRES_DB}" -c \"${THIS_CMD}\""
