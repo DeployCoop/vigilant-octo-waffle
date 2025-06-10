@@ -1,0 +1,35 @@
+apiVersion: opensearch.opster.io/v1
+kind: OpenSearchCluster
+metadata:
+  name:  opensearch-${THIS_NAME}
+  namespace: ${THIS_NAMESPACE}
+spec:
+  general:
+    serviceName: opensearch-${THIS_NAME}
+    version: "${THIS_OPENSEARCH_VERSION}"
+  dashboards:
+    enable: true
+    version: "${THIS_OPENSEARCH_VERSION}"
+    replicas: 1
+    resources:
+      requests:
+         memory: "${THIS_OPENSEARCH_DASH_MEM_REQ}"
+         cpu: "${THIS_OPENSEARCH_DASH_CPU_REQ}"
+      limits:
+         memory: "${THIS_OPENSEARCH_DASH_MEM_LIM}"
+         cpu: "${THIS_OPENSEARCH_DASH_CPU_LIM}"
+  nodePools:
+    - component: nodes
+      replicas: 1
+      diskSize: "5Gi"
+      nodeSelector:
+      resources:
+         requests:
+            memory: "${THIS_OPENSEARCH_NODEPOOL_MEM_REQ}"
+            cpu: "${THIS_OPENSEARCH_NODEPOOL_CPU_REQ}"
+         limits:
+            memory: "${THIS_OPENSEARCH_NODEPOOL_MEM_LIM}"
+            cpu: "${THIS_OPENSEARCH_NODEPOOL_CPU_LIM}"
+      roles:
+        - "cluster_manager"
+        - "data"

@@ -14,6 +14,7 @@
 127.0.0.1 nextcloud.${THIS_DOMAIN}
 127.0.0.1 nextjsdocker.${THIS_DOMAIN}
 127.0.0.1 openproject.${THIS_DOMAIN}
+127.0.0.1 opensearch.${THIS_DOMAIN}
 127.0.0.1 phpldapadmin.${THIS_DOMAIN}
 127.0.0.1 prometheus.${THIS_DOMAIN}
 127.0.0.1 supa.${THIS_DOMAIN}
