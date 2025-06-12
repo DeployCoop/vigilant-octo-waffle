@@ -49,7 +49,10 @@ Ensure the following tools are installed:
    ```bash
    mkcert -install
    ```
-   This ensures browsers trust locally generated TLS certificates.
+   This ensures your browser should then trust locally generated TLS certificates from certificate-manager within KinD.  
+   The configuration of KinD and certificate-manager are completely automated from here on out.
+
+   For further help on [mkcert](https://mkcert.org), check their [github](https://github.com/Lukasa/mkcert).
 
 ---
 
@@ -67,12 +70,28 @@ This will:
 - Deploy ArgoCD, cert-manager, and configured applications.
 - Apply TLS certificates and ingress rules.
 
+for now and you should have a cluster like so:
+
 **Example Output**:
 ```bash
+urban-disco on  main on ☁️   (us-east-2) on ☁️    
+󰰸 ❯ kgia
 NAMESPACE   NAME                             CLASS   HOSTS                  ADDRESS   PORTS     AGE
 argocd      argocd-server-ingress            nginx   argocd.example.com               80, 443   4h28m
 example     goharbor-example-ingress         nginx   harbor.example.com               80, 443   4h27m
 example     keycloak                         nginx   keycloak.example.com             80, 443   4h28m
+example     openbao                          nginx   bao.example.com                  80, 443   4h27m
+example     openbao-ui                       nginx   baoui.example.com                80, 443   4h27m
+example     supabase-example-supabase-kong   nginx   supa.example.com                 80, 443   4h27m
+urban-disco on  main on ☁️   (us-east-2) on ☁️    
+󰰸 ❯ k get cert -A
+NAMESPACE   NAME                          READY   SECRET                        AGE
+argocd      argocd-example-tls            True    argocd-example-tls            4h28m
+example     chart-bao-example.com-tls     True    chart-bao-example.com-tls     4h27m
+example     chart-example-baoui-tls       True    chart-example-baoui-tls       4h27m
+example     chart-example-keycloak-tls    True    chart-example-keycloak-tls    4h28m
+example     harborishel1234018730248971   True    harborishel1234018730248971   4h27m
+example     supatekro-ingress-tls         True    supatekro-ingress-tls         4h27m
 ```
 
 ### Access Applications
