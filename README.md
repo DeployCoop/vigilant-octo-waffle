@@ -35,7 +35,7 @@ Ensure the following tools are installed:
 
 1. **Create `.env`**:
    ```bash
-   make .env
+   cp src/example.env .env
    ```
    Edit the `.env` file to customize domain names, secrets, and other parameters.
 
@@ -111,7 +111,7 @@ To delete the cluster and all resources:
 
 Edit `.env.enabler` to control which services are deployed:
 ```bash
-make .env.enabler
+cp src/example.env.enabler .env.enabler
 ```
 
 Example:

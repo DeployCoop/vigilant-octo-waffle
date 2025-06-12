@@ -1,43 +1,50 @@
 # Roadmap
 
-I am trying to make this more useful by variabilizing example.com so someone could conceivably use this on a k3s instance as something other than example.com possibly in production, but that is not recommended at this point in time.  At this point it is for running an example.com and related services on your local laptop to test things out.  K3D might be considered as well once the k3s stuff is worked out.
+## Current State
 
-## Secrets
+The project provides a local Kubernetes environment with:
+- KinD/K3s cluster
+- ArgoCD for GitOps deployments
+- TLS with mkcert
+- Multi-application support (OpenLDAP, Harbor, Nextcloud, OpenProject, etc.)
+- Configurable via .env and .env.enabler
 
-On the roadmap is a route to getting all secrets sync'd with openbao, and for all charts to use secrets instead of values in the values viles (typo but I'll keep it).  However, that ideally involves PRs upstream to the various charts repos themselves
+## Next Steps
 
-# bash or sh or python?
+### Secrets Management
+- Implement OpenBAO integration for secret management
+- Update all charts to use secrets instead of values in values files
+- Create PRs upstream to chart repositories for secret support
 
-Well it started out as `#!/bin/sh` but complications arose from dash being linked as sh on some systems, so I converted all shellscripts to `#!/usr/bin/env bash` to accomodate for weirdOS like NixOS.  Why not move all .sh scripts to be .bash? Why not convert them to python too?  We'll see.
+### Architecture Improvements
+- Convert shell scripts to Python where appropriate
+- Add more error handling and validation
+- Improve logging and status reporting
+- Add health checks for all components
 
-# Style
+### Feature Enhancements
+- Add support for K3D as an alternative to KinD
+- Improve documentation for production use cases
+- Add more application templates (e.g., GitLab, Jenkins)
+- Add monitoring and alerting for local cluster
 
-So for the moment the style is decidedly bash with variables wrapped in curl brackets `${this_var}`, 
-and with tests being in double brackets to avoid forking out to `test`, e.g.
+### Development Process
+- Add CI/CD pipeline for testing changes
+- Add more unit tests for shell scripts
+- Improve code formatting and consistency
+- Add more examples and tutorials
 
-```bash
-if [[ ${this_var} -gt 99 ]]; then
-  echo "greater than 99"
-fi
-```
+## Language Considerations
 
-And math in double parenthesis, e.g.
+- Currently using Bash for all scripts
+- Considering Python for more complex logic
+- Open to Rust for performance-critical components
 
-```bash
-countzero=0
-while [[ ${countzero} -lt 99 ]]; do
-  echo "${countzero}"
-  ((++countzero))
-done
-```
+## Style Guide
 
-All execution should be at the base of this repo. 
-i.e. All scripts etc should be put in the `src` directory and should be invoked like so:
-
-```bash
-src/argocd.sh
-```
-
-`cd` should be avoided, be sure to return to the root after you are done.
-
-But I'm open to suggestions, and maybe converting many things to python or rust etc.
+- Using `${this_var}` syntax for variables
+- Using double brackets for tests
+- Using double parentheses for arithmetic
+- All execution should be at the base of the repo
+- All scripts should be in the `src` directory
+- Avoid `cd` commands, return to root after operations
