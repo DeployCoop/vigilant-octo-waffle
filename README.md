@@ -1,120 +1,153 @@
-# vigilant-octo-waffle
-![Vigilant Octo Waffle](src/vigilantoctowaffle.png?raw=true "Title")
+# Vigilant Octo Waffle 🐙
 
-This is a repo builds a kubernetes cluster in KinD or K3S, and then templatizes the necessary yaml to apply the [urban-disco](https://github.com/DeployCoop/urban-disco) as argoCD applications.  
+![Vigilant Octo Waffle](src/vigilantoctowaffle.png?raw=true "Vigilant Octo Waffle")
 
-You can use this repo to spin up a domain of your choice and a bunch of related services in KinD (kubernetes in docker).
+This project provides a **Kubernetes cluster setup** using [KinD](https://kind.sigs.k8s.io) or [K3s](https://k3s.io), pre-configured with [ArgoCD](https://argoproj.github.io/argocd/) and a suite of applications. It's ideal for testing, development, and demonstrating Kubernetes-based deployments with TLS, ingress, and secrets management.
 
-It's main use is so I can replicate issues I'm having on internal infrastructure and use this an example when requesting support through github issues and that sort of thing.
+---
 
-Maybe the coolest part is that I got [mkcert](https://mkcert.org) working and installed the certs so that https://example.com and many other hostnames pass the TLS checks in the browser.
-So I can verify that everything is done securely even in my examples.
+## 🚀 Features
 
-### Requirements
+- **Local Kubernetes Cluster**: Spin up a KinD or K3s cluster with a single command.
+- **ArgoCD Integration**: Automate application deployments using GitOps principles.
+- **TLS with mkcert**: Generate trusted certificates for local development (e.g., `https://example.com`).
+- **Multi-App Support**: Includes OpenLDAP, Harbor, Nextcloud, OpenProject, and more.
+- **Customizable**: Use `.env` and `.env.enabler` to configure services and enable/disable components.
 
-bash  # much of this was written in bash
+---
 
-python # there is at least one python script in here for now to update the password for harbor
+## 🛠 Requirements
 
-kubectl
+Ensure the following tools are installed:
 
-argocd
+- **Bash** (with `tr`, `pwgen`, `openssl`)
+- **Python 3**
+- **kubectl**
+- **argocd CLI**
+- **Docker** (with `docker-compose`)
+- **mkcert**
+- **KinD** (for Kubernetes-in-Docker)
+- **K3s** (optional)
 
-tr
+---
 
-pwgen
+## 📁 Configuration
 
-openssl
+1. **Create `.env`**:
+   ```bash
+   make .env
+   ```
+   Edit the `.env` file to customize domain names, secrets, and other parameters.
 
-[mkcert](https://mkcert.org)
+2. **Populate `/etc/hosts`**:
+   ```bash
+   src/hostr.sh
+   ```
+   This adds necessary hostnames (e.g., `example.com`) to your local hosts file.
 
-[KinD](https://kind.sigs.k8s.io)
+3. **mkcert Setup**:
+   ```bash
+   mkcert -install
+   ```
+   This ensures browsers trust locally generated TLS certificates.
 
-### Configuration 
+---
 
-`make .env`
+## 🚀 Usage
 
-And edit that file and it should be working
-
-There is also a convenience script to populate your local hosts file:
-
-`src/hostr.sh`
-
-### [mkcert](https://mkcert.org)
-
-Install [mkcert](https://mkcert.org) and ensure it is in your path and then:
-
-`mkcert -install`
-
-And your browser should then accept the certs from certificate-manager within KinD.  The configuration of KinD and certificate-manager are completely automated from here on out.
-
-For further help on [mkcert](https://mkcert.org), check their [github](https://github.com/Lukasa/mkcert).
-
-### Useage
-
-To start the cluster:
-
-`./up.sh`
-
-for now and you should have a cluster like so:
+### Start the Cluster
 
 ```bash
-urban-disco on  main on ☁️   (us-east-2) on ☁️    
-󰰸 ❯ kgia
+./up
+```
+
+This will:
+- Delete any existing cluster.
+- Create a new KinD/K3s cluster.
+- Deploy ArgoCD, cert-manager, and configured applications.
+- Apply TLS certificates and ingress rules.
+
+**Example Output**:
+```bash
 NAMESPACE   NAME                             CLASS   HOSTS                  ADDRESS   PORTS     AGE
 argocd      argocd-server-ingress            nginx   argocd.example.com               80, 443   4h28m
 example     goharbor-example-ingress         nginx   harbor.example.com               80, 443   4h27m
 example     keycloak                         nginx   keycloak.example.com             80, 443   4h28m
-example     openbao                          nginx   bao.example.com                  80, 443   4h27m
-example     openbao-ui                       nginx   baoui.example.com                80, 443   4h27m
-example     supabase-example-supabase-kong   nginx   supa.example.com                 80, 443   4h27m
-urban-disco on  main on ☁️   (us-east-2) on ☁️    
-󰰸 ❯ k get cert -A
-NAMESPACE   NAME                          READY   SECRET                        AGE
-argocd      argocd-example-tls            True    argocd-example-tls            4h28m
-example     chart-bao-example.com-tls     True    chart-bao-example.com-tls     4h27m
-example     chart-example-baoui-tls       True    chart-example-baoui-tls       4h27m
-example     chart-example-keycloak-tls    True    chart-example-keycloak-tls    4h28m
-example     harborishel1234018730248971   True    harborishel1234018730248971   4h27m
-example     supatekro-ingress-tls         True    supatekro-ingress-tls         4h27m
 ```
 
-### Deplying to the local harbor registry:
+### Access Applications
 
-Start in https://harbor.example.com/ and make a new user and a project to push into.
+- **ArgoCD**: `https://argocd.example.com`
+- **Harbor**: `https://harbor.example.com`
+- **Keycloak**: `https://keycloak.example.com`
 
-Add that user to the project, and then login using
+Log in using credentials from your `.env` file.
 
+---
+
+## 📦 Deploy to Local Harbor Registry
+
+1. **Create a Project and User** in Harbor's UI.
+2. **Push an Image**:
+   ```bash
+   docker login harbor.example.com
+   docker push harbor.example.com/demo/mydockerthing:latest
+   ```
+
+---
+
+## 🧹 Teardown
+
+To delete the cluster and all resources:
 ```bash
-docker login harbor.example.com
+./src/kindDown.sh
 ```
 
-And then push into it:
+> ⚠️ Warning: This will remove all data stored in the cluster.
 
+---
+
+## 🛠 Enabling/Disabling Services
+
+Edit `.env.enabler` to control which services are deployed:
 ```bash
-docker push harbor.example.com/demo/mydockerthing:latest
-```
-
-# Down
-
-To tear it all down:
-
-```bash
-kindDown.sh
-```
-
-# Enabler
-
-You can make the default `.env.enabler` file with:
-
-```
 make .env.enabler
 ```
 
-Then simply delete any service you don't want to start from that file, or change its value into anything other than true.
+Example:
+```bash
+BAO_ENABLED=true
+NEXTCLOUD_ENABLED=false
+```
 
-## [Architecture](ARCHITECTURE.md)
+> ⚠️ Service names in `.env.enabler` must match the format `${THIS_THING}_ENABLED` (uppercase, underscores).
 
-## [Contributing](CONTRIBUTING.md)
+---
 
-## [Roadmap](ROADMAP.md)
+## 📚 Documentation
+
+- **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Roadmap**: [ROADMAP.md](ROADMAP.md)
+
+---
+
+## 🤝 Contributing
+
+- **Report Issues**: Open a GitHub issue for bugs or feature requests.
+- **Add Applications**: Follow the [contributing guide](CONTRIBUTING.md) to add new apps.
+- **Pull Requests**: All contributions are welcome!
+
+---
+
+## 📌 Notes
+
+- This project is ideal for **local testing** and **development**. Do not use in production without review.
+- For K3s, ensure your environment supports it (e.g., bare metal or VMs).
+- TLS certificates are valid for local hosts only (e.g., `example.com`).
+
+---
+
+## 📞 Support
+
+For questions or help, open an issue or join the community on Discord (link in [CONTRIBUTING.md](CONTRIBUTING.md)).
