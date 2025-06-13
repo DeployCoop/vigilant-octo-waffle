@@ -5,7 +5,7 @@
 # Default number of parallel jobs if parallel is available
 : "${PARALLEL_JOBS:=1}"
 : "${DEBUG:='false'}"
-: "${ENABLER:='./.env.enabler'}"
+: "${ENABLER:=.env.enabler}"
 
 # Log an error message and exit
 log_error() {
@@ -54,9 +54,12 @@ check_enabler () {
     log_warn "No enabler file found. Running all applications."
     THIS_ENABLED=true
     return 0
+  else
+    set -a && source ${ENABLER} && set +a
   fi
-  set -a && source ${ENABLER} && set +a
-  set -x
+  if [[ "${VERBOSITY}" -gt "99" ]] ; then
+    set -x
+  fi
   varname=$(echo ${THIS_THING}_ENABLED | tr '[:lower:]' '[:upper:]' | tr '-' '_' )
   if [[ ! ${!varname} == 'true' ]]; then
     echo "${varname} is not enabled check ${ENABLER}"
@@ -88,40 +91,7 @@ para_runner () {
   fi
 }
 
-
 # Initialize Kubernetes resources from a directory
-robo_initializer() {
-  if [[ $# -ne 1 ]]; then
-    log_error "Usage: initializer <directory>"
-  fi
-
-  local init_dir="$1"
-  if [[ ! -d "$init_dir" ]]; then
-    log_error "'$init_dir' is not a valid directory."
-  fi
-
-  log_debug "Initializing Kubernetes resources from '$init_dir'"
-
-  while IFS= read -r -d '' file; do
-    local ext="${file##*.}"
-    if [[ "$ext" != "yaml" && "$ext" != "yml" ]]; then
-      log_debug "Skipping non-YAML file: '$file'"
-      continue
-    fi
-
-    log_debug "Processing file: '$file'"
-
-    if [[ "$DEBUG" == "true" ]]; then
-      log_debug "envsubst output for '$file':"
-      envsubst < "$file" >&2
-    fi
-
-    if ! envsubst < "$file" | kubectl apply -f -; then
-      log_error "Failed to apply '$file'"
-    fi
-  done < <(find "$init_dir" -type f -name "*.yaml" -o -name "*.yml" -print0)
-}
-
 initializer () {
   if [[ ! $# -eq 1 ]]; then
     log_error "Usage: $0 <directory>"
@@ -141,4 +111,52 @@ initializer () {
     fi
     envsubst < ${f} | kubectl apply -f -
   done
+}
+
+phile_checkr () {
+if [[ $# -eq 1 ]]; then
+TARGET_FILE=$1
+  if [[ -f $TARGET_FILE ]]; then
+    echo "$TARGET_FILE exists, leaving untouched"; exit 0
+  fi
+else
+  echo "Wrong number of args! $#"
+  echo "usage: $0 file_to_check"
+fi
+}
+
+liner () {
+  echo "  $1 $2" >> $SECRET_FILE
+  if [[ ${THIS_ENABLE_PLAIN_SECRETS_FILE} == 'true' ]]; then
+    echo "  $1 $3" >> $KEY_FILE
+  fi
+}
+
+munger () {
+  if [[ $# -eq 0 ]]; then
+      echo 'ERROR: no args!'; exit 1
+  fi
+  KEY_NAME=$1
+  if [[ $# -eq 2 ]]; then
+    SECRET=$2
+  elif [[ $# -eq 3 ]]; then
+    PASS_LENGTH=$2
+    RANDO_METHOD=$3
+    if [[ ${RANDO_METHOD} == 'tr' ]]; then
+      check_cmd tr
+      SECRET=$(< /dev/random tr -dc _A-Z-a-z-0-9 | head -c${PASS_LENGTH})
+    elif [[ ${RANDO_METHOD} == 'pwgen' ]]; then
+      SECRET=pwgen ${PASS_LENGTH} 1
+    elif [[ ${RANDO_METHOD} == 'openssl' ]]; then
+      check_cmd openssl
+      SECRET=$(openssl rand -base64 ${PASS_LENGTH})
+    else
+      echo 'ERROR: unrecognized method!'; exit 1
+    fi
+  else
+    PASS_LENGTH='23'
+    SECRET=$(pwgen ${PASS_LENGTH} 1)
+  fi
+  based=$(echo -n ${SECRET} | base64)
+  liner ${KEY_NAME} $based ${SECRET}
 }

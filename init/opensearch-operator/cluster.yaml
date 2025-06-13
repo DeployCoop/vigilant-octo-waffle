@@ -9,8 +9,13 @@ spec:
     version: "${THIS_OPENSEARCH_VERSION}"
   dashboards:
     enable: true
+    tls:
+      enable: true  # Configure TLS
+      generate: true  # Have the Operator generate and sign a certificate
     version: "${THIS_OPENSEARCH_VERSION}"
     replicas: 1
+    nodeSelector:
+      opensearchrole: "worker"
     resources:
       requests:
          memory: "${THIS_OPENSEARCH_DASH_MEM_REQ}"
@@ -18,11 +23,16 @@ spec:
       limits:
          memory: "${THIS_OPENSEARCH_DASH_MEM_LIM}"
          cpu: "${THIS_OPENSEARCH_DASH_CPU_LIM}"
+  security:
+    config:  # Everything related to the securityconfig
+      adminCredentialsSecret:
+        name: "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}"
   nodePools:
     - component: nodes
-      replicas: 1
-      diskSize: "5Gi"
+      replicas: 3
+      diskSize: "${THIS_OPENSEARCH_NODEPOOL_DISK_SIZE}"
       nodeSelector:
+        opensearchrole: "worker"
       resources:
          requests:
             memory: "${THIS_OPENSEARCH_NODEPOOL_MEM_REQ}"
@@ -33,3 +43,16 @@ spec:
       roles:
         - "cluster_manager"
         - "data"
+    - component: masters
+      replicas: 3
+      diskSize: 30
+      roles:
+        - "data"
+        - "master"
+      nodeSelector:
+        opensearchrole: "worker"
+      persistence:
+        pvc:
+          storageClass: "${THIS_STORAGECLASS}"
+          accessModes: # You can change the accessMode
+          - ReadWriteOnce

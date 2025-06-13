@@ -3,6 +3,7 @@ source ./src/check_cmd.bash
 check_cmd pwgen
 check_cmd kubectl
 check_cmd argocd
+check_cmd jq
 source ./src/w8.bash
 source ./src/util.bash
 

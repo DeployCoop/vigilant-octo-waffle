@@ -250,7 +250,10 @@ controller:
   # -- Node tolerations for server scheduling to nodes with taints
   ## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
   ##
-  tolerations: []
+  tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "PreferNoSchedule"
   #  - key: "key"
   #    operator: "Equal|Exists"
   #    value: "value"
@@ -334,6 +337,7 @@ controller:
   ##
   nodeSelector:
     kubernetes.io/os: linux
+    tier: "frontend"
   ## Liveness and readiness probe values
   ## Ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
   ##
@@ -810,7 +814,11 @@ controller:
         enabled: false
       nodeSelector:
         kubernetes.io/os: linux
-      tolerations: []
+        tier: "frontend"
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "PreferNoSchedule"
       # -- Labels to be added to patch job resources
       labels: {}
       # -- Security context for secret creation & webhook patch pods
@@ -1002,7 +1010,10 @@ defaultBackend:
   # -- Node tolerations for server scheduling to nodes with taints
   ## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
   ##
-  tolerations: []
+  tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "PreferNoSchedule"
   #  - key: "key"
   #    operator: "Equal|Exists"
   #    value: "value"
@@ -1087,6 +1098,7 @@ defaultBackend:
   ##
   nodeSelector:
     kubernetes.io/os: linux
+    tier: "frontend"
   # -- Annotations to be added to default backend pods
   ##
   podAnnotations: {}

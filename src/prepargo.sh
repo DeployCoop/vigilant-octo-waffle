@@ -11,7 +11,6 @@ main () {
   fi
   set -eu
   sleep 5
-
   echo "argocd admin initial-password -n argocd"
   echo 'w8 argocd'
   if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
@@ -22,7 +21,6 @@ main () {
   fi
   sleep 15
   echo 'init argo pass'
-  cd "${this_cwd}"
   src/argocd-init-pass.sh
 }
 

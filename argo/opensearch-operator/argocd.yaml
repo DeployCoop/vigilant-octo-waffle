@@ -17,5 +17,7 @@ spec:
     repoURL: ${THIS_REPO_URL}
     targetRevision: HEAD
     helm:
-      valueFiles:
-        - ./values.yaml
+      values: |
+        manager:
+          extraEnv:
+            OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
