@@ -23,6 +23,9 @@ spec:
       limits:
          memory: "${THIS_OPENSEARCH_DASH_MEM_LIM}"
          cpu: "${THIS_OPENSEARCH_DASH_CPU_LIM}"
+  bootstrap:
+    additionalConfig:
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
   security:
     config:  # Everything related to the securityconfig
       adminCredentialsSecret:
