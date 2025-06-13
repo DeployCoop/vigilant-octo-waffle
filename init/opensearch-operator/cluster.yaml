@@ -27,6 +27,8 @@ spec:
     config:  # Everything related to the securityconfig
       adminCredentialsSecret:
         name: "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}"
+      securityConfigSecret:
+        name: "opensearch-${THIS_NAME}-securityconfig-secret"
   nodePools:
     - component: nodes
       replicas: 3
@@ -45,7 +47,7 @@ spec:
         - "data"
     - component: masters
       replicas: 3
-      diskSize: 30
+      diskSize: "${THIS_OPENSEARCH_NODEPOOL_DISK_SIZE}"
       roles:
         - "data"
         - "master"
