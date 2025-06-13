@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 THIS_THING=opensearch-operator
 source src/common.sh
-source src/sourceror.sh
+source src/sourceror.bash
 PASS_LENGTH=33
 if [[ -z ${THIS_OPENSEARCH_ADMIN_PASSWORD} ]]; then
   echo 'WARN: env var THIS_OPENSEARCH_ADMIN_PASSWORD not set generating a random password!'
   export THIS_OPENSEARCH_ADMIN_PASSWORD=$(pwgen -y -c ${PASS_LENGTH} 1)
    pwgen -y -c 23 1
 fi
-if [[ -z ${THIS_OPENSEARCH_ADMIN_PASSWORD} ]]; then
+if [[ -z ${THIS_OPENSEARCH_DASHUSER_PASSWORD} ]]; then
   echo 'WARN: env var THIS_OPENSEARCH_DASHUSER_PASSWORD not set generating a random password!'
   export THIS_OPENSEARCH_DASHUSER_PASSWORD=$(pwgen -y -c ${PASS_LENGTH} 1)
 fi
