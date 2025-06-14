@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source ./src/util.bash
 source src/sourceror.bash
-set -a && source ./.env && set +a
+set -a && source ./.env && source src/default.env && set +a
 source ./src/w8.bash
 source ./src/util.bash
 source ./src/argoRunner.sh
