@@ -15,4 +15,4 @@ else
 fi
 # load the defaults which should be ignored 
 # if a value was previously set in the .env
-source ./src/default.env
+  set -a && source ./src/default.env && set +a
