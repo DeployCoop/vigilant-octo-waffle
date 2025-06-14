@@ -4,6 +4,7 @@ metadata:
   name:  opensearch-${THIS_NAME}
   namespace: ${THIS_NAMESPACE}
 spec:
+  #plugins.security.allow_default_init_securityindex: true
   general:
     serviceName: opensearch-${THIS_NAME}
     version: "${THIS_OPENSEARCH_VERSION}"
@@ -25,13 +26,14 @@ spec:
          cpu: "${THIS_OPENSEARCH_DASH_CPU_LIM}"
   bootstrap:
     additionalConfig:
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
-  security:
-    config:  # Everything related to the securityconfig
-      adminCredentialsSecret:
-        name: "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}"
-      securityConfigSecret:
-        name: "opensearch-${THIS_NAME}-securityconfig-secret"
+      #OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "deadbeefDeluxe333!"
+  #security:
+  #  config:  # Everything related to the securityconfig
+  #    adminCredentialsSecret:
+  #      name: "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}"
+  #    securityConfigSecret:
+  #      name: "opensearch-${THIS_NAME}-securityconfig-secret"
   nodePools:
     - component: nodes
       replicas: 3
