@@ -14,6 +14,7 @@ if [[ -z ${THIS_OPENSEARCH_DASHUSER_PASSWORD} ]]; then
 fi
 export THIS_OPENSEARCH_ADMIN_PASSHASH=$(src/opensearch-hashpass.py ${THIS_OPENSEARCH_ADMIN_PASSWORD})
 export THIS_OPENSEARCH_DASHUSER_PASSHASH=$(src/opensearch-hashpass.py ${THIS_OPENSEARCH_DASHUSER_PASSWORD})
+
 secret_maker () {
   local secret_name=$1
   local secret_user=$2
@@ -21,8 +22,8 @@ secret_maker () {
   kubectl create secret generic \
     "${secret_name}" \
     -n "${THIS_NAMESPACE}" \
-    --from-literal=username="${THIS_OPENSEARCH_ADMIN_USER}" \
-    --from-literal=password="${THIS_OPENSEARCH_ADMIN_PASSWORD}"
+    --from-literal=username="${secret_user}" \
+    --from-literal=password="${secret_pass}"
 }
 
 main () {
