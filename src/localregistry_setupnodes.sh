@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-set -x
+set -eux
 
+reg_name='kind-registry'
+reg_port='5001'
 # 3. Add the registry config to the nodes
 #
 # This is necessary because localhost resolves to loopback addresses that are
