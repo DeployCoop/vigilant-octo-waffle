@@ -50,8 +50,8 @@ spec:
           tls:
             - secretName: nextcloud-example-tls
               hosts:
-                - nextcloud.example.com
-          hosts: [ nextcloud.example.com ]
+                - ${THIS_NC_HOST}.${THIS_DOMAIN}
+          hosts: [ ${THIS_NC_HOST}.${THIS_DOMAIN} ]
           annotations:
             spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
             nginx.ingress.kubernetes.io/ssl-passthrough: "true"
@@ -96,7 +96,7 @@ spec:
           protocol: https
         
         nextcloud:
-          host: nextcloud.example.com
+          host: ${THIS_NC_HOST}.${THIS_DOMAIN}
           #username: admin
           #password:
           ## Use an existing secret
@@ -118,14 +118,14 @@ spec:
             subPath:
           # if set, we'll template this list to the NEXTCLOUD_TRUSTED_DOMAINS env var
           trustedDomains:
-            - nextcloud.example.com
+            - ${THIS_NC_HOST}.${THIS_DOMAIN}
           ## SMTP configuration
           mail:
             enabled: true
             # the user we send email as
             fromAddress: wekan
             # the domain we send email from
-            domain: example.com
+            domain: ${THIS_DOMAIN}
             smtp:
               #host: domain.com
               secure: ssl
@@ -274,7 +274,7 @@ spec:
               $CONFIG = array (
                 'trusted_domains' =>
                 array(
-                0 => 'nextcloud.example.com',
+                0 => '${THIS_NC_HOST}.${THIS_DOMAIN}',
                 ),
               );
         
@@ -282,7 +282,7 @@ spec:
               <?php
               $CONFIG = array (
                 'overwriteprotocol' => 'https',
-                'overwrite.cli.url' => 'https://nextcloud.example.com/',
+                'overwrite.cli.url' => 'https://${THIS_NC_HOST}.${THIS_DOMAIN}/',
               );
         
             extras.config.php: |-
@@ -316,7 +316,7 @@ spec:
           #   $CONFIG = array (
           #     'trusted_proxies' =>
           #     array(
-          #     0 => 'nextcloud.example.com',
+          #     0 => '${THIS_NC_HOST}.${THIS_DOMAIN}',
           #     ),
           #   );
         
@@ -325,7 +325,7 @@ spec:
           #   $CONFIG = array (
           #     'trusted_domains' =>
           #     array(
-          #     0 => 'nextcloud.example.com',
+          #     0 => '${THIS_NC_HOST}.${THIS_DOMAIN}',
           #     ),
           #   );
         
