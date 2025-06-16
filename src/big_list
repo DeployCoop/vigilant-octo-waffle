@@ -10,3 +10,4 @@ src/FOSSBilling.sh
 src/drupal.sh
 src/kubeshark.sh
 src/opensearch-operator.sh
+src/opensearch.sh

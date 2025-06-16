@@ -21,7 +21,6 @@ spec:
         ingress:
           enabled: true
           ingressClassName: "${THIS_CLUSTER_INGRESS}"
-          ingressClassName: 
           annotations:
             nginx.ingress.kubernetes.io/rewrite-target: /
             cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}

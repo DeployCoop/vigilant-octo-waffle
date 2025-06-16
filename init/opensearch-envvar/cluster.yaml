@@ -6,6 +6,8 @@ metadata:
 spec:
   #plugins.security.allow_default_init_securityindex: true
   general:
+    additionalConfig:
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
     serviceName: opensearch-${THIS_NAME}
     version: "${THIS_OPENSEARCH_VERSION}"
   dashboards:
@@ -24,9 +26,10 @@ spec:
       limits:
          memory: "${THIS_OPENSEARCH_DASH_MEM_LIM}"
          cpu: "${THIS_OPENSEARCH_DASH_CPU_LIM}"
-  #bootstrap:
-  #  additionalConfig:
-  #    OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
+  bootstrap:
+    envVar:
+    additionalConfig:
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
       #OPENSEARCH_INITIAL_ADMIN_PASSWORD: "deadbeefDeluxe333!"
   security:
     config:  # Everything related to the securityconfig
@@ -36,8 +39,8 @@ spec:
         name: "opensearch-${THIS_NAME}-securityconfig-secret"
   nodePools:
     - component: nodes
-  #    additionalConfig:
-  #      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
+      additionalConfig:
+        OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
       replicas: 3
       diskSize: "${THIS_OPENSEARCH_NODEPOOL_DISK_SIZE}"
       nodeSelector:
@@ -53,8 +56,8 @@ spec:
         - "cluster_manager"
         - "data"
     - component: masters
-  #    additionalConfig:
-  #      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
+      additionalConfig:
+        OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
       replicas: 3
       diskSize: "${THIS_OPENSEARCH_NODEPOOL_DISK_SIZE}"
       roles:

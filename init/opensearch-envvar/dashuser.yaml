@@ -1,0 +1,13 @@
+apiVersion: opensearch.opster.io/v1
+kind: OpensearchUser
+metadata:
+  name: ${THIS_OPENSEARCH_DASHUSER_USER}
+  namespace: ${THIS_NAMESPACE}
+spec:
+  opensearchCluster:
+    name:  opensearch-${THIS_NAME}
+  passwordFrom:
+    name: ${THIS_OPENSEARCH_DASHUSER_CRED_SECRET}
+    key: password
+  backendRoles:
+  - kibanauser
