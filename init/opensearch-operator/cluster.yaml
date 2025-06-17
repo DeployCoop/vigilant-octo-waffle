@@ -34,6 +34,12 @@ spec:
         name: "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}"
       securityConfigSecret:
         name: "opensearch-${THIS_NAME}-securityconfig-secret"
+    tls:
+       http:
+         generate: true
+       transport:
+         generate: true
+         perNode: true
   nodePools:
     - component: nodes
   #    additionalConfig:
