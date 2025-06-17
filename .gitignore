@@ -1,4 +1,5 @@
 .env*
+*secrets
 *secrets.yaml
 *secrets.yml
 .aider*

@@ -37,7 +37,7 @@ main () {
   done
   set -e
 
-  admin_pass=$(yq '.stringData|."argocdadmin-password"' .${THIS_NAME}-plain-secrets.yaml|sed 's/"//g')
+  admin_pass=$(yq '.stringData|."argocdadmin-password"' ${KEY_FILE}|sed 's/"//g')
   admin_pass=${admin_pass//$'\n'/}
 
   argocd account update-password \

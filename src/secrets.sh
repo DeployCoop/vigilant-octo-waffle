@@ -2,10 +2,7 @@
 source src/sourceror.bash
 source src/util.bash
 
-if [[ ${THIS_ENABLE_PLAIN_SECRETS_FILE} == 'true' ]]; then
-  KEY_FILE=./.${THIS_NAME}-plain-secrets.yaml
-fi
-SECRET_FILE=./${THIS_SECRETS}.yaml 
+mkdir -p ./.secrets
 
 if [[ ! $1 == '--force' ]]; then
   phile_checkr $SECRET_FILE
