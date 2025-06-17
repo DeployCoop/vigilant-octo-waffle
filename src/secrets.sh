@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 source src/sourceror.bash
-source src/util.bash
-
 mkdir -p ./.secrets
 
 if [[ ! $1 == '--force' ]]; then
