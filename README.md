@@ -33,6 +33,32 @@ This project provides a **Kubernetes cluster setup** using [KinD](https://kind.s
 - **supabase
 - **example-nextjs-docker
 
+## Ingress 
+
+Adjustable $subdomain.$domain.$tld for each subdomain. With TLS using mkcert for local development and LetsEncrypt with real certs if you have an external static IP
+
+```bash
+󰰸 ❯ kgia
+NAMESPACE    NAME                                      CLASS    HOSTS                      ADDRESS   PORTS     AGE
+argocd       argocd-server-ingress                     nginx    argocd.example.com                   80, 443   26m
+example      drupal-example                            nginx    drupal.example.com                   80, 443   24m
+example      examplenc-collabora                       nginx    collabora.example.com                80, 443   24m
+example      examplenc-nextcloud                       nginx    nextcloud.example.com                80, 443   24m
+example      fossbilling                               nginx    fossbilling.example.com              80, 443   24m
+example      goharbor-example-ingress                  nginx    harbor.example.com                   80, 443   24m
+example      keycloak                                  nginx    keycloak.example.com                 80, 443   25m
+example      kubeshark-ingress                         nginx    kubeshark.example.com                80, 443   24m
+example      nextjs-docker-example-web                 nginx    nextjsdocker.example.com             80, 443   24m
+example      openbao                                   nginx    bao.example.com                      80, 443   23m
+example      openbao-ui                                nginx    baoui.example.com                    80, 443   24m
+example      openproject-example                       nginx    openproject.example.com              80, 443   24m
+example      opensearch-cluster-master                 nginx    opensearch.example.com               80, 443   24m
+example      supabase-example-supabase-kong            nginx    supa.example.com                     80, 443   24m
+monitoring   prometheus-grafana                        nginx    grafana.example.com                  80, 443   24m
+monitoring   prometheus-kube-prometheus-alertmanager   nginx    alertmanager.example.com             80, 443   24m
+monitoring   prometheus-kube-prometheus-prometheus     nginx    prometheus.example.com               80, 443   24m
+```
+
 ---
 
 ## 🛠 Requirements
@@ -48,6 +74,23 @@ Ensure the following tools are installed:
 - **KinD** (for Kubernetes-in-Docker)
 - **K3s** (optional)
 
+You will need around 11 GB just to pull all the images and startup the cluster if you enable all the apps, it might be prudent to start with just a few.  
+And my laptop is using about 25 GB of RAM with everything on and my browser open.
+
+```bash
+$ grep 'model name' /proc/cpuinfo |uniq
+model name      : Intel(R) Core(TM) Ultra 5 125U
+
+$ cat /proc/loadavg 
+0.97 1.04 1.41 1/5915 941800
+
+$ free -m
+               total        used        free      shared  buff/cache   available
+Mem:           47483       25126        2092        1231       22069       22356
+Swap:          65535         407       65128
+```
+
+
 ---
 
 ## 📁 Configuration
@@ -56,7 +99,8 @@ Ensure the following tools are installed:
    ```bash
    cp src/example.env .env
    ```
-   Edit the `.env` file to customize domain names, secrets, and other parameters.
+   Edit the `.env` file to customize domain names, secrets, and other parameters.   
+   There are many defaults in src/defaults.env, any that you want to change either set in your environment file beforehand or set them in a local .env file.
 
 2. **Populate `/etc/hosts`**:
    ```bash
