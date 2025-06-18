@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory() as tmpdirname:
 
 # convert my bash env vars to python
 with tempfile.NamedTemporaryFile() as fp:
-    print(f'src/printenv.sh > ${fp.name}')
+    print(f'src/printenv.sh > {fp.name}')
     myCompletedProcess = subprocess.run([f'src/printenv.sh > {fp.name}'], capture_output=True, shell=True)
     fp.seek(0)
     print(fp.read())

@@ -30,7 +30,11 @@ make_db () {
   sqlrrr "CREATE DATABASE $customDatabaseName;"
   sqlrrr "CREATE USER $customUserName WITH PASSWORD '$customPassword';"
   sqlrrr "GRANT ALL PRIVILEGES ON DATABASE $customDatabaseName to $customUserName;"
+  sqlrrr "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $customUserName;"
+  sqlrrr "GRANT USAGE, CREATE ON SCHEMA public TO $customUserName;"
+  #sqlrrr "GRANT EXECUTE ON SCHEMA public TO $customUserName;"
   sqlrrr "ALTER DATABASE $customDatabaseName SET bytea_output = 'escape';"
+  sqlrrr "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT UPDATE, INSERT, SELECT, DELETE ON TABLES TO $customUserName;"
 }
 
 if [[ $# -eq 3 ]]; then

@@ -14,6 +14,3 @@ sleep 2
 set +e 
 w8_pod "${THIS_NAMESPACE}" "${THIS_NAME}-postgres-1-0"
 set -e 
-sleep 2
-db_password=$(kubectl get secret -n "${THIS_NAMESPACE}" example-secrets -o json|jq -r '.data."op-db-password"'|base64 -d)
-src/mkdb.sh "${THIS_OPENPROJECT_POSTGRES_DB}" "${THIS_OPENPROJECT_POSTGRES_USER}" "${db_password}"

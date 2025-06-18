@@ -18,6 +18,7 @@ spec:
     targetRevision: HEAD
     helm:
       values: |
+        develop: true
         ingress:
           enabled: true
           ingressClassName: "${THIS_CLUSTER_INGRESS}"
@@ -48,7 +49,7 @@ spec:
         postgresql:
           ## When set to true, a postgres server will be deployed into current namespace, when false you have to provide your
           ## own database instance.
-          bundled: false
+          bundled: ${THIS_OPENPROJECT_POSTGRES_BUNDLED}
           global:
             containerSecurityContext:
               enabled: true
@@ -70,3 +71,85 @@ spec:
               userPasswordKey: "op-db-password"
             username: "${THIS_OPENPROJECT_POSTGRES_USER}"
             database: "${THIS_OPENPROJECT_POSTGRES_DB}"
+        openproject:
+          https: true
+          hsts: true
+          cache:
+            store: "memcache"
+          extraEnvVarsSecret: ""
+          seed_locale: "en"
+          admin_user:
+            password_reset: "true"
+            name: "OpenProject Admin"
+            mail: "${THIS_OPENPROJECT_ADMIN_EMAIL}"
+        
+            secret: "${THIS_NAME}-openproject-admin-pass"
+        
+            ## In case your secret does not use the default key in the secret, you can adjust it here
+            secretKeys:
+              password: ""
+            # Uncomment if you want to lock the user after creation
+            # Relevant for automated deployments that seed LDAP or SSO
+            # locked: true
+        
+          ## Define OpenID Connect providers
+          oidc:
+            enabled: false
+            provider: "Keycloak"
+            displayName: "Keycloak"
+            host: ""
+            identifier: ""
+            secret: ""
+            authorizationEndpoint: ""
+            tokenEndpoint: ""
+            userinfoEndpoint: ""
+            endSessionEndpoint: ""
+            scope: "[openid]"
+        
+            # Optional attribute mappings from the id token
+            attribute_map: {}
+        
+            ## To avoid having sensitive credentials in your values.yaml, the preferred way is to
+            ## use an existing secret containing the OIDC compatible access credentials.
+            ## Specify the name of this existing secret here.
+            existingSecret:
+        
+            ## In case your secret does not use the default keys in the secret, you can adjust them here.
+            secretKeys:
+              identifier: "clientId"
+              secret: "clientSecret"
+        
+            # Allows usage of sealed-secret for `identifier` and `secret` values.
+            # Special use case for use in setups where heml template `lookup` function is not available.
+            # Ref: https://github.com/argoproj/argo-cd/issues/5202
+            #
+            extraOidcSealedSecret:
+        
+          ## Modify PostgreSQL statement timout.
+          ## Increase in case you get errors such as "ERROR: canceling statement due to statement timeout".
+          ##
+          ## Ref.: https://www.openproject.org/docs/installation-and-operations/configuration/environment/#postgresql-statement_timeout
+          #
+          postgresStatementTimeout: 120s
+        
+          ## Whether or not to use ephemeral volumes for /app/tmp and /tmp.
+          ## Falls back to a sensible default if undefined.
+          #
+          useTmpVolumes: true
+        
+          ## Define the tmp storage sizes
+          #
+          tmpVolumesStorage: "5Gi"
+        
+          ## Define the class of the tmp storage
+          #
+          tmpVolumesStorageClassName: "${THIS_STORAGECLASS}"
+        
+          ## Define custom annotations of tmp storage
+          #
+          tmpVolumesAnnotations: {}
+        
+          ## Define custom labels of tmp storage
+          #
+          tmpVolumesLabels: {}
+        
