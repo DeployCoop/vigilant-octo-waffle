@@ -14,6 +14,25 @@ This project provides a **Kubernetes cluster setup** using [KinD](https://kind.s
 - **Multi-App Support**: Includes OpenLDAP, Harbor, Nextcloud, OpenProject, and more.
 - **Customizable**: Use `.env` and `.env.enabler` to configure services and enable/disable components.
 
+## Apps
+
+- **argocd
+- **certmanager
+- **drupal
+- **FOSSBilling
+- **harbor
+- **kube-prometheus-stack
+- **kubeshark
+- **openbao
+- **openebs
+- **openldap
+- **openproject
+- **opensearch
+- **opensearch-operator
+- **nextcloud
+- **supabase
+- **example-nextjs-docker
+
 ---
 
 ## 🛠 Requirements
