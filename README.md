@@ -232,4 +232,4 @@ NEXTCLOUD_ENABLED=false
 
 ## 📞 Support
 
-For questions or help, open an issue or join the community on Discord (link in [CONTRIBUTING.md](CONTRIBUTING.md)).
+For questions or help, open an issue or join the community on Matrix (link in [CONTRIBUTING.md](CONTRIBUTING.md)).

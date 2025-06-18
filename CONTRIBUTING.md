@@ -1,5 +1,9 @@
 # Contributing
 
+## Matrix
+
+Join our [matrix](https://matrix.to/#/#vigilant-octo-waffle:matrix.org) to chat with us directly.
+
 ## Updating charts in the urban-disco repo
 
 I usually just delete the chart and `helm fetch --untar` it again, 
