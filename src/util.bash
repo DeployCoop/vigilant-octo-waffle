@@ -160,3 +160,21 @@ munger () {
   based=$(echo -n ${SECRET} | base64)
   liner ${KEY_NAME} $based ${SECRET}
 }
+
+linerrr () {
+  if [[ ! $# -eq 2 ]]; then
+    echo "wrong args $#"
+    exit 1
+  fi
+  line_to_add=$1
+  file_to_add_to=$2
+  if ! grep -q "$line_to_add" "${file_to_add_to}"; then
+    touched=1
+    echo "$line_to_add" | sudo tee -a "${file_to_add_to}" > /dev/null
+    echo "$line_to_add added to "${file_to_add_to}""
+  else
+    if [[ ${DEBUG} -eq 1 ]]; then
+      echo "$line_to_add already exists in "${file_to_add_to}""
+    fi
+  fi
+}

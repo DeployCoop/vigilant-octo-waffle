@@ -4,6 +4,7 @@ check_cmd pwgen
 check_cmd kubectl
 check_cmd argocd
 check_cmd jq
+check_cmd sed
 source ./src/w8.bash
 source ./src/util.bash
 
