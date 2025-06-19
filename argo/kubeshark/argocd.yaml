@@ -156,7 +156,7 @@ spec:
                   showAdminConsoleLink: true
           ingress:
             enabled: true
-            className: ""
+            className: ${THIS_CLUSTER_INGRESS}
             host: ${THIS_KUBESHARK_HOST}.${THIS_DOMAIN}
             tls: []
             annotations:
