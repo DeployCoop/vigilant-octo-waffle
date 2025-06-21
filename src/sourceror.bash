@@ -3,6 +3,7 @@ source ./src/check_cmd.bash
 check_cmd argocd
 check_cmd kubectl
 check_cmd jq
+check_cmd kind
 check_cmd pwgen
 check_cmd sed
 check_cmd sshuttle

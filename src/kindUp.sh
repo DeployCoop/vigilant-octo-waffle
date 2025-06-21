@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-source ./src/check_cmd.bash
-check_cmd kind
-set -a && source ./.env && set +a
-source ./src/w8.bash
-source ./src/util.bash
+source ./src/sourceror.bash
 this_cwd=$(pwd)
 
 main () {
+  TMP=$(mktemp)
+  trap 'rm $TMP' EXIT
+  envsubst < ${KIND_CONFIG_TPL} > ${TMP}
   set -eu
-  kind create cluster --config=./src/kind-config.yaml
+  kind create cluster --config=${TMP}
 }
 
 check_docker

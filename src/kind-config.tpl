@@ -6,7 +6,7 @@ nodes:
   labels:
     opensearchrole: controlplane
   extraMounts:
-  - hostPath: /mnt/xfs_backup/example
+  - hostPath: ${THIS_STORAGE_PATH}/controlplane1
     containerPath: /mnt/xfs_backup/example
 - role: worker
   labels:
@@ -20,19 +20,19 @@ nodes:
     hostPort: 443
     protocol: TCP
   extraMounts:
-  - hostPath: /mnt/xfs_backup/example1
+  - hostPath: ${THIS_STORAGE_PATH}/worker1
     containerPath: /mnt/xfs_backup/example
 - role: worker
   labels:
     opensearchrole: worker
   extraMounts:
-  - hostPath: /mnt/xfs_backup/example2
+  - hostPath: ${THIS_STORAGE_PATH}/worker2
     containerPath: /mnt/xfs_backup/example
 - role: worker
   labels:
     opensearchrole: worker
   extraMounts:
-  - hostPath: /mnt/xfs_backup/example3
+  - hostPath: ${THIS_STORAGE_PATH}/worker3
     containerPath: /mnt/xfs_backup/example
 containerdConfigPatches:
 - |-

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-: "${DEBUG:=0}"
-source src/util.bash
+source ./src/sourceror.bash
 set -eu
 if [[ -f ./.env ]]; then
 set -a && source ./.env && set +a
