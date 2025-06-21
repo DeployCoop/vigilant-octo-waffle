@@ -15,17 +15,6 @@ fi
 export THIS_OPENSEARCH_ADMIN_PASSHASH=$(src/opensearch-hashpass.py ${THIS_OPENSEARCH_ADMIN_PASSWORD})
 export THIS_OPENSEARCH_DASHUSER_PASSHASH=$(src/opensearch-hashpass.py ${THIS_OPENSEARCH_DASHUSER_PASSWORD})
 
-secret_maker () {
-  local secret_name=$1
-  local secret_user=$2
-  local secret_pass=$3
-  kubectl create secret generic \
-    "${secret_name}" \
-    -n "${THIS_NAMESPACE}" \
-    --from-literal=username="${secret_user}" \
-    --from-literal=password="${secret_pass}"
-}
-
 main () {
   if [[ ${VERBOSITY} -gt 99 ]]; then
     set -x

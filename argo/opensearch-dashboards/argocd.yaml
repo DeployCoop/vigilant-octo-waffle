@@ -1,0 +1,48 @@
+metadata:
+  name: opensearch-dashboards-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: opensearch-dashboards
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      values: |
+        opensearchHosts: "${THIS_OPENSEARCH_SVC_HOST}"
+        ingress:
+          enabled: true
+          # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+          # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+          ingressClassName: ${THIS_CLUSTER_INGRESS}
+          annotations:
+            nginx.ingress.kubernetes.io/rewrite-target: /
+            cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+            spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+          hosts:
+            - host: "${THIS_OPENSEARCH_DASH_HOST}.${THIS_DOMAIN}"
+              paths:
+                - path: /
+                  backend:
+                    serviceName: "opensearch-dashboards-${THIS_NAME}"
+                    servicePort: 5601
+          tls:
+            - secretName: ${THIS_NAME}-opensearch-dashboards-tls
+              hosts:
+                - "${THIS_OPENSEARCH_DASH_HOST}.${THIS_DOMAIN}"
+        ## Enable to add 3rd Party / Custom plugins not offered in the default OpenSearchDashboards image.
+        plugins:
+          enabled: false
+          installList: []
+          # - example-fake-plugin-downloadable-url
+          removeList: []
+          # - examplePluginName

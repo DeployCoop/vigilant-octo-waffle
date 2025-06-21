@@ -178,3 +178,25 @@ linerrr () {
     fi
   fi
 }
+
+secret_maker () {
+  local secret_name=$1
+  local secret_user=$2
+  local secret_pass=$3
+  kubectl create secret generic \
+    "${secret_name}" \
+    -n "${THIS_NAMESPACE}" \
+    --from-literal=username="${secret_user}" \
+    --from-literal=password="${secret_pass}"
+}
+
+secret_getter () {
+  if [[ ! $# -eq 3 ]]; then
+    echo "wrong args $# $@"
+    exit 1
+  fi
+  secret_namespace=$1
+  secret_name=$2
+  data_key=$3
+  kubectl get secret -n ${secret_namespace} ${secret_name} -o json|jq .data.${data_key}|sed 's/"//g'|base64 -d
+}

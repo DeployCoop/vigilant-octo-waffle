@@ -10,7 +10,7 @@ if [[ -z ${THIS_OPENSEARCH_ADMIN_PASSWORD} ]]; then
 fi
 export THIS_OPENSEARCH_ADMIN_PASSHASH=$(src/opensearch-hashpass.py ${THIS_OPENSEARCH_ADMIN_PASSWORD})
 
-secret_maker () {
+opensearch_initial_admin_secret_maker () {
   local secret_name=$1
   local secret_pass=$2
   kubectl create secret generic \
@@ -24,7 +24,7 @@ main () {
     set -x
   fi
   set -eu
-  secret_maker "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}" "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
+  opensearch_initial_admin_secret_maker "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}" "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
   argoRunner "${THIS_THING}"
 }
 time main
