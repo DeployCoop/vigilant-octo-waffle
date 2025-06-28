@@ -14,4 +14,21 @@ check_cmd () {
   fi
 }
 #useage
-check_cmd argocd
+# do_checks
+
+do_cmd_checks () {
+  check_cmd argocd
+  check_cmd kubectl
+  check_cmd jq
+  check_cmd pwgen
+  check_cmd sed
+  check_cmd sshuttle
+  check_cmd yq
+  if [[ $THIS_K8S_TYPE == "kind" ]]; then
+    check_cmd kind
+  elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
+    check_cmd k3d
+  elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
+    check_cmd k3s
+  fi
+}
