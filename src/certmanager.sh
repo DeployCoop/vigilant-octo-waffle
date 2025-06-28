@@ -4,8 +4,8 @@ source ./src/util.bash
 helm upgrade --install \
   cert-manager cert-manager \
   --repo https://charts.jetstack.io \
-  --namespace cert-manager \
-  --create-namespace \
+  --namespace cert-manager --create-namespace \
+  --wait \
   --version v1.16.3 \
   --set prometheus.enabled=true \
   --set crds.enabled=true

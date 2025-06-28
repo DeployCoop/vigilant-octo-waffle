@@ -17,6 +17,8 @@ main () {
       #src/registry-proxy.sh
       src/localregistry_setupnodes.sh
     fi
+  elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
+    src/k3dUp.sh
   elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
     kubectl get nodes
     if [[ $? == 0 ]]; then
@@ -34,7 +36,23 @@ main () {
   initializer "$this_cwd/init/cluster"
   kubectl apply -f .secrets/${THIS_SECRETS}.yaml
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    src/nginx.sh
+    if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
+      src/traefik.sh
+    elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
+      src/nginx.sh
+    else
+      echo 'unrecognized ingress'
+      exit 1
+    fi
+  elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
+    if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
+      src/traefik.sh
+    elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
+      src/nginx.sh
+    else
+      echo 'unrecognized ingress'
+      exit 1
+    fi
   else
     echo 'k3s uses traefik'
   fi

@@ -6,6 +6,7 @@ helm upgrade --install \
   openebs openebs \
   --namespace openebs --create-namespace \
   --repo https://openebs.github.io/openebs  \
+  --wait \
   -f src/openebs-values.yaml
 set +e
 w8_pod openebs openebs-localpv-provisioner

@@ -3,6 +3,12 @@ name: vigilant-octo-waffle
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-controller=true"
   labels:
     opensearchrole: controlplane
   extraMounts:

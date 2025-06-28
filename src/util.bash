@@ -173,7 +173,7 @@ linerrr () {
     echo "$line_to_add" | sudo tee -a "${file_to_add_to}" > /dev/null
     echo "$line_to_add added to "${file_to_add_to}""
   else
-    if [[ ${DEBUG} -eq 1 ]]; then
+    if [[ "$DEBUG" == "true" ]]; then
       echo "$line_to_add already exists in "${file_to_add_to}""
     fi
   fi

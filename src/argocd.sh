@@ -10,9 +10,16 @@ if [[ ${VERBOSITY} -gt 10 ]]; then
 fi
 envsubst < argo/argo-cd/values.yaml > "${TMP}/values.yaml"
 if [[ ${THIS_ARGO_METHOD} == 'helm' ]]; then
-  helm repo add argo https://argoproj.github.io/argo-helm
-  helm repo update
-  helm install archocd argo/argo-cd -f "${TMP}/values.yaml"
+  # helm repo add argo https://argoproj.github.io/argo-helm
+  # helm repo update
+  # helm install archocd argo/argo-cd \
+  # --wait \
+  #   -f "${TMP}/values.yaml"
+  helm upgrade --install \
+    argocd argo-cd \
+    --repo https://argoproj.github.io/argo-helm \
+    --wait \
+    -f "${TMP}/values.yaml"
 else
   #kubectl delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
   kubectl create namespace argocd
