@@ -27,6 +27,6 @@ spec:
         path: /
         pathType: Prefix  
   tls:
+    secretName: ${THIS_ARGO_HOST}-${THIS_NAMESPACE}-tls
   - hosts:
     - ${THIS_ARGO_HOST}.${THIS_DOMAIN}
-    secretName: ${THIS_ARGO_HOST}-${THIS_NAMESPACE}-tls

@@ -47,14 +47,7 @@ main () {
       exit 1
     fi
   elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
-    if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
-      src/traefik.sh
-    elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
-      src/nginx.sh
-    else
-      echo 'unrecognized ingress'
-      exit 1
-    fi
+    echo 'k3d uses traefik'
   else
     echo 'k3s uses traefik'
   fi

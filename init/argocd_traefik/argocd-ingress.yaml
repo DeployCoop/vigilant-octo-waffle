@@ -3,7 +3,14 @@ kind: IngressRoute
 metadata:
   name: argocd-server
   namespace: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+    kubernetes.io/ingress.class: ${THIS_CLUSTER_INGRESS}
+    traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
+    traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
+  tls:
+    secretName: {THIS_NAME}-argocd-tls
   entryPoints:
     - websecure
   routes:
@@ -20,5 +27,3 @@ spec:
         - name: argocd-server
           port: 80
           scheme: h2c
-  tls:
-    certResolver: default

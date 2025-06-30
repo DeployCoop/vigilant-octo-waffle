@@ -2,7 +2,8 @@
 source ./src/util.bash
 export this_cwd=$(pwd)
 TMP=$(mktemp -d)
-trap 'rm -Rf $TMP' EXIT
+#trap 'rm -Rf $TMP' EXIT
+trap 'echo $TMP' EXIT
 set -eu
 set -a && source ./.env && set +a
 if [[ ${VERBOSITY} -gt 10 ]]; then
