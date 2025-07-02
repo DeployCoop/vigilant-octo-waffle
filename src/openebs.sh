@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+THIS_THING=openebs
+source src/common.sh
+
 set -eux
-source ./src/util.bash
 #helm repo add openebs https://openebs.github.io/openebs
 helm upgrade --install \
   openebs openebs \

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-source src/sourceror.bash
+THIS_THING=kubegres
+source src/common.sh
+
 initializer "$this_cwd/init/kubegres"
 sleep 1
 kubectl apply -f https://raw.githubusercontent.com/reactive-tech/kubegres/v1.19/kubegres.yaml

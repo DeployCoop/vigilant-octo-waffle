@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 THIS_THING=REPLACEME_THING_REPLACEME
 source src/common.sh
-source src/sourceror.bash
 
 main () {
-  if [[ ${VERBOSITY} -gt 99 ]]; then
-    set -x
-  fi
   set -eu
   #initializer "${this_cwd}/init/pre-${THIS_THING}"
   argoRunner "${THIS_THING}"

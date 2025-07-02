@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-set -eux
-source ./src/util.bash
+THIS_THING=certmanager
+source src/common.sh
+
+set -eu
 helm upgrade --install \
   cert-manager cert-manager \
   --repo https://charts.jetstack.io \
@@ -14,10 +16,7 @@ kubectl -n cert-manager get pod
 set +e
 src/mkcert.sh
 set -e
-initializer "init/certmanager"
+src/letsencrypt.sh
 kubectl get ClusterIssuer -A
-kubectl describe clusterissuer letsencrypt-staging
-kubectl describe clusterissuer letsencrypt-production
-kubectl describe clusterissuer mkcert-issuer 
 kubectl create deployment nginx --image nginx:alpine 
 kubectl expose deployment nginx --port 80 --target-port 80

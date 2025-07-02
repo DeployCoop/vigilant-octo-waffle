@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-source ./src/util.bash
+THIS_THING=argocd
+source src/common.sh
 export this_cwd=$(pwd)
 TMP=$(mktemp -d)
 #trap 'rm -Rf $TMP' EXIT
 trap 'echo $TMP' EXIT
 set -eu
-set -a && source ./.env && set +a
-if [[ ${VERBOSITY} -gt 10 ]]; then
-  set -x
-fi
 envsubst < argo/argo-cd/values.yaml > "${TMP}/values.yaml"
 if [[ ${THIS_ARGO_METHOD} == 'helm' ]]; then
   # helm repo add argo https://argoproj.github.io/argo-helm

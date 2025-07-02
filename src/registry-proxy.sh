@@ -1,5 +1,5 @@
 #!/bin/bash
-source ./src/sourceror.bash
+source src/sourceror.bash
 
 registry_from_template () {
   TMP=$(mktemp -d)

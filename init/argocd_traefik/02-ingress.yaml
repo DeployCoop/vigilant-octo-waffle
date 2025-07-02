@@ -10,7 +10,7 @@ metadata:
     traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
   tls:
-    secretName: {THIS_NAME}-argocd-tls
+    secretName: "${THIS_ARGO_HOST}-${THIS_NAME}-tls"
   entryPoints:
     - websecure
   routes:

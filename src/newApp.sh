@@ -6,7 +6,7 @@ if [[ ! $# -eq 1 ]]; then
 fi
 THIS_THING=$1
 source src/sourceror.bash
-source src/util.bash
+
 cp -av src/argo_example "argo/${THIS_THING}"
 sed -i "s/REPLACEME_THING_REPLACEME/${THIS_THING}/g" "argo/${THIS_THING}/argocd.yaml"
 cp -av src/example.sh "src/${THIS_THING}.sh"

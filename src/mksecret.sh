@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 source src/sourceror.bash
-source src/util.bash
 
 MK_NEW_SECRET_NAME=$1
 MK_NEW_SECRET_CONTENT=$2

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 THIS_THING=openldap
-source ./src/common.sh
+source src/common.sh
 
 main () {
   #set -eux

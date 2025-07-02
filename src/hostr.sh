@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 source ./src/sourceror.bash
+
 set -eu
 if [[ -f ./.env ]]; then
 set -a && source ./.env && set +a

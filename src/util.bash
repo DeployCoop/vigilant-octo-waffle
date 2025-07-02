@@ -5,7 +5,6 @@
 # Default number of parallel jobs if parallel is available
 : "${PARALLEL_JOBS:=1}"
 : "${DEBUG:='false'}"
-: "${ENABLER:=.env.enabler}"
 
 # Log an error message and exit
 log_error() {
@@ -48,27 +47,6 @@ check_docker() {
   fi
 }
 
-# Check if the application is enabled via .env.enabler
-check_enabler () {
-  if [[ ! -f "$ENABLER" ]]; then
-    log_warn "No enabler file found. Running all applications."
-    THIS_ENABLED=true
-    return 0
-  else
-    set -a && source ${ENABLER} && set +a
-  fi
-  if [[ "${VERBOSITY}" -gt "99" ]] ; then
-    set -x
-  fi
-  varname=$(echo ${THIS_THING}_ENABLED | tr '[:lower:]' '[:upper:]' | tr '-' '_' )
-  if [[ ! ${!varname} == 'true' ]]; then
-    echo "${varname} is not enabled check ${ENABLER}"
-    exit 0
-    THIS_ENABLED=false
-  else
-    THIS_ENABLED=true
-  fi
-}
 
 # Run commands in parallel if supported
 para_runner () {

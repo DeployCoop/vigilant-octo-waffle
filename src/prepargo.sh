@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -e 
-set -a && source ./.env && set +a
-source ./src/w8.bash
-source ./src/util.bash
-this_cwd=$(pwd)
+source src/sourceror.bash
 
 main () {
   if [[ ${VERBOSITY} -gt 99 ]]; then

@@ -5,6 +5,9 @@ if [[ -f .env ]]; then
 else
   echo ".env file does not exist, copy .env.example to .env and start there"
 fi
+if [[ ${VERBOSITY} -gt ${THIS_DEBUG_THRESH} ]]; then
+  set -x
+fi
 # load the defaults which should be ignored 
 # if a value was previously set in the .env
   set -a && source ./src/default.env && set +a

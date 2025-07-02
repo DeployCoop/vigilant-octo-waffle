@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 THIS_THING=opensearch-dashboards
 source src/common.sh
-source src/sourceror.bash
 
 main () {
   if [[ ${VERBOSITY} -gt 99 ]]; then

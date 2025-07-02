@@ -59,7 +59,7 @@ main () {
   src/kubegres.sh
   # argoCD
   src/argocd.sh
-  initializer "$this_cwd/init/keycloak"
+  src/keycloak.sh
   src/dockerCreds.sh
   para_runner "${BIG_LIST}"
 }

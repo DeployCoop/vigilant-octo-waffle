@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eu
-source ./src/sourceror.bash
+source src/sourceror.bash
 
 updaterrr () {
   HARBOR_ADMIN_PASSWORD=$(kubectl get secret -n example example-secrets -o json|jq -r '.data.HARBOR_ADMIN_PASSWORD'|base64 -d)

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 source ./src/sourceror.bash
+
 TMP=$(mktemp -d)
 cleanup () {
   if [[ ${VERBOSITY} -gt 10 ]]; then

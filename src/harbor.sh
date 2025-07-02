@@ -2,7 +2,6 @@
 THIS_THING=goharbor
 source ./src/common.sh
 
-
 main () {
   #set -eux
   set -eu

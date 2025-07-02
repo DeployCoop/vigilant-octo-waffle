@@ -4,7 +4,7 @@
 # how many waits before giving up
 : "${WAITS:=30}"
 set -u
-source ./src/sourceror.bash
+source src/sourceror.bash
 
 checkerrr () {
   countzero=0

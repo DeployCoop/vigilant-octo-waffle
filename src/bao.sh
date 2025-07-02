@@ -4,9 +4,6 @@ source ./src/common.sh
 
 
 main () {
-  if [[ ${VERBOSITY} -gt 99 ]]; then
-    set -x
-  fi
   set -eu
 
   initializer "${this_cwd}/init/bao"

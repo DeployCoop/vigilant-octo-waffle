@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-source ./src/util.bash
-set -a && source ./.env && set +a
+source src/sourceror.bash
 this_cwd=$(pwd)
 
 install_traefik_w_helm () {

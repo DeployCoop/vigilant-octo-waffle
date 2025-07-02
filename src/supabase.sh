@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 THIS_THING=supabase
-source ./src/common.sh
+source src/common.sh
 
 
 main () {

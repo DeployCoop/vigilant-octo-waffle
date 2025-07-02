@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 THIS_THING=opensearch-operator
 source src/common.sh
-source src/sourceror.bash
+
 PASS_LENGTH=33
 if [[ -z ${THIS_OPENSEARCH_ADMIN_PASSWORD} ]]; then
   echo 'WARN: env var THIS_OPENSEARCH_ADMIN_PASSWORD not set generating a random password!'
