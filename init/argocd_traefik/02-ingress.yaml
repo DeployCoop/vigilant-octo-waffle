@@ -19,7 +19,8 @@ spec:
       priority: 10
       services:
         - name: argocd-server
-          port: 80
+          port: 443
+          scheme: https
     - kind: Rule
       match: Host(`${THIS_ARGO_HOST}.${THIS_DOMAIN}`) && Header(`Content-Type`, `application/grpc`)
       priority: 11
