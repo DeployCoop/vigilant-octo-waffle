@@ -12,8 +12,10 @@ fi
 # if a value was previously set in the .env
   set -a && source ./src/default.env && set +a
 
+source ./src/argoRunner.bash
 source ./src/check_cmd.bash
-source ./src/w8.bash
+source ./src/squawk.bash
 source ./src/util.bash
+source ./src/w8.bash
 
 do_cmd_checks 
