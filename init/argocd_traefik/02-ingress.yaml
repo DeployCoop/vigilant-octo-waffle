@@ -21,6 +21,7 @@ spec:
         - name: argocd-server
           port: 443
           scheme: https
+          serversTransport: argotransport
     - kind: Rule
       match: Host(`${THIS_ARGO_HOST}.${THIS_DOMAIN}`) && Header(`Content-Type`, `application/grpc`)
       priority: 11
