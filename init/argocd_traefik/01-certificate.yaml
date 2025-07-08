@@ -8,5 +8,5 @@ spec:
   dnsNames:
     -  "${THIS_ARGO_HOST}.${THIS_DOMAIN}"
   issuerRef:
-    name: mkcert-issuer
     kind: ClusterIssuer
+    name: ${THIS_CLUSTER_ISSUER}
