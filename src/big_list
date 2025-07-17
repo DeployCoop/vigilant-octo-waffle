@@ -12,3 +12,4 @@ src/kubeshark.sh
 src/opensearch-operator.sh
 src/opensearch.sh
 src/opensearch-dashboards.sh
+src/velero.sh
