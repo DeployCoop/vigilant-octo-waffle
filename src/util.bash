@@ -81,19 +81,23 @@ initializer () {
   trap 'rm -rf ${TMP}' EXIT
   local base_dir="$(basename $1)"
   local init_dir="${TMP}/${base_dir}"
-  if [[ -d ".init_overrides/$1" ]]; then
+  if [[ -d ".init_overrides/${base_dir}" ]]; then
     mkdir "${init_dir}"
     these_files=$(find ".init_overrides/${base_dir}" -regex '.*.ya?ml'|sort)
     for f in ${these_files[@]}; do
       base_name=$(basename "${f}")
       echo "merging ${f}"
-      if [[ "${DEBUG}" == "true" ]]; then
-        merge2yaml "${f}" "init/${base_dir}/${base_name}"
+      if [[ -f "init/${base_dir}/${base_name}" ]]; then
+        if [[ "${DEBUG}" == "true" ]]; then
+          merge2yaml "${f}" "init/${base_dir}/${base_name}"
+        fi
+        merge2yaml "${f}" "init/${base_dir}/${base_name}" > "${init_dir}/${base_name}"
+      else
+        cp -av "${f}" "${init_dir}/${base_name}"
       fi
-      merge2yaml "${f}" "init/${base_dir}/${base_name}" > "${init_dir}/${base_name}"
     done
   else
-    cp -a $1 ${TMP}/
+    cp -av $1 ${TMP}/
   fi
 
   if [[ ! -d ${init_dir} ]]; then

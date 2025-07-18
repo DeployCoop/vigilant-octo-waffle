@@ -143,6 +143,10 @@ cp -a init/cluster .init_overrides/
 
 Now you can edit `.init_overrides/cluster/namespace.yaml`, and the two yaml files will be merged with `yq` and applied.
 
+### caveats
+
+Because of this we cannot merge multiple yaml files into a single file with triple dashes
+
 ## 🚀 Usage
 
 ### Start the Cluster
