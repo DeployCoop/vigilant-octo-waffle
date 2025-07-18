@@ -119,6 +119,30 @@ Swap:          65535         407       65128
 
 ---
 
+## Overrides
+
+### argo
+
+You can create an override for argo based applications like so:
+
+```
+mkdir .argo_overrides
+cp -a argo/velero .argo_overrides/
+```
+
+Now you can edit `.argo_overrides/velero/argocd.yaml`, and the two yaml files will be merged with `yq` and applied.
+
+### init
+
+You can create an override for stuff in the init director like so:
+
+```
+mkdir .init_overrides
+cp -a init/cluster .init_overrides/
+```
+
+Now you can edit `.init_overrides/cluster/namespace.yaml`, and the two yaml files will be merged with `yq` and applied.
+
 ## 🚀 Usage
 
 ### Start the Cluster

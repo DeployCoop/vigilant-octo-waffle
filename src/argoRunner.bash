@@ -2,7 +2,7 @@
 source src/merge2yaml.bash
 
 argoRunner () {
-  TMP=$(mktemp -d argoRunner_tmp.XXXXXXX --suffix .tmp.d)
+  TMP=$(mktemp -d --suffix .tmp.d)
   trap 'rm -rf ${TMP}' EXIT
   this_cwd=$(pwd)
   if [[ $# -eq 1 ]]; then

@@ -3,7 +3,7 @@ set -eu
 source ./src/sourceror.bash
 
 sqlrrr () {
-  TMP=$(mktemp -d mkdb_XXXXXXX --suffix .tmp.d )
+  TMP=$(mktemp -d --suffix .tmp.d )
   cleanup () {
     if [[ ${VERBOSITY} -gt 10 ]]; then
       rm -Rvf ${TMP}

@@ -77,19 +77,20 @@ initializer () {
     log_error "Usage: $0 <directory>"
   fi
 
-  TMP=$(mktemp -d initializer_tmp.XXXXXXX --suffix .tmp.d)
+  TMP=$(mktemp -d --suffix .tmp.d)
   trap 'rm -rf ${TMP}' EXIT
-  local init_dir="${TMP}/$1"
-  if [[ ".init_overrides/$1" ]]; then
+  local base_dir="$(basename $1)"
+  local init_dir="${TMP}/${base_dir}"
+  if [[ -d ".init_overrides/$1" ]]; then
     mkdir "${init_dir}"
-    these_files=$(find ".init_overrides/$1" -regex '.*.ya?ml'|sort)
+    these_files=$(find ".init_overrides/${base_dir}" -regex '.*.ya?ml'|sort)
     for f in ${these_files[@]}; do
+      base_name=$(basename "${f}")
       echo "merging ${f}"
       if [[ "${DEBUG}" == "true" ]]; then
-        merge2yaml "${f}" "init/$1/${base_name}"
+        merge2yaml "${f}" "init/${base_dir}/${base_name}"
       fi
-      base_name=$(basename "${f}")
-      merge2yaml "${f}" "init/$1/${base_name}" > "${init_dir}/${base_name}"
+      merge2yaml "${f}" "init/${base_dir}/${base_name}" > "${init_dir}/${base_name}"
     done
   else
     cp -a $1 ${TMP}/

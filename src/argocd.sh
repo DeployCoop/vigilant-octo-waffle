@@ -2,7 +2,7 @@
 THIS_THING=argocd
 source src/common.sh
 export this_cwd=$(pwd)
-TMP=$(mktemp -d argo_tmp_XXXXXXX --suffix .tmp.d )
+TMP=$(mktemp -d --suffix .tmp.d )
 trap 'rm -rf ${TMP}' EXIT
 set -eu
 envsubst < argo/argo-cd/values.yaml > "${TMP}/values.yaml"

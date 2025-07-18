@@ -8,7 +8,7 @@ else
   echo 'no env'
   exit 1
 fi
-TMP=$(mktemp -d hostr_tmp.XXXXXXX --suffix .tmp.d)
+TMP=$(mktemp -d --suffix .tmp.d)
 trap 'rm -Rf $TMP' EXIT
 envsubst < "src/hosts" > "$TMP/hosts"
 touched=0
