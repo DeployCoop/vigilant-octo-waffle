@@ -2,7 +2,8 @@
 source src/sourceror.bash
 
 registry_from_template () {
-  TMP=$(mktemp -d)
+  TMP=$(mktemp -d registry_from_template_XXXXXXX --suffix .tmp.d )
+  trap 'rm -rf ${TMP}'
   envsubst < "src/registry-proxy/docker-compose.yml.tpl" > "${TMP}/docker-compose.yml"
   cd "${TMP}"
   #docker-compose down

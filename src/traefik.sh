@@ -4,7 +4,7 @@ this_cwd=$(pwd)
 
 install_traefik_w_helm () {
 #helm upgrade --install traefik traefik/traefik \
-  TMP=$(mktemp -d)
+  TMP=$(mktemp -d install_traefik_XXXXXXX --suffix .tmp.d )
   trap 'rm -rf ${TMP}' EXIT
   envsubst < src/ingress-traefik-values.yaml > "${TMP}/values.yaml"
   helm upgrade --install traefik traefik \

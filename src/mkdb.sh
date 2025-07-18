@@ -2,20 +2,19 @@
 set -eu
 source ./src/sourceror.bash
 
-TMP=$(mktemp -d)
-cleanup () {
-  if [[ ${VERBOSITY} -gt 10 ]]; then
-    rm -Rvf ${TMP}
-  else
-    rm -Rf ${TMP}
-  fi
-}
-trap cleanup EXIT
-
 sqlrrr () {
+  TMP=$(mktemp -d mkdb_XXXXXXX --suffix .tmp.d )
+  cleanup () {
+    if [[ ${VERBOSITY} -gt 10 ]]; then
+      rm -Rvf ${TMP}
+    else
+      rm -Rf ${TMP}
+    fi
+  }
+  trap cleanup EXIT
   kubectl get secret -n "${THIS_NAMESPACE}" "${THIS_SECRETS}" -o json|jq -r '.data."db-admin-pass"'|base64 -d 1> "${TMP}/pass"
-
   db_admin_password=$(cat ${TMP}/pass)
+
   THIS_CMD=$1
   #UPDATE_CMD="PGPASSWORD=${db_admin_password} /usr/bin/psql -u postgres -d "${POSTGRES_DB}" -c \"${THIS_CMD}\""
   #UPDATE_CMD="psql -U 'postgres' -c \"${THIS_CMD}\""

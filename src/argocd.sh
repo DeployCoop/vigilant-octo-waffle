@@ -2,9 +2,8 @@
 THIS_THING=argocd
 source src/common.sh
 export this_cwd=$(pwd)
-TMP=$(mktemp -d)
-#trap 'rm -Rf $TMP' EXIT
-trap 'echo $TMP' EXIT
+TMP=$(mktemp -d argo_tmp_XXXXXXX --suffix .tmp.d )
+trap 'rm -rf ${TMP}' EXIT
 set -eu
 envsubst < argo/argo-cd/values.yaml > "${TMP}/values.yaml"
 if [[ ${THIS_ARGO_METHOD} == 'helm' ]]; then

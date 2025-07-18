@@ -71,11 +71,29 @@ para_runner () {
 
 # Initialize Kubernetes resources from a directory
 initializer () {
+  source src/merge2yaml.bash
+
   if [[ ! $# -eq 1 ]]; then
     log_error "Usage: $0 <directory>"
   fi
 
-  local init_dir="$1"
+  TMP=$(mktemp -d initializer_tmp.XXXXXXX --suffix .tmp.d)
+  trap 'rm -rf ${TMP}' EXIT
+  local init_dir="${TMP}/$1"
+  if [[ ".init_overrides/$1" ]]; then
+    mkdir "${init_dir}"
+    these_files=$(find ".init_overrides/$1" -regex '.*.ya?ml'|sort)
+    for f in ${these_files[@]}; do
+      echo "merging ${f}"
+      if [[ "${DEBUG}" == "true" ]]; then
+        merge2yaml "${f}" "init/$1/${base_name}"
+      fi
+      base_name=$(basename "${f}")
+      merge2yaml "${f}" "init/$1/${base_name}" > "${init_dir}/${base_name}"
+    done
+  else
+    cp -a $1 ${TMP}/
+  fi
 
   if [[ ! -d ${init_dir} ]]; then
     log_error "'${init_dir}' is not a valid directory."

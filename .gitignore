@@ -3,3 +3,5 @@
 *secrets.yaml
 *secrets.yml
 .aider*
+.argo_overrides
+.init_overrides
