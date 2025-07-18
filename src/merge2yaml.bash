@@ -9,5 +9,5 @@ merge2yaml () {
     echo "useage $0 OVERRIDE_YAML ORIG_YAML"
     exit 1
   fi
-  yq e ". *+ load($OVERRIDE_YAML)" $ORIG_YAML
+  yq e ". *+ load(\"$OVERRIDE_YAML\")" $ORIG_YAML
 }
