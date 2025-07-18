@@ -143,9 +143,74 @@ cp -a init/cluster .init_overrides/
 
 Now you can edit `.init_overrides/cluster/namespace.yaml`, and the two yaml files will be merged with `yq` and applied.
 
+### yq merge
+
+You can completely override my argocd.yaml files and init files.  As I am using yq to merge the results, you can put as little or as much as you want in the override.
+
+For example, you can configure a provider for velero
+
+```
+spec:
+  source:
+    helm:
+      values: |
+        configuration:
+          backupStorageLocation:
+          - name:
+            provider: "${THIS_VELERO_PROVIDER}"
+            bucket: "${THIS_VELERO_BUCKET}"
+            default: "${THIS_VELERO_DEFAULTED}"
+            accessMode: ReadWrite
+            credential:
+              name:
+              key:
+            config:
+              s3ForcePathStyle: /testpath
+              s3Url: s3.example.com
+```
+
+This will result in this merge:
+
+```
+yq e '. *+ load(".argo_overrides/velero/argocd.yaml")' argo/velero/argocd.yaml
+metadata:
+  name: velero-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: velero
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=false
+  source:
+    path: velero
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      values: |
+        configuration:
+          backupStorageLocation:
+          - name:
+            provider: "${THIS_VELERO_PROVIDER}"
+            bucket: "${THIS_VELERO_BUCKET}"
+            default: "${THIS_VELERO_DEFAULTED}"
+            accessMode: ReadWrite
+            credential:
+              name:
+              key:
+            config:
+              s3ForcePathStyle: /testpath
+              s3Url: s3.example.com
+```
+
 ### caveats
 
-Because of this we cannot merge multiple yaml files into a single file with triple dashes
+Because of yq not handling it we cannot merge multiple yaml files into a single file with triple dashes
 
 ## 🚀 Usage
 
