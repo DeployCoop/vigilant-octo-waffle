@@ -17,11 +17,12 @@ argoRunner () {
     set -x
   fi
   if [[ -f ".argo_overrides/${THIS_THING}/argocd.yaml" ]]; then
-    merge2yaml ".argo_overrides/${THIS_THING}/argocd.yaml" "argo/${THIS_THING}/argocd.yaml" > "${TMP}/argocd.yaml"
+    mkdir -p "${TMP}/${THIS_THING}"
+    merge2yaml ".argo_overrides/${THIS_THING}/argocd.yaml" "argo/${THIS_THING}/argocd.yaml" > "${TMP}/${THIS_THING}/argocd.yaml"
   else
-    cp -a "argo/${THIS_THING}" ${TMP}/
+    cp -a "argo/${THIS_THING}" "${TMP}/"
   fi
-  envsubst < "${TMP}/argocd.yaml" | argocd app create --name "${THIS_THING}" --grpc-web -f -
+  envsubst < "${TMP}/${THIS_THING}/argocd.yaml" | argocd app create --name "${THIS_THING}" --grpc-web -f -
 
   cd "${this_cwd}"
 }

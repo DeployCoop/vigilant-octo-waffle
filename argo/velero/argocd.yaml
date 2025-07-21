@@ -34,7 +34,7 @@ spec:
             # prefix is the directory under which all Velero data should be stored within the bucket. Optional.
             prefix:
             # default indicates this location is the default backup storage location. Optional.
-            default: "${THIS_VELERO_DEFAULTED}"
+            default: ${THIS_VELERO_DEFAULTED}
             # validationFrequency defines how frequently Velero should validate the object storage. Optional.
             validationFrequency: "${THIS_VELERO_VALIDATIONFREQ}"
             # accessMode determines if velero can write to this backup storage location. Optional.
