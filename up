@@ -36,7 +36,6 @@ main () {
   set -eu
   set -x
   initializer "$this_cwd/init/cluster"
-  exit 0
   kubectl apply -f .secrets/${THIS_SECRETS}.yaml
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
     if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
