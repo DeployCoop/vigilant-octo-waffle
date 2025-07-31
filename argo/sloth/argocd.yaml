@@ -1,0 +1,98 @@
+metadata:
+  name: sloth-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: sloth
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      skipCrds: false
+      values: |
+        labels: {}
+        
+        image:
+          repository: ghcr.io/slok/sloth
+          tag: v0.12.0
+        
+        # -- Container resources: requests and limits for CPU, Memory
+        resources:
+          limits:
+            cpu: 50m
+            memory: 150Mi
+          requests:
+            cpu: 5m
+            memory: 75Mi
+        
+        imagePullSecrets: []
+        #  - name: secret1
+        #  - name: secret2
+        
+        sloth:
+          resyncInterval: ""    # The controller resync interval duration (e.g 15m).
+          workers: 0            # The number of concurrent controller workers (e.g 5).
+          labelSelector: ""     # Sloth will handle only the ones that match the selector.
+          namespace: ""         # The namespace where sloth will the CRs to process.
+          extraLabels: {}       # Labels that will be added to all the generated SLO Rules.
+          defaultSloPeriod: ""  # The slo period used by sloth (e.g. 30d).
+          optimizedRules: true  # Reduce prom load for calculating period window burnrates.
+          debug:
+            enabled: false
+          # Could be: default or json
+          logger: default
+        
+        commonPlugins:
+          enabled: true
+          image:
+            repository: registry.k8s.io/git-sync/git-sync
+            tag: v4.4.0
+          gitRepo:
+            url: https://github.com/slok/sloth-common-sli-plugins
+            branch: main
+            resources:
+              limits:
+                cpu: 50m
+                memory: 100Mi
+              requests:
+                cpu: 5m
+                memory: 50Mi
+        
+        metrics:
+          enabled: true
+          #scrapeInterval: 30s
+          prometheusLabels: {}
+        
+        customSloConfig:
+          enabled: false
+          path: /windows
+          data: {}
+        #    apiVersion: sloth.slok.dev/v1
+        #    kind: AlertWindows
+        #    spec:
+        #    ... See https://sloth.dev/usage/slo-period-windows/
+        
+        # add deployment pod tolerations
+        # tolerations:
+        #   - key: kubernetes.azure.com/scalesetpriority
+        #     operator: Equal
+        #     value: spot
+        #     effect: NoSchedule
+        
+        securityContext:
+          pod: null
+          #   fsGroup: 100
+          #   runAsGroup: 1000
+          #   runAsNonRoot: true
+          #   runAsUser: 100
+          container: null
+          #   allowPrivilegeEscalation: false
