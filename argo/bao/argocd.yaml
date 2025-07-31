@@ -14,7 +14,7 @@ spec:
       prune: true      # (Optional) cleans up removed resources
       selfHeal: true   # (Optional) attempts to revert out-of-sync resources
   source:
-    path: openbao
+    path: charts/openbao
     repoURL: https://github.com/joshuacox/argocd-tests.git
     targetRevision: HEAD 
     helm:

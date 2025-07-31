@@ -13,7 +13,7 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: nextjs-docker
+    path: charts/nextjs-docker
     repoURL: ${THIS_REPO_URL}
     targetRevision: HEAD
     helm:

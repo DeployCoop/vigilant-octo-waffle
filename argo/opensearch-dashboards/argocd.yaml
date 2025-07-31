@@ -13,7 +13,7 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: opensearch-dashboards
+    path: charts/opensearch-dashboards
     repoURL: ${THIS_REPO_URL}
     targetRevision: HEAD
     helm:

@@ -51,8 +51,6 @@ main () {
   else
     echo 'k3s uses traefik'
   fi
-  #openEBS
-  src/openebs.sh
   # certmanager
   src/certmanager.sh
   # kubegres
@@ -61,6 +59,8 @@ main () {
   src/argocd.sh
   src/keycloak.sh
   src/dockerCreds.sh
+  #openEBS
+  src/openebs.sh
   para_runner "${BIG_LIST}"
 }
 

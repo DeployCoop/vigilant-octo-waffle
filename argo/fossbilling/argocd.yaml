@@ -13,7 +13,7 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: FOSSBilling
+    path: charts/FOSSBilling
     repoURL: ${THIS_REPO_URL}
     targetRevision: HEAD
     helm:

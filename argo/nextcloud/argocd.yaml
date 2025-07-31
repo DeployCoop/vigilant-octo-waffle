@@ -13,7 +13,7 @@ spec:
     syncOptions:
     - ServerSideApply=true
   source:
-    path: nextcloud
+    path: charts/nextcloud
     repoURL: ${THIS_REPO_URL}
     targetRevision: HEAD
     helm:

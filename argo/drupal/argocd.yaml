@@ -13,7 +13,7 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: drupal
+    path: charts/drupal
     repoURL: ${THIS_REPO_URL}
     targetRevision: HEAD
     helm:
