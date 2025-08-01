@@ -8,4 +8,4 @@ if [[ ! $THIS_ENABLED == 'true' ]]; then
   exit 0
 fi
 source src/sourceror.bash
-#this_cwd=$(pwd)
+this_cwd=$(pwd)

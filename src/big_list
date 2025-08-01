@@ -16,3 +16,4 @@ src/velero.sh
 src/sloth.sh
 src/minio-operator.sh
 src/openebs-monitoring.sh
+src/minio-tenant.sh

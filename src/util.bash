@@ -180,6 +180,17 @@ linerrr () {
   fi
 }
 
+key_maker () {
+  local secret_name=$1
+  local access_key=$2
+  local secret_key=$3
+  kubectl create secret generic \
+    "${secret_name}" \
+    -n "${THIS_NAMESPACE}" \
+    --from-literal=accessKey="${access_key}" \
+    --from-literal=secretKey="${secret_key}"
+}
+
 secret_maker () {
   local secret_name=$1
   local secret_user=$2

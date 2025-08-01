@@ -23,3 +23,5 @@
 127.0.0.1 sloth.${THIS_DOMAIN}
 127.0.0.1 minio.${THIS_DOMAIN}
 127.0.0.1 openebs-monitoring.${THIS_DOMAIN}
+127.0.0.1 minio-api.${THIS_DOMAIN}
+127.0.0.1 minio-console.${THIS_DOMAIN}
