@@ -22,4 +22,4 @@
 127.0.0.1 traefik.${THIS_DOMAIN}
 127.0.0.1 sloth.${THIS_DOMAIN}
 127.0.0.1 minio.${THIS_DOMAIN}
-127.0.0.1 minio-operator.${THIS_DOMAIN}
+127.0.0.1 openebs-monitoring.${THIS_DOMAIN}

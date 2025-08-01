@@ -1,0 +1,339 @@
+metadata:
+  name: openebs-monitoring-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_OPENEBS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: charts/openebs-monitoring
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      values: |
+        # Default values for monitoring.
+        # This is a YAML-formatted file.
+        # Declare variables to be passed into your templates.
+        
+        ## Provide a name in place of monitoring for `app:` labels
+        ##
+        nameOverride: ""
+        
+        ## Override the deployment namespace
+        ##
+        namespaceOverride: ""
+        
+        ## Provide a name to substitute for the full names of resources
+        ##
+        fullnameOverride: ""
+        
+        ## Configuration for kube-prometheus-stack subchart
+        kube-prometheus-stack:
+          install: true
+        
+          global:
+            rbac:
+              pspEnabled: false
+        
+          kube-state-metrics:
+            podSecurityPolicy:
+              enabled: false
+        
+          prometheus-node-exporter:
+            rbac:
+              pspEnabled: false
+        
+            ## privilege and access control settings for node-exporter
+            securityContext:
+              fsGroup: 65534
+              runAsGroup: 0
+              runAsNonRoot: false
+              runAsUser: 0
+        
+            ## Additional container arguments
+            extraArgs:
+              - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)
+              - --collector.filesystem.fs-types-exclude=^(tmpfs|autofs|binfmt_misc|cgroup|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|sysfs|tracefs)$
+              - --collector.diskstats.device-exclude=^(ram|loop|fd|sr|(h|s|v|xv)d[a-z]+|nvme\d+n\d+p|nvme\d+c\d+n)\d+$
+        
+          prometheus:
+            service:
+              type: NodePort
+              nodePort: 32514
+        
+            prometheusSpec:
+              ## If true, a nil or {} value for prometheus.prometheusSpec.serviceMonitorSelector will cause the
+              ## prometheus resource to be created with selectors based on values in the helm deployment,
+              ## which will also match the servicemonitors created
+              ##
+              serviceMonitorSelectorNilUsesHelmValues: false
+        
+              ## If true, a nil or {} value for prometheus.prometheusSpec.podMonitorSelector will cause the
+              ## prometheus resource to be created with selectors based on values in the helm deployment,
+              ## which will also match the podmonitors created
+              ##
+              podMonitorSelectorNilUsesHelmValues: false
+        
+              ## If true, a nil or {} value for prometheus.prometheusSpec.ruleSelector will cause the
+              ## prometheus resource to be created with selectors based on values in the helm deployment,
+              ## which will also match the PrometheusRule resources created
+              ##
+              ruleSelectorNilUsesHelmValues: false
+        
+              ## Number of replicas of each shard to deploy for a Prometheus deployment.
+              ## Number of replicas multiplied by shards is the total number of Pods created.
+              ##
+              replicas: 1
+        
+              ## Prometheus StorageSpec for persistent data
+              ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/master/Documentation/user-guides/storage.md
+              ##
+              storageSpec:
+                volumeClaimTemplate:
+                  metadata:
+                    name: openebs-prometheus-pv
+                  spec:
+                    # This storageClass is backed by openebs localpv-provisioner.
+                    storageClassName: openebs-hostpath
+                    accessModes: ["ReadWriteOnce"]
+                    resources:
+                      requests:
+                        storage: 1Gi
+        
+          alertmanager:
+            ## Deploy alertmanager
+            ##
+            enabled: true
+        
+            config:
+              global:
+                resolve_timeout: 5m
+              route:
+                group_by: ["alertname", "job", "volName"]
+                group_wait: 30s
+                group_interval: 5m
+                repeat_interval: 4h
+                receiver: "null"
+                ## This route specifically groups openebs alerts.
+                routes:
+                  - matchers:
+                      - product="openebs"
+                    receiver: "null"
+              ## Add receivers as required. Ref: https://prometheus.io/docs/alerting/latest/configuration/#receiver-integration-settings
+              receivers:
+                - name: "null"
+              templates:
+                - /etc/alertmanager/config/*.tmpl
+        
+            service:
+              type: NodePort
+              nodePort: 30903
+        
+            alertmanagerSpec:
+              ## Size is the expected size of the alertmanager cluster. The controller will eventually make the size of the
+              ## running cluster equal to the expected size.
+              replicas: 1
+        
+              ## Storage is the definition of how storage will be used by the Alertmanager instances.
+              ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/master/Documentation/user-guides/storage.md
+              ##
+              storage:
+                {}
+                # volumeClaimTemplate:
+                #   metadata:
+                #     name: alert-pv
+                #   spec:
+                #     # This storageClass is backed by openebs localpv-provisioner.
+                #     storageClassName: openebs-hostpath
+                #     accessModes: ["ReadWriteOnce"]
+                #     resources:
+                #       requests:
+                #         storage: 1Gi
+                #   selector: {}
+        
+          prometheusOperator:
+            enabled: true
+        
+            ## Prometheus-Operator v0.39.0 and later support TLS natively.
+            ##
+            # tls:
+            #   enabled: false
+        
+          grafana:
+            enabled: true
+        
+            rbac:
+              pspEnabled: false
+        
+            ## In order to render HTML and Javascript in a text panel without being sanitized
+            ## enable the `disable_sanitize_html` settings in Grafana ini file
+            grafana.ini:
+              panels:
+                disable_sanitize_html: true
+        
+            service:
+              type: NodePort
+              nodePort: 32515
+        
+            ## Deploy default dashboards.
+            ##
+            defaultDashboardsEnabled: true
+            adminPassword: admin
+        
+            sidecar:
+              dashboards:
+                enabled: true
+                # ConfigMaps with label below will be added to Grafana as dashboards.
+                label: grafana_dashboard
+        
+            ## Pass the plugins you want installed as a list.
+            ##
+            plugins:
+              - grafana-polystat-panel
+              - snuids-trafficlights-panel
+        
+            ## Add persistent storage for Grafana
+            persistence:
+              enabled: true
+              # This storageClass is backed by openebs localpv-provisioner.
+              storageClassName: openebs-hostpath
+              accessModes:
+                - ReadWriteOnce
+              size: 1Gi
+        
+        localpv-provisioner:
+          enabled: true
+          hostpathClass:
+            name: openebs-hostpath
+            # -- Enable default hostpath localpv StorageClass.
+            enabled: true
+          analytics:
+            enabled: true
+        
+        ## Configuration for node-problem-detector subchart
+        node-problem-detector:
+          install: false
+        
+          ## Volume for storing logs
+          extraVolumes:
+            - name: kmsg
+              hostPath:
+                path: /dev/kmsg
+        
+          extraVolumeMounts:
+            - name: kmsg
+              mountPath: /dev/kmsg
+              readOnly: true
+        
+          ## Enabling service monitors of npd
+          metrics:
+            serviceMonitor:
+              enabled: true
+        
+        ## Configuration for installing monitoring addons
+        openebsMonitoringAddon:
+          lvmLocalPV:
+            enabled: true
+            dashboards:
+              enabled: true
+            alertRules:
+              enabled: true
+            serviceMonitor:
+              enabled: true
+        
+              ## Endpoints of the selected service to be monitored
+              endpoints:
+                ## Name of the endpoint's service port
+                ## Mutually exclusive with targetPort
+                #  port: ""
+                port: metrics
+        
+                ## HTTP path to scrape for metrics
+                #  path: /metrics
+                path: /metrics
+        
+              ## Label selector for services to which this ServiceMonitor applies
+              # selector: {}
+              #   matchLabels: {}
+        
+              ## Example
+        
+              # selector:
+              #   matchLabels:
+              #     name: openebs-lvm-node
+        
+              selector:
+                matchLabels:
+                  name: openebs-lvm-node
+        
+              ## Namespaces from which services are selected
+              # namespaceSelector: []
+              ## Match any namespace
+              #   any: true
+        
+              ## Example
+        
+              # namespaceSelector:
+              #   any: true
+        
+              ## Explicit list of namespace names to select
+              #   matchNames: []
+        
+              ## Example
+        
+              # namespaceSelector:
+              #   matchNames:
+              #   - openebs
+              #   - default
+        
+              namespaceSelector:
+                any: true
+        
+          npd:
+            enabled: false
+            dashboards:
+              enabled: false
+            alertRules:
+              enabled: false
+        
+          volume:
+            enabled: true
+            alertRules:
+              enabled: true
+        
+          zfsLocalPV:
+            enabled: true
+            dashboards:
+              enabled: true
+        
+          mayastor:
+            enabled: true
+            dashboards:
+              enabled: true
+            serviceMonitor:
+              enabled: true
+        
+              ## Endpoints of the selected service to be monitored
+              endpoints:
+                ## Name of the endpoint's service port
+                ## Mutually exclusive with targetPort
+                #  port: ""
+                port: metrics
+        
+                ## HTTP path to scrape for metrics
+                #  path: /metrics
+                path: /metrics
+        
+              selector:
+                matchLabels:
+                  app: metrics-exporter-io-engine
+        
+              namespaceSelector:
+                any: true

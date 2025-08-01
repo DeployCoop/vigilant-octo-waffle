@@ -3,8 +3,8 @@ apiVersion: k3d.io/v1alpha5 # this will change in the future as we make everythi
 kind: Simple # internally, we also have a Cluster config, which is not yet available externally
 metadata:
   name: vigilant-octo-waffle # name that you want to give to your cluster (will still be prefixed with `k3d-`)
-servers: 2 # same as `--servers 3`
-agents: 4 # same as `--agents 3`
+servers: 3 # same as `--servers 3`
+agents: 4 # same as `--agents 4`
 volumes: # repeatable flags are represented as YAML lists
   - volume: ${THIS_STORAGE_PATH}/workerk3d:/mnt/xfs_backup/example
     nodeFilters:

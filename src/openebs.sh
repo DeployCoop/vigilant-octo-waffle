@@ -9,9 +9,9 @@ main () {
   kubectl krew install mayastor openebs
   argoRunner "$THIS_THING"
   set +e
-  w8_pod ${THIS_NAMESPACE} openebs-${THIS_NAME}-localpv-provisioner
-  w8_pod ${THIS_NAMESPACE} openebs-${THIS_NAME}-lvm-localpv-controller
-  w8_pod ${THIS_NAMESPACE} openebs-${THIS_NAME}-lvm-localpv-node
+  w8_pod ${THIS_OPENEBS_NAMESPACE} openebs-${THIS_NAME}-localpv-provisioner
+  w8_pod ${THIS_OPENEBS_NAMESPACE} openebs-${THIS_NAME}-lvm-localpv-controller
+  w8_pod ${THIS_OPENEBS_NAMESPACE} openebs-${THIS_NAME}-lvm-localpv-node
   set -e
   initializer "$this_cwd/init/openebs"
 }
