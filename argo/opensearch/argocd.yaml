@@ -159,7 +159,7 @@ spec:
         # Enabling this will publically expose your OpenSearch instance.
         # Only enable this if you have security enabled on your cluster
         ingress:
-          enabled: true
+          enabled: ${THIS_OPENSEARCH_API_INGRESS}
           ingressClassName: ${THIS_CLUSTER_INGRESS}
           annotations:
             nginx.ingress.kubernetes.io/rewrite-target: /
