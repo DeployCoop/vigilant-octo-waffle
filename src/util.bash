@@ -25,7 +25,7 @@ log_debug() {
 }
 
 # Check if a command exists in the system PATH
-check_cmd() {
+old_check_cmd() {
   if [[ $# -ne 1 ]]; then
     log_error "Usage: check_cmd <command>"
   fi

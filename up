@@ -53,14 +53,14 @@ main () {
   fi
   # certmanager
   src/certmanager.sh
-  # kubegres
-  src/kubegres.sh
   # argoCD
   src/argocd.sh
-  src/keycloak.sh
-  src/dockerCreds.sh
   #openEBS
   src/openebs.sh
+  # kubegres
+  src/kubegres.sh
+  src/keycloak.sh
+  src/dockerCreds.sh
   para_runner "${BIG_LIST}"
 }
 
