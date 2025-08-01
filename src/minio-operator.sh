@@ -4,7 +4,7 @@ source src/common.sh
 
 main () {
   set -eu
-  kubectl krew install minio
+  #kubectl krew install minio
   #initializer "${this_cwd}/init/pre-${THIS_THING}"
   argoRunner "${THIS_THING}"
   #w8_pod "${THIS_NAMESPACE}" "opensearch-operator-${THIS_NAME}-controller-manager"

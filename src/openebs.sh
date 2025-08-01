@@ -6,7 +6,7 @@ main () {
   #set -eux
   set -eu
 
-  kubectl krew install mayastor openebs
+  #kubectl krew install mayastor openebs
   argoRunner "$THIS_THING"
   set +e
   w8_pod ${THIS_OPENEBS_NAMESPACE} openebs-${THIS_NAME}-localpv-provisioner
