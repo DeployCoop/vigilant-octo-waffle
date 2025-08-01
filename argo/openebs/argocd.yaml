@@ -121,7 +121,7 @@ spec:
               size: ${THIS_DEFAULT_STORAGE_SIZE}
         
           minio:
-            replicas: 4
+            replicas: 3
             drivesPerNode: 1
             mode: distributed
             # Disable this if you want to enabled external s3 bucket, and uncomment the storage section above.
