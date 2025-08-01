@@ -214,6 +214,21 @@ Because of yq not handling it we cannot merge multiple yaml files into a single 
 
 ## 🚀 Usage
 
+### Check your dns
+
+if you populating /etc/hosts run the script:
+
+```
+src/hostr.sh
+```
+
+if you are using publicly available DNS you can generate bind compatible records:
+
+```
+src/host2bind.sh 1.2.3.4 1.2.3.5 1.2.3.6
+```
+
+
 ### Start the Cluster
 
 ```bash
