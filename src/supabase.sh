@@ -2,12 +2,11 @@
 THIS_THING=supabase
 source src/common.sh
 
-
 main () {
   #set -eux
   set -eu
-
   argoRunner "$THIS_THING"
+  initializer "${this_cwd}/init/${THIS_THING}"
 }
 
 time main

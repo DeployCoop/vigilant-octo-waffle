@@ -1,0 +1,12 @@
+# Middleware
+# Strip prefix /overview
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: mw-stripper
+  namespace: ${THIS_NAMESPACE}
+spec:
+  stripPrefix:
+    forceSlash: false
+    prefixes:
+      - /overview
