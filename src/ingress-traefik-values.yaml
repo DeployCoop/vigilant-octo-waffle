@@ -214,7 +214,10 @@ ingressRoute:
     middlewares: 
       - name: "default-traefik-auth@kubernetescrd"
     # -- TLS options (e.g. secret containing certificate)
-    tls: {}
+    tls:
+      - secretName: ${THIS_NAME}-traefik-ingress-tls
+        hosts:
+          - ${THIS_TRAEFIK_HOST}.${THIS_DOMAIN}
   healthcheck:
     # -- Create an IngressRoute for the healthcheck probe
     enabled: false
