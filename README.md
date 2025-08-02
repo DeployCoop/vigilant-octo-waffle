@@ -297,6 +297,16 @@ To delete the cluster and all resources:
 
 ---
 
+## 🛠 mkExample.env
+
+You can regenerate the example.env if I have forgotten something:
+
+```bash
+src/mkExample.env
+```
+
+Feel free to submit a PR with the additions.
+
 ## 🛠 Enabling/Disabling Services
 
 Edit `.env.enabler` to control which services are deployed:
