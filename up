@@ -52,6 +52,7 @@ main () {
   else
     echo 'k3s'
   fi
+  exit 0
   # certmanager
   src/certmanager.sh
   # argoCD
