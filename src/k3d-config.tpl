@@ -3,8 +3,8 @@ apiVersion: k3d.io/v1alpha5 # this will change in the future as we make everythi
 kind: Simple # internally, we also have a Cluster config, which is not yet available externally
 metadata:
   name: vigilant-octo-waffle # name that you want to give to your cluster (will still be prefixed with `k3d-`)
-servers: 3 # same as `--servers 3`
-agents: 4 # same as `--agents 4`
+servers: 1 # same as `--servers 3`
+agents: 1 # same as `--agents 4`
 volumes: # repeatable flags are represented as YAML lists
   - volume: ${THIS_STORAGE_PATH}/workerk3d:/mnt/xfs_backup/example
     nodeFilters:
@@ -38,5 +38,10 @@ registries: # define how registries should be created or used
           - http://docker-io:5000
 options:
   k3d: # k3d runtime settings
-    wait: true # wait for cluster to be usable before returning; same as `--wait` (default: true)
+    wait: true # wait for cluster to be usable before returining; same as `--wait` (default: true)
     timeout: "90s" # wait timeout before aborting; same as `--timeout 60s`
+  k3s: # options passed on to K3s itself
+    extraArgs: # additional arguments passed to the `k3s server|agent` command; same as `--k3s-arg`
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:0

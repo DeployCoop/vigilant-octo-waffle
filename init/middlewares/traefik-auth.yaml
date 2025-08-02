@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: traefik-auth
+spec:
+  basicAuth:
+    secret: authsecret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: authsecret
+  namespace: default
+type: kubernetes.io/basic-auth
+data:
+  username: ${THIS_TRAEFIK_BASIC_AUTH_USER_64}
+  password: ${THIS_TRAEFIK_BASIC_AUTH_PASS_64}

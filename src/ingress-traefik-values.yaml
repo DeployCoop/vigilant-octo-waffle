@@ -101,6 +101,10 @@ deployment:
   #     scheme: HTTP
   # -- Set a runtimeClassName on pod
   runtimeClassName: ""
+  # -- Percentage of memory limit to set for GOMEMLIMIT
+  # -- set as decimal (0.9 = 90%, 0.95 = 95% etc)
+  # -- only takes effect when resources.limits.memory is set
+  goMemLimitPercentage: 0.9
 
 # -- [Pod Disruption Budget](https://kubernetes.io/docs/reference/kubernetes-api/policy-resources/pod-disruption-budget-v1/)
 podDisruptionBudget:  # @schema additionalProperties: false
@@ -131,11 +135,10 @@ experimental:
   kubernetesGateway:
     # -- Enable traefik experimental GatewayClass CRD
     enabled: false
-  # -- Enable traefik experimental plugins
+  # -- Enable experimental plugins
   plugins: {}
-  # demo:
-  #   moduleName: github.com/traefik/plugindemo
-  #   version: v0.2.1
+  # -- Enable experimental local plugins
+  localPlugins: {}
 
 gateway:
   # -- When providers.kubernetesGateway.enabled, deploy a default gateway
@@ -159,7 +162,7 @@ gateway:
       # Specify expected protocol on this listener. See [ProtocolType](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.ProtocolType)
       protocol: HTTP
       # -- Routes are restricted to namespace of the gateway [by default](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.FromNamespaces
-      namespacePolicy:  # @schema type:[string, null]
+      namespacePolicy:  # @schema type:[object, null]
     # websecure listener is disabled by default because certificateRefs needs to be added,
     # or you may specify TLS protocol with Passthrough mode and add "--providers.kubernetesGateway.experimentalChannel=true" in additionalArguments section.
     # websecure:
@@ -189,7 +192,7 @@ gatewayClass:  # @schema additionalProperties: false
 ingressRoute:
   dashboard:
     # -- Create an IngressRoute for the dashboard
-    enabled: true
+    enabled: ${THIS_TRAEFIK_INGRESS}
     # -- Additional ingressRoute annotations (e.g. for kubernetes.io/ingress.class)
     annotations:
       cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
@@ -197,7 +200,7 @@ ingressRoute:
     labels: {}
     # -- The router match rule used for the dashboard ingressRoute
     #matchRule: PathPrefix(`/dashboard`) || PathPrefix(`/api`)
-    matchRule: Host('${THIS_TRAEFIK_HOST}.${THIS_DOMAIN}') 
+    matchRule: Host(`${THIS_TRAEFIK_HOST}.${THIS_DOMAIN}`) 
     # -- The internal service used for the dashboard ingressRoute
     services:
       - name: api@internal
@@ -205,10 +208,11 @@ ingressRoute:
     # -- Specify the allowed entrypoints to use for the dashboard ingress route, (e.g. traefik, web, websecure).
     # By default, it's using traefik entrypoint, which is not exposed.
     # /!\ Do not expose your dashboard without any protection over the internet /!\
-    #entryPoints: ["traefik"]
     entryPoints: ["traefik", "web", "websecure"]
     # -- Additional ingressRoute middlewares (e.g. for authentication)
-    middlewares: []
+    #middlewares: ["traefik-auth"]
+    middlewares: 
+      - name: "default-traefik-auth@kubernetescrd"
     # -- TLS options (e.g. secret containing certificate)
     tls: {}
   healthcheck:
@@ -230,7 +234,6 @@ ingressRoute:
     # -- Additional ingressRoute middlewares (e.g. for authentication)
     middlewares: []
     # -- TLS options (e.g. secret containing certificate)
-    #WRONG tls: ${THIS_NAME}-traefik-ingress-tls
     tls: {}
 
 updateStrategy:  # @schema additionalProperties: false
@@ -271,7 +274,7 @@ providers:  # @schema additionalProperties: false
     # -- Load Kubernetes IngressRoute provider
     enabled: true
     # -- Allows IngressRoute to reference resources in namespace other than theirs
-    allowCrossNamespace: false
+    allowCrossNamespace: true
     # -- Allows to reference ExternalName services in IngressRoute
     allowExternalNameServices: false
     # -- Allows to return 503 when there is no endpoints available
@@ -305,10 +308,12 @@ providers:  # @schema additionalProperties: false
       pathOverride: ""
     # -- Defines whether to use Native Kubernetes load-balancing mode by default.
     nativeLBByDefault: false
+    # -- Defines whether to make prefix matching strictly comply with the Kubernetes Ingress specification.
+    strictPrefixMatching: false
 
   kubernetesGateway:
     # -- Enable Traefik Gateway provider for Gateway API
-    enabled: false
+    enabled: true
     # -- Toggles support for the Experimental Channel resources (Gateway API release channels documentation).
     # This option currently enables support for TCPRoute and TLSRoute.
     experimentalChannel: false
@@ -364,7 +369,7 @@ logs:
     format:  # @schema enum:["common", "json", null]; type:[string, null]; default: "common"
     # By default, the level is set to INFO.
     # -- Alternative logging levels are TRACE, DEBUG, INFO, WARN, ERROR, FATAL, and PANIC.
-    level: "INFO"  # @schema enum:[TRACE,DEBUG,INFO,WARN,ERROR,FATAL,PANIC]; default: "INFO"
+    level: "DEBUG"  # @schema enum:[TRACE,DEBUG,INFO,WARN,ERROR,FATAL,PANIC]; default: "INFO"
     # -- To write the logs into a log file, use the filePath option.
     filePath: ""
     # -- When set to true and format is common, it disables the colorized output.
@@ -624,9 +629,7 @@ global:
 # -- Additional arguments to be passed at Traefik's binary
 # See [CLI Reference](https://docs.traefik.io/reference/static-configuration/cli/)
 # Use curly braces to pass values: `helm install --set="additionalArguments={--providers.kubernetesingress.ingressclass=traefik-internal,--log.level=DEBUG}"`
-#additionalArguments: []
-additionalArguments:
-  - "--providers.kubernetesingress.ingressendpoint.publishedservice=example/traefik-ingress"
+additionalArguments: []
 #  - "--providers.kubernetesingress.ingressclass=traefik-internal"
 #  - "--log.level=DEBUG"
 
@@ -831,10 +834,23 @@ service:
   #   # externalIPs: []
   #   # ipFamilies: [ "IPv4","IPv6" ]
 
-autoscaling:
+autoscaling:  # @schema additionalProperties: false
   # -- Create HorizontalPodAutoscaler object.
   # See EXAMPLES.md for more details.
   enabled: false
+  # -- minReplicas is the lower limit for the number of replicas to which the autoscaler can scale down. It defaults to 1 pod.
+  minReplicas:  # @schema type:[integer, null]; minimum:0
+  # -- maxReplicas is the upper limit for the number of pods that can be set by the autoscaler; cannot be smaller than MinReplicas.
+  maxReplicas:  # @schema type:[integer, null]; minimum:0
+  # -- metrics contains the specifications for which to use to calculate the desired replica count (the maximum replica count across all metrics will be used).
+  metrics: []
+  # -- behavior configures the scaling behavior of the target in both Up and Down directions (scaleUp and scaleDown fields respectively).
+  behavior: {}
+  # -- scaleTargetRef points to the target resource to scale, and is used to the pods for which metrics should be collected, as well as to actually change the replica count.
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: "{{ template \"traefik.fullname\" . }}"
 
 persistence:
   # -- Enable persistence using Persistent Volume Claims
@@ -964,7 +980,7 @@ hub:
   # It enables API Gateway.
   token: ""
   # -- Disables all external network connections.
-  offline: false
+  offline:  # @schema type:[boolean, null]
   # -- By default, Traefik Hub provider watches all namespaces. When using `rbac.namespaced`, it will watch helm release namespace and namespaces listed in this array.
   namespaces: []  # @schema required:true
   apimanagement:
@@ -983,9 +999,11 @@ hub:
       # -- When set to true, it will only accept paths and methods that are explicitly defined in its OpenAPI specification
       validateRequestMethodAndPath: false
 
-  experimental:
+  aigateway:
     # -- Set to true in order to enable AI Gateway. Requires a valid license token.
-    aigateway: false
+    enabled: false
+    # -- Hard limit for the size of request bodies inspected by the gateway. Accepts a plain integer representing **bytes**. The default value is `1048576` (1 MiB).
+    maxRequestBodySize:  # @schema type:[integer, null]; minimum:0
   providers:
     consulCatalogEnterprise:
       # -- Enable Consul Catalog Enterprise backend with default settings.
