@@ -185,7 +185,7 @@ spec:
             ## Deploy default dashboards.
             ##
             defaultDashboardsEnabled: true
-            adminPassword: admin
+            adminPassword: ${THIS_OPENEBS_ADMIN_PASSWORD}
         
             sidecar:
               dashboards:
