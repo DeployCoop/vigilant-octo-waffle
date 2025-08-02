@@ -20,7 +20,7 @@ install_traefik_w_helm () {
   envsubst < src/ingress-traefik-values.yaml > "${TMP}/values.yaml"
   helm upgrade --install traefik traefik \
     --repo https://traefik.github.io/charts \
-    --namespace ingress-traefik --create-namespace \
+    --namespace traefik --create-namespace \
     --wait \
     --debug \
     -f "${TMP}/values.yaml"
@@ -39,7 +39,6 @@ if [[ ${THIS_TRAEFIK_METHOD} == 'helm' ]]; then
 elif [[ ${THIS_TRAEFIK_METHOD} == 'main' ]]; then
   echo  "WARN: chicken vs egg problem with argo, you should have another ingress already setup before argo"
   sleep 2
-  install_traefik_w_helm
   time main
 else
   initializer "${this_cwd}/init/traefik"
