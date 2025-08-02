@@ -36,6 +36,10 @@ main () {
   set -eu
   set -x
   initializer "$this_cwd/init/cluster"
+
+  # certmanager
+  src/certmanager.sh
+
   kubectl apply -f .secrets/${THIS_SECRETS}.yaml
   if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
     src/traefik.sh
@@ -52,8 +56,7 @@ main () {
   else
     echo 'k3s'
   fi
-  # certmanager
-  src/certmanager.sh
+
   # argoCD
   src/argocd.sh
   #openEBS
