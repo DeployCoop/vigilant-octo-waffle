@@ -208,7 +208,7 @@ ingressRoute:
     # -- Specify the allowed entrypoints to use for the dashboard ingress route, (e.g. traefik, web, websecure).
     # By default, it's using traefik entrypoint, which is not exposed.
     # /!\ Do not expose your dashboard without any protection over the internet /!\
-    entryPoints: ["traefik", "web", "websecure"]
+    entryPoints: ["traefik", "websecure"]
     # -- Additional ingressRoute middlewares (e.g. for authentication)
     #middlewares: ["traefik-auth"]
     middlewares: 
