@@ -1,0 +1,9 @@
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: miniotransport
+  namespace: minio
+
+spec:
+  serverName: "${THIS_MINIO_CONSOLE_HOST}.${THIS_DOMAIN}"
+  insecureSkipVerify: true
