@@ -1,7 +1,7 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: ${THIS_NAME}-traefik-ingress-tls
+  name: ${THIS_NAME}-traefik-ingress-cert
   namespace: traefik
 spec:
   secretName: ${THIS_NAME}-traefik-ingress-tls
