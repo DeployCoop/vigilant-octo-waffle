@@ -196,6 +196,9 @@ ingressRoute:
     # -- Additional ingressRoute annotations (e.g. for kubernetes.io/ingress.class)
     annotations:
       cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+      kubernetes.io/ingress.class: ${THIS_CLUSTER_INGRESS}
+      traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
+      traefik.ingress.kubernetes.io/router.tls: "true"
     # -- Additional ingressRoute labels (e.g. for filtering IngressRoute by custom labels)
     labels: {}
     # -- The router match rule used for the dashboard ingressRoute
