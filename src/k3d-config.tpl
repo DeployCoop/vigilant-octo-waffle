@@ -46,4 +46,4 @@ options:
     extraArgs: # additional arguments passed to the `k3s server|agent` command; same as `--k3s-arg`
       - arg: --disable=traefik
         nodeFilters:
-          - server:0
+          - server:*

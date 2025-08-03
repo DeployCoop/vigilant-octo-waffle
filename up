@@ -37,6 +37,10 @@ main () {
   set -x
   initializer "$this_cwd/init/cluster"
 
+  if [[ ${THIS_EARLY_END} -eq 'true' ]]; then
+    exit 0
+  fi
+
   # certmanager
   src/certmanager.sh
 
