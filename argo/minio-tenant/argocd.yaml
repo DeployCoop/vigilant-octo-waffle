@@ -503,8 +503,8 @@ spec:
             annotations:
               cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
               spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
-              traefik.ingress.kubernetes.io/service.serversscheme: https # Ensure Traefik uses HTTPS for backend communication
-              traefik.ingress.kubernetes.io/service.serverstransport: miniotransport@kubernetescrd
+              #traefik.ingress.kubernetes.io/service.serversscheme: https # Ensure Traefik uses HTTPS for backend communication
+              #traefik.ingress.kubernetes.io/service.serverstransport: miniotransport@kubernetescrd
               nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
               nginx.ingress.kubernetes.io/proxy-ssl-verify: "off"
               ingress.kubernetes.io/protocol: https
@@ -522,8 +522,8 @@ spec:
             annotations:
               cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
               spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
-              traefik.ingress.kubernetes.io/service.serversscheme: https # Ensure Traefik uses HTTPS for backend communication
-              traefik.ingress.kubernetes.io/service.serverstransport: miniotransport@kubernetescrd
+              #traefik.ingress.kubernetes.io/service.serversscheme: https # Ensure Traefik uses HTTPS for backend communication
+              #traefik.ingress.kubernetes.io/service.serverstransport: miniotransport@kubernetescrd
               nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
               nginx.ingress.kubernetes.io/proxy-ssl-verify: "off"
               ingress.kubernetes.io/protocol: https
