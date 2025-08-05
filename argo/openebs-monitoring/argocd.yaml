@@ -11,7 +11,7 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-    - ServerSideApply=false
+    - ServerSideApply=true
   source:
     path: charts/openebs-monitoring
     repoURL: ${THIS_REPO_URL}

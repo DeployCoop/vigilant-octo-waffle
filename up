@@ -37,7 +37,7 @@ main () {
   set -x
   initializer "$this_cwd/init/cluster"
 
-  if [[ ${THIS_EARLY_END} -eq 'true' ]]; then
+  if [[ ${THIS_EARLY_END} == 'true' ]]; then
     exit 0
   fi
 
