@@ -21,6 +21,7 @@ do_cmd_checks () {
   check_cmd kubectl
   check_cmd jq
   check_cmd pwgen
+  check_cmd helm
   check_cmd sed
   check_cmd sshuttle
   check_cmd yq
