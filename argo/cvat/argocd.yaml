@@ -179,11 +179,11 @@ spec:
                     protocol: TCP
                     name: http
             defaultStorage:
-                enabled: true
-                 storageClassName: "${THIS_STORAGECLASS}"
-                 accessModes:
-                  - ReadWriteMany
-                size: ${THIS_CVAT_DISK_SIZE}
+              enabled: true
+              storageClassName: "${THIS_STORAGECLASS}"
+              accessModes:
+                - ReadWriteMany
+              size: ${THIS_CVAT_DISK_SIZE}
           frontend:
             replicas: 1
             image: cvat/ui
