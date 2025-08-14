@@ -183,7 +183,7 @@ spec:
               storageClassName: "${THIS_STORAGECLASS}"
               accessModes:
                 - ReadWriteMany
-              size: ${THIS_CVAT_DISK_SIZE}
+              size: ${THIS_CVAT_BACKEND_DISK_SIZE}
           frontend:
             replicas: 1
             image: cvat/ui
@@ -340,10 +340,10 @@ spec:
               initialDelaySeconds: 30
             defaultStorage:
               enabled: true
-        #     storageClassName: default
-        #     accessModes:
-        #       - ReadWriteOnce
-              size: 100Gi
+              storageClassName: "${THIS_STORAGECLASS}"
+              accessModes:
+                - ReadWriteMany
+              size: ${THIS_CVAT_KVROCKS_DISK_SIZE}
         
         postgresql:
           #See https://github.com/bitnami/charts/blob/master/bitnami/postgresql/ for more info
