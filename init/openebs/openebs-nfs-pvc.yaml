@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${THIS_NAME}-nfs-server-claim
+  namespace: nfs-server
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: ${THIS_OPENEBS_NFS_DISK_SIZE}
+  storageClassName: ${THIS_NFS_STORAGECLASS}

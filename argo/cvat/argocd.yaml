@@ -180,7 +180,7 @@ spec:
                     name: http
             defaultStorage:
               enabled: true
-              storageClassName: "${THIS_STORAGECLASS}"
+              storageClassName: "${THIS_CVAT_STORAGECLASS}"
               accessModes:
                 - ReadWriteMany
               size: ${THIS_CVAT_BACKEND_DISK_SIZE}
@@ -340,7 +340,7 @@ spec:
               initialDelaySeconds: 30
             defaultStorage:
               enabled: true
-              storageClassName: "${THIS_STORAGECLASS}"
+              storageClassName: "${THIS_CVAT_STORAGECLASS}"
               accessModes:
                 - ReadWriteMany
               size: ${THIS_CVAT_KVROCKS_DISK_SIZE}

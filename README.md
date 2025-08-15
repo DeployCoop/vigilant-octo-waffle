@@ -33,6 +33,20 @@ This project provides a **Kubernetes cluster setup** using [KinD](https://kind.s
 - **supabase
 - **example-nextjs-docker
 
+## Storage
+
+### OpenEBS
+
+OpenEBS is quite mature at this point I have heavily tested the LVM provisioner, and am adding RWX support with NFS, ZFS support is planned as well.
+
+#### LVMPV
+
+https://github.com/openebs/lvm-localpv/blob/develop/docs/quickstart.md#setup
+
+#### NFS
+
+https://openebs.io/docs/Solutioning/read-write-many/nfspvc
+
 ## Ingress 
 
 Adjustable $subdomain.$domain.$tld for each subdomain. With TLS using mkcert for local development and LetsEncrypt with real certs if you have an external static IP
