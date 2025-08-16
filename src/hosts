@@ -26,4 +26,3 @@
 127.0.0.1 sloth.${THIS_DOMAIN}
 127.0.0.1 supa.${THIS_DOMAIN}
 127.0.0.1 traefik.${THIS_DOMAIN}
-127.0.0.1 csi-driver-nfs.${THIS_DOMAIN}

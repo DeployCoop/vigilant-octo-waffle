@@ -3,6 +3,8 @@ if [[ $# -eq 1 ]]; then
 TARGET=$1
 else
   echo "wrong number of args: $#"
+  echo "useage: $0 kernel_mod"
+  echo "e.g. $0 nvme_tcp"
   exit 1
 fi
 lsmod | grep $TARGET
