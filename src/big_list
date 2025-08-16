@@ -19,4 +19,3 @@ src/openebs-monitoring.sh
 src/minio-tenant.sh
 src/traefik.sh
 src/cvat.sh
-src/csi-driver-nfs.sh
