@@ -6,6 +6,7 @@ main () {
   #set -eux
   set -eu
 
+  src/kmod.sh nvme_tcp
   #kubectl krew install mayastor openebs
   argoRunner "$THIS_THING"
   set +e

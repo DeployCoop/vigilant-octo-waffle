@@ -12,6 +12,10 @@ volumes: # repeatable flags are represented as YAML lists
     nodeFilters:
       - server:0
       - agent:*
+  - volume: ${THIS_STORAGE_PATH}/udev:/run/udev
+    nodeFilters:
+      - server:*
+      - agent:*
 ports:
   - port: 8000:8000 # same as `--port '8080:8000@loadbalancer'`
     nodeFilters:

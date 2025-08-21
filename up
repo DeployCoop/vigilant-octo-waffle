@@ -64,6 +64,7 @@ main () {
   src/argocd.sh
   #openEBS
   src/openebs.sh
+  src/csi-driver-nfs.sh
   # kubegres
   src/kubegres.sh
   src/keycloak.sh
