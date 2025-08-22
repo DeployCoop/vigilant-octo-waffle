@@ -418,8 +418,8 @@ spec:
             kubernetes.io/ingress.class: ${THIS_CLUSTER_INGRESS}
             kubernetes.io/tls-acme: "true"
           hosts:
-            - ${THIS_FLUENTD_HOST}.${THIS_DOMAIN}
-            - port: 9880
+            - host: ${THIS_FLUENTD_HOST}.${THIS_DOMAIN}
+              port: 9880
           tls:
             - secretName: ${THIS_NAME}-fluent-big-ingress-tls
               hosts:
