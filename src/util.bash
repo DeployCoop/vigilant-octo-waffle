@@ -162,6 +162,19 @@ munger () {
   liner ${KEY_NAME} $based ${SECRET}
 }
 
+sorterrr () {
+  if [[ ! $# -eq 1 ]]; then
+    echo "wrong args $#"
+    exit 1
+  fi
+  file_to_sort=$1
+  SORTERRR_TMP=$(mktemp)
+  trap 'rm -rf ${SORTERRR_TMP}' EXIT
+  sort ${file_to_sort} > ${SORTERRR_TMP}
+  cat ${SORTERRR_TMP} > ${file_to_sort}
+  echo $SORTERRR_TMP
+}
+
 linerrr () {
   if [[ ! $# -eq 2 ]]; then
     echo "wrong args $#"
