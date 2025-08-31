@@ -6,6 +6,8 @@
 127.0.0.1 collabora.${THIS_DOMAIN}
 127.0.0.1 cvat.${THIS_DOMAIN}
 127.0.0.1 drupal.${THIS_DOMAIN}
+127.0.0.1 fluent-bit.${THIS_DOMAIN}
+127.0.0.1 fluentd.${THIS_DOMAIN}
 127.0.0.1 fossbilling.${THIS_DOMAIN}
 127.0.0.1 grafana.${THIS_DOMAIN}
 127.0.0.1 harbor.${THIS_DOMAIN}

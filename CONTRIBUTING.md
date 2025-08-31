@@ -71,5 +71,5 @@ replacing mynewapp in those files
 You will still need to perform these steps and inspect all new files.
 
 1. Take the values.yaml from your chart and append it to the argocd.yaml in the `argo/YOURAPP` directory. e.g. bao [argo/bao/values.yaml](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/argo/bao/values.yaml)
-1. Add any more yaml like ingresses to the `init/YOURAPP` directory. e.g. [init/argo](https://github.com/DeployCoop/vigilant-octo-waffle/tree/main/init/bao)
+1. Add any more yaml like ingresses to the `init/YOURAPP` directory. e.g. [init/bao](https://github.com/DeployCoop/vigilant-octo-waffle/tree/main/init/bao)
 1. Add env vars to [src/default.env](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/default.env).
