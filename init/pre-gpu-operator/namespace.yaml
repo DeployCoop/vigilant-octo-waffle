@@ -13,7 +13,7 @@ metadata:
           f:kubernetes.io/metadata.name: {}
     manager: kubectl-create
     operation: Update
-  name: velero
+  name: gpu-operator
 spec:
   finalizers:
   - kubernetes
