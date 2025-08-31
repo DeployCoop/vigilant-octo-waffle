@@ -86,6 +86,7 @@ Ensure the following tools are installed:
 - **Docker** (with `docker-compose`)
 - **mkcert**
 - **KinD** (for Kubernetes-in-Docker)
+- **yq** [yq-go](https://github.com/mikefarah/yq)
 - **K3s** (optional)
 
 You will need around 11 GB just to pull all the images and startup the cluster if you enable all the apps, it might be prudent to start with just a few.  
