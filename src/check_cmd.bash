@@ -18,12 +18,16 @@ check_cmd () {
 
 do_cmd_checks () {
   check_cmd argocd
-  check_cmd kubectl
-  check_cmd jq
-  check_cmd pwgen
+  check_cmd docker
   check_cmd helm
+  check_cmd jq
+  check_cmd kubectl
+  check_cmd openssl
+  check_cmd parallel
+  check_cmd pwgen
   check_cmd sed
   check_cmd sshuttle
+  check_cmd tr
   check_cmd yq
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
     check_cmd kind
