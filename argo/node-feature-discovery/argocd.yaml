@@ -3,7 +3,7 @@ metadata:
   namespace: argocd
 spec:
   destination:
-    namespace: ${THIS_NAMESPACE}
+    namespace: node-feature-discovery
     server: https://kubernetes.default.svc
   project: default
   syncPolicy:
