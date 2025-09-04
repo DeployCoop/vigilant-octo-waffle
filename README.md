@@ -243,6 +243,11 @@ if you are using publicly available DNS you can generate bind compatible records
 src/host2bind.sh 1.2.3.4 1.2.3.5 1.2.3.6
 ```
 
+if you are using cloudflare as DNS you can generate cf compatible records:
+
+```
+src/host2cloudflare.sh 1.2.3.4 1.2.3.5 1.2.3.6
+```
 
 ### Start the Cluster
 
