@@ -4,6 +4,7 @@ src/drupal.sh
 src/fluent-bit.sh
 src/fluentd.sh
 src/FOSSBilling.sh
+src/gpu-operator.sh
 src/harbor.sh
 src/kube-prometheus-stack.sh
 src/kubeshark.sh
@@ -11,12 +12,14 @@ src/minio-operator.sh
 src/minio-tenant.sh
 src/nextcloud.sh
 src/nextjs-docker.sh
+src/node-feature-discovery.sh
 src/openebs-monitoring.sh
 src/openldap.sh
 src/openproject.sh
 src/opensearch-dashboards.sh
 src/opensearch-operator.sh
 src/opensearch.sh
+src/rancher.sh
 src/sloth.sh
 src/supabase.sh
 src/velero.sh

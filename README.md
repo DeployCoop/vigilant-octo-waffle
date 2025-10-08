@@ -86,6 +86,7 @@ Ensure the following tools are installed:
 - **Docker** (with `docker-compose`)
 - **mkcert**
 - **KinD** (for Kubernetes-in-Docker)
+- **yq** [yq-go](https://github.com/mikefarah/yq)
 - **K3s** (optional)
 
 You will need around 11 GB just to pull all the images and startup the cluster if you enable all the apps, it might be prudent to start with just a few.  
@@ -242,6 +243,11 @@ if you are using publicly available DNS you can generate bind compatible records
 src/host2bind.sh 1.2.3.4 1.2.3.5 1.2.3.6
 ```
 
+if you are using cloudflare as DNS you can generate cf compatible records:
+
+```
+src/host2cloudflare.sh 1.2.3.4 1.2.3.5 1.2.3.6
+```
 
 ### Start the Cluster
 
