@@ -19,6 +19,7 @@ src/openproject.sh
 src/opensearch-dashboards.sh
 src/opensearch-operator.sh
 src/opensearch.sh
+src/opentelemetry-operator.sh
 src/rancher.sh
 src/sloth.sh
 src/supabase.sh
