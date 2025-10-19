@@ -23,3 +23,4 @@ src/rancher.sh
 src/sloth.sh
 src/supabase.sh
 src/velero.sh
+src/vmq-operator.sh

@@ -18,7 +18,6 @@ check_cmd () {
 
 do_cmd_checks () {
   check_cmd argocd
-  check_cmd docker
   check_cmd helm
   check_cmd jq
   check_cmd kubectl
@@ -31,8 +30,10 @@ do_cmd_checks () {
   check_cmd yq
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
     check_cmd kind
+    check_cmd docker
   elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
     check_cmd k3d
+    check_cmd docker
   elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
     check_cmd k3s
   fi
