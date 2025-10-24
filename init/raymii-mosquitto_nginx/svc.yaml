@@ -10,6 +10,7 @@ spec:
     role: primary
   ports:    
   - name: mqtt
+    nodePort: 31883
     port: 1883
     targetPort: 1883
     protocol: TCP

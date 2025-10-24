@@ -20,13 +20,13 @@ ports:
   - port: 8000:8000 # same as `--port '8080:8000@loadbalancer'`
     nodeFilters:
       - loadbalancer
-  - port: 1883:1883
+  - port: 1883:31883
     nodeFilters:
       - loadbalancer
-  - port: 2883:2883
+  - port: 2883:32883
     nodeFilters:
       - loadbalancer
-  - port: 3883:3883
+  - port: 3883:33883
     nodeFilters:
       - loadbalancer
   - port: 443:443 # same as `--port '443:443@loadbalancer'`
