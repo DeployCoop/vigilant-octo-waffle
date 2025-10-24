@@ -8,6 +8,8 @@ main () {
     initializer "${this_cwd}/init/pre-${THIS_THING}-traefik"
   elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     echo 'ingress nginx is good to go'
+  elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
+    echo 'ingress haproxy is good to go'
   else
     echo 'unrecognized ingress'
     exit 1

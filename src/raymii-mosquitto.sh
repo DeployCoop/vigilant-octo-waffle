@@ -12,6 +12,8 @@ main () {
     initializer "${this_cwd}/init/${THIS_THING}_traefik"
   elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     initializer "${this_cwd}/init/${THIS_THING}_nginx"
+  elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
+    initializer "${this_cwd}/init/${THIS_THING}_haproxy"
   else
     echo 'unrecognized ingress'
     exit 1

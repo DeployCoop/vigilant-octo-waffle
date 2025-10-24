@@ -49,6 +49,8 @@ main () {
     src/traefik.sh
   elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     src/nginx.sh
+  elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
+    src/haproxy.sh
   else
     echo 'unrecognized ingress'
     exit 1
