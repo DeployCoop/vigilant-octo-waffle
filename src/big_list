@@ -20,6 +20,7 @@ src/opensearch-dashboards.sh
 src/opensearch-operator.sh
 src/opensearch.sh
 src/rancher.sh
+src/raymii-mosquitto.sh
 src/sloth.sh
 src/supabase.sh
 src/velero.sh
