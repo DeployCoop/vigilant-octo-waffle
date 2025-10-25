@@ -20,6 +20,7 @@
 127.0.0.1 mosquitto.${THIS_DOMAIN}
 127.0.0.1 nextcloud.${THIS_DOMAIN}
 127.0.0.1 nextjsdocker.${THIS_DOMAIN}
+127.0.0.1 opencti.${THIS_DOMAIN}
 127.0.0.1 openebs-monitoring.${THIS_DOMAIN}
 127.0.0.1 openproject.${THIS_DOMAIN}
 127.0.0.1 opensearch.${THIS_DOMAIN}

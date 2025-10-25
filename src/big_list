@@ -13,6 +13,7 @@ src/minio-tenant.sh
 src/nextcloud.sh
 src/nextjs-docker.sh
 src/node-feature-discovery.sh
+src/opencti.sh
 src/openebs-monitoring.sh
 src/openldap.sh
 src/openproject.sh
