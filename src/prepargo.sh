@@ -15,6 +15,9 @@ main () {
   elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
     echo 'w8 wip'
     sleep 5
+  elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
+    echo 'w8 wip'
+    sleep 5
   fi
   sleep 15
   echo 'init argo pass'

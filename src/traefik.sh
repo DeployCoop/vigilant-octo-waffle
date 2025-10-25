@@ -16,8 +16,7 @@ main () {
 
 
 install_traefik_w_helm () {
-  #helm upgrade --install traefik traefik/traefik \
-  envsubst < src/ingress-traefik-values.yaml > "${TMP}/values.yaml"
+  envsubst < ${TRAEFIK_CONFIG_TPL} > "${TMP}/values.yaml"
   helm upgrade --install traefik traefik \
     --repo https://traefik.github.io/charts \
     --namespace traefik --create-namespace \
