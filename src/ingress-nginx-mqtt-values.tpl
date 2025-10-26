@@ -1,4 +1,9 @@
 controller:
+  containerPort:
+    http: 80
+    https: 443
+    mqtt: 1883
+    mqtts: 8883
   tcp:
     configMap: "ingress-nginx/tcp-services-configmap"
   extraArgs:
@@ -14,3 +19,4 @@ controller:
       http: 80
       https: 443
       mqtt: 1883
+      mqtts: 8883

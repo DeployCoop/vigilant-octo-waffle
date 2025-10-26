@@ -28,6 +28,23 @@ web:
 
 Then those values must be updated in the `argo` directory as well.
 
+## useful regex
+
+This one readies an env var for the defaults.env
+```
+s/^\(.*\)=\(.*\)/: "${\1:=\2}"/
+```
+
+prep a values.yaml to be embedded in argo.yaml:
+```
+'<,'>s/^/        /
+```
+
+change a storageClass line to use our variable:
+```
+s/\(storageClass:\).*/\1 "${THIS_STORAGECLASS}"
+```
+
 ## Adding applications
 
 Perhaps the easiest way to contribute is to add more applications.  
