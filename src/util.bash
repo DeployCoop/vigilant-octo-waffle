@@ -77,10 +77,10 @@ initializer () {
     log_error "Usage: $0 <directory>"
   fi
 
-  TMP=$(mktemp -d --suffix .tmp.d)
-  trap 'rm -rf ${TMP}' EXIT
+  INITIALIZER_TMP=$(mktemp -d --suffix .tmp.d)
+  trap 'rm -rf ${INITIALIZER_TMP}' EXIT
   local base_dir="$(basename $1)"
-  local init_dir="${TMP}/${base_dir}"
+  local init_dir="${INITIALIZER_TMP}/${base_dir}"
   if [[ -d ".init_overrides/${base_dir}" ]]; then
     mkdir "${init_dir}"
     these_files=$(find ".init_overrides/${base_dir}" -regex '.*.ya?ml'|sort)
@@ -97,7 +97,7 @@ initializer () {
       fi
     done
   else
-    cp -av $1 ${TMP}/
+    cp -av $1 ${INITIALIZER_TMP}/
   fi
 
   if [[ ! -d ${init_dir} ]]; then
