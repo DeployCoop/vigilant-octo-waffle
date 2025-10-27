@@ -7,6 +7,8 @@ controller:
     mqtts: 8883
   tcp:
     configMap: "ingress-nginx/tcp-services-configmap"
+  config:
+    annotations-risk-level: Critical
   extraArgs:
     tcp-services-configmap: "ingress-nginx/tcp-services-configmap"
   service:

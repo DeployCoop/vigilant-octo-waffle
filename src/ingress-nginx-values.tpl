@@ -53,7 +53,8 @@ controller:
     https: 443
   # -- Global configuration passed to the ConfigMap consumed by the controller. Values may contain Helm templates.
   # Ref.: https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/
-  config: {}
+  config:
+    annotations-risk-level: Critical
   # -- Annotations to be added to the controller config configuration configmap.
   configAnnotations: {}
   # -- Will add custom headers before sending traffic to backends according to https://github.com/kubernetes/ingress-nginx/tree/main/docs/examples/customization/custom-headers
