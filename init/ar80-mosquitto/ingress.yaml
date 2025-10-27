@@ -7,6 +7,13 @@ metadata:
     nginx.ingress.kubernetes.io/rewrite-target: /
     spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
     #traefik.ingress.kubernetes.io/router.middlewares: example-redirect-https@kubernetescrd
+    kubernetes.io/ingress.class: ${THIS_CLUSTER_INGRESS}
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP" # Important for WebSocket upgrade
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600" # Increase timeout for long-lived connections
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade "websocket";
+      proxy_set_header Connection "Upgrade";
   labels:
     app.kubernetes.io/instance: ar80-mosquitto
   name: ar80-mosquitto

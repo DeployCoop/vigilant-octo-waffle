@@ -5,5 +5,5 @@ if [[ ID == alpine ]]; then
 fi
 
 export THIS_IP=$(curl icanhazip.com)
-export INSTALL_K3S_EXEC="server --tls-san $THIS_IP --cluster-init --flannel-backend=wireguard-native --disable=traefik"
+export INSTALL_K3S_EXEC="server --tls-san $THIS_IP --cluster-init --flannel-backend=wireguard-native --disable=traefik --secrets-encryption"
 curl -sfL https://get.k3s.io | sh -s -

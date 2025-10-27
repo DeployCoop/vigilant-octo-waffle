@@ -1,4 +1,5 @@
 controller:
+  allowSnippetAnnotations: true
   containerPort:
     http: 80
     https: 443
