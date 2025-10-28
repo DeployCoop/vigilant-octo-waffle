@@ -8,10 +8,14 @@ main () {
   argoRunner "${THIS_THING}"
   #initializer "${this_cwd}/init/${THIS_THING}"
   if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
+    echo 'unimplemented'
+    exit 1
     initializer "${this_cwd}/init/${THIS_THING}_traefik"
   elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     initializer "${this_cwd}/init/${THIS_THING}_nginx"
   elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
+    echo 'unimplemented'
+    exit 1
     initializer "${this_cwd}/init/${THIS_THING}_haproxy"
   else
     echo 'unrecognized ingress'
