@@ -1,4 +1,3 @@
-
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -15,23 +14,23 @@ metadata:
       proxy_set_header Upgrade "websocket";
       proxy_set_header Connection "Upgrade";
   labels:
-    app.kubernetes.io/instance: ar80-mosquitto
-  name: ar80-mosquitto
+    app.kubernetes.io/instance: urban-mosquitto
+  name: urban-mosquitto
   namespace: ${THIS_NAMESPACE}
 spec:
   ingressClassName: ${THIS_CLUSTER_INGRESS}
   rules:
-  - host: ${THIS_AR80_MOSQUITTO_HOST}.${THIS_DOMAIN}
+  - host: ${THIS_URBAN_MOSQUITTO_HOST}.${THIS_DOMAIN}
     http:
       paths:
       - backend:
           service:
-            name: ar80-mosquitto-svc-nodeport
+            name: urban-mosquitto-${THIS_NAMESPACE}
             port:
               number: 9090
         path: /
         pathType: Prefix
   tls:
   - hosts:
-    - ${THIS_AR80_MOSQUITTO_HOST}.${THIS_DOMAIN}
-    secretName: chart-${THIS_NAMESPACE}-${THIS_AR80_MOSQUITTO_HOST}-tls
+    - ${THIS_URBAN_MOSQUITTO_HOST}.${THIS_DOMAIN}
+    secretName: chart-${THIS_NAMESPACE}-${THIS_URBAN_MOSQUITTO_HOST}-tls

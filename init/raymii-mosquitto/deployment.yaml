@@ -13,8 +13,11 @@ data:
   raymii-mosquitto.conf: |
     listener 1883
     allow_anonymous true  
+    protocol websockets
     listener 2883
     allow_anonymous true  
+    listener 9090
+    protocol websockets
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -27,6 +30,8 @@ data:
     allow_anonymous true
     listener 3883
     allow_anonymous true
+    listener 9090
+    protocol websockets
     connection bridge-to-primary
     address raymii-mosquitto-primary-svc.raymii-mosquitto-dev.svc.cluster.local:2883
     clientid raymii-mosquitto-bridge

@@ -26,5 +26,6 @@ src/rancher.sh
 src/raymii-mosquitto.sh
 src/sloth.sh
 src/supabase.sh
+src/urban-mosquitto.sh
 src/velero.sh
 src/vmq-operator.sh
