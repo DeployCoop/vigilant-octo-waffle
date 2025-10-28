@@ -6,7 +6,7 @@ main () {
   set -eu
   #initializer "${this_cwd}/init/pre-${THIS_THING}"
   argoRunner "${THIS_THING}"
-  initializer "${this_cwd}/init/${THIS_THING}"
+  #initializer "${this_cwd}/init/${THIS_THING}"
   if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
     echo 'unimplemented'
     exit 1
