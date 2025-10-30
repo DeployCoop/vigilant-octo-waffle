@@ -1,0 +1,18 @@
+# https://www.haproxy.com/documentation/kubernetes-ingress/ingress-tutorials/tcp/
+apiVersion: ingress.v1.haproxy.org/v1
+kind: TCP
+metadata:
+  name: example-service1-tcp
+  annotations:
+    ingress.class: haproxy
+spec:
+  - name: example-tcp
+    frontend:
+      name: example-frontend
+      tcplog: true
+      binds:
+        - name: bind1
+          port: 2000
+    service:
+      name: example-service1
+      port: 3000

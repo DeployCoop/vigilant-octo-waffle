@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcp-services-configmap
+  namespace: ingress-nginx
+data:
+  1883: "raymii-mosquitto-dev/raymii-mosquitto-svc:1883"

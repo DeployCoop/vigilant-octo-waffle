@@ -1,0 +1,289 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: raymii-mosquitto-dev
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raymii-mosquitto-primary-config
+  namespace: raymii-mosquitto-dev
+data:
+  raymii-mosquitto.conf: |
+    listener 1883
+    allow_anonymous true  
+    protocol websockets
+    listener 2883
+    allow_anonymous true  
+    listener 9090
+    protocol websockets
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raymii-mosquitto-bridge-config
+  namespace: raymii-mosquitto-dev
+data:
+  raymii-mosquitto.conf: |
+    listener 1883
+    allow_anonymous true
+    listener 3883
+    allow_anonymous true
+    listener 9090
+    protocol websockets
+    connection bridge-to-primary
+    address raymii-mosquitto-primary-svc.raymii-mosquitto-dev.svc.cluster.local:2883
+    clientid raymii-mosquitto-bridge
+    topic # both 0
+    start_type automatic
+    try_private true
+    notifications true
+    restart_timeout 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raymii-mosquitto-primary
+  namespace: raymii-mosquitto-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: raymii-mosquitto
+      role: primary
+  template:
+    metadata:
+      labels:
+        app: raymii-mosquitto
+        role: primary
+    spec:
+      containers:
+      - name: raymii-mosquitto
+        image: eclipse-mosquitto:2.0.21
+        command: ["mosquitto"]
+        args: ["-c", "/raymii-mosquitto/config/raymii-mosquitto.conf"]
+        ports:
+        - containerPort: 1883
+        - containerPort: 2883
+        livenessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - /usr/bin/mosquitto_pub -h raymii-mosquitto-primary-svc.raymii-mosquitto-dev.svc.cluster.local -p 2883 -t healthcheck/primary/liveness -m "$(hostname) ok $(date)" -r -q 0
+        initialDelaySeconds: 30
+        periodSeconds: 5
+        # livenessProbe:
+        # tcpSocket:
+        #   port: 1883
+        # initialDelaySeconds: 5
+        # periodSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: primary-config
+          mountPath: /raymii-mosquitto/config/
+      volumes:
+      - name: primary-config
+        configMap:
+          name: raymii-mosquitto-primary-config     
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - raymii-mosquitto
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raymii-mosquitto-secondary
+  namespace: raymii-mosquitto-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: raymii-mosquitto
+      role: secondary
+  template:
+    metadata:
+      labels:
+        app: raymii-mosquitto
+        role: secondary
+    spec:
+      containers:
+      - name: raymii-mosquitto
+        image: eclipse-mosquitto:2.0.21
+        command: ["mosquitto"]
+        args: ["-c", "/raymii-mosquitto/config/raymii-mosquitto.conf"]
+        ports:
+        - containerPort: 1883
+        - containerPort: 3883
+        livenessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - /usr/bin/mosquitto_pub -h raymii-mosquitto-secondary-svc.raymii-mosquitto-dev.svc.cluster.local -p 3883 -t healthcheck/secondary/liveness -m "$(hostname) ok $(date)" -r -q 0
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        # livenessProbe:
+        #  tcpSocket:
+        #     port: 1883
+        #  initialDelaySeconds: 5
+        #  periodSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 5
+          periodSeconds: 5        
+        volumeMounts:
+        - name: bridge-config
+          mountPath: /raymii-mosquitto/config/          
+      volumes:
+      - name: bridge-config
+        configMap:
+          name: raymii-mosquitto-bridge-config
+      restartPolicy: Always
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - raymii-mosquitto
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: raymii-mosquitto-svc
+  namespace: raymii-mosquitto-dev
+spec:
+  type: LoadBalancer
+  selector:
+    app: raymii-mosquitto
+    role: primary
+  ports:    
+  - port: 1883
+    targetPort: 1883
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: raymii-mosquitto-primary-svc
+  namespace: raymii-mosquitto-dev
+spec:
+  type: LoadBalancer
+  selector:
+    app: raymii-mosquitto
+    role: primary
+  ports:    
+  - port: 2883
+    targetPort: 2883
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: raymii-mosquitto-secondary-svc
+  namespace: raymii-mosquitto-dev
+spec:
+  type: LoadBalancer
+  selector:
+    app: raymii-mosquitto
+    role: secondary
+  ports:
+  - port: 3883
+    targetPort: 3883
+    protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raymii-mosquitto-failover
+  namespace: raymii-mosquitto-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: raymii-mosquitto-failover
+  template:
+    metadata:
+      labels:
+        app: raymii-mosquitto-failover
+    spec:
+      serviceAccountName: raymii-mosquitto-failover-sa
+      containers:
+      - name: failover
+        image: bitnami/kubectl
+        command:
+        - /bin/sh
+        - -c
+        - |
+          PREV_STATUS=""
+          while true; do
+            STATUS=$(kubectl get pod -l app=raymii-mosquitto,role=primary -n raymii-mosquitto-dev -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}')
+            if [ "$STATUS" != "$PREV_STATUS" ]; then
+              if [ "$STATUS" != "True" ]; then
+                kubectl patch service raymii-mosquitto-svc -n raymii-mosquitto-dev -p '{"spec":{"selector":{"app":"raymii-mosquitto","role":"secondary"}}}'
+                echo "$(date) - Primary down, routing to secondary."
+              else
+                kubectl patch service raymii-mosquitto-svc -n raymii-mosquitto-dev -p '{"spec":{"selector":{"app":"raymii-mosquitto","role":"primary"}}}'
+                echo "$(date) - Primary healthy, routing to primary."
+              fi
+              PREV_STATUS="$STATUS"
+            fi
+            sleep 5
+          done
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - raymii-mosquitto
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: raymii-mosquitto-failover-sa
+  namespace: raymii-mosquitto-dev
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: raymii-mosquitto-failover-role
+  namespace: raymii-mosquitto-dev
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "patch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: raymii-mosquitto-failover-rb
+  namespace: raymii-mosquitto-dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: raymii-mosquitto-failover-role
+subjects:
+- kind: ServiceAccount
+  name: raymii-mosquitto-failover-sa
+  namespace: raymii-mosquitto-dev

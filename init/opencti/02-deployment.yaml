@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xtm-composer
+  namespace: xtm-composer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xtm-composer
+  template:
+    metadata:
+      labels:
+        app: xtm-composer
+    spec:
+      containers:
+      - name: xtm-composer
+        image: filigran/xtm-composer:latest
+        env:
+        - name: COMPOSER_ENV
+          value: "production"
+        - name: MANAGER__ID
+          value: "k8s-manager"
+        - name: MANAGER__CREDENTIALS_KEY_FILEPATH
+          value: "/keys/private_key.pem"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: keys
+          mountPath: /keys
+      volumes:
+      - name: config
+        configMap:
+          name: xtm-composer-config
+      - name: keys
+        secret:
+          secretName: xtm-composer-keys
+      serviceAccountName: xtm-composer
