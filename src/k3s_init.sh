@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SECRET=$(cat /var/lib/rancher/k3s/server/token)
+SECRET=$(cat /var/lib/rancher/k3s/server/node-token)
 THIS_FILE=/root/k3s_init_node.sh
 SERVER_IP=$(curl icanhazip.com)
 
