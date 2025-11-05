@@ -435,7 +435,7 @@ spec:
             ## Hosts must be provided if Ingress is enabled.
             ##
             hosts:
-              - alertmanager.example.com
+              - ${THIS_KUBE_PROMETHEUS_STACK_ALERTMANAGER_HOST}.${THIS_DOMAIN}
         
             ## Paths to use for ingress rules - one path should match the alertmanagerSpec.routePrefix
             ##
@@ -450,9 +450,9 @@ spec:
             ## Secret must be manually created in the namespace
             ##
             tls:
-              - secretName: alertmanager-example-general-tls
+              - secretName: alertmanager-${THIS_NAME}-general-tls
                 hosts:
-                - alertmanager.example.com
+                - ${THIS_KUBE_PROMETHEUS_STACK_ALERTMANAGER_HOST}.${THIS_DOMAIN}
         
           # -- BETA: Configure the gateway routes for the chart here.
           # More routes can be added by adding a dictionary key like the 'main' route.
@@ -843,7 +843,7 @@ spec:
         
             ## The external URL the Alertmanager instances will be available under. This is necessary to generate correct URLs. This is necessary if Alertmanager is not served from root of a DNS name. string  false
             ##
-            externalUrl: https://alertmanager.example.com
+            externalUrl: https://${THIS_KUBE_PROMETHEUS_STACK_ALERTMANAGER_HOST}.${THIS_DOMAIN}
         
             ## The route prefix Alertmanager registers HTTP handlers for. This is useful, if using ExternalURL and a proxy is rewriting HTTP routes of a request, and the actual ExternalURL is still true,
             ## but the server serves requests under a different route prefix. For example for use with kubectl proxy.
@@ -3382,7 +3382,7 @@ spec:
             ## Secret must be manually created in the namespace
             ##
             tls: []
-            # - secretName: thanos-gateway-tls
+            # - secretName: ${THIS_NAME}-thanos-gateway-tls
             #   hosts:
             #   - thanos-gateway.domain.com
             #
@@ -3421,7 +3421,7 @@ spec:
             ## Must be provided if Ingress is enabled.
             ##
             hosts:
-              - prometheus.example.com
+              - ${THIS_KUBE_PROMETHEUS_STACK_PROMETHEUS_HOST}.${THIS_DOMAIN}
         
             ## Paths to use for ingress rules - one path should match the prometheusSpec.routePrefix
             ##
@@ -3436,9 +3436,9 @@ spec:
             ## Secret must be manually created in the namespace
             ##
             tls:
-              - secretName: prometheus-example-general-tls
+              - secretName: prometheus-${THIS_NAME}-general-tls
                 hosts:
-                  - prometheus.example.com
+                  - ${THIS_KUBE_PROMETHEUS_STACK_PROMETHEUS_HOST}.${THIS_DOMAIN}
         
           # -- BETA: Configure the gateway routes for the chart here.
           # More routes can be added by adding a dictionary key like the 'main' route.
@@ -4585,7 +4585,7 @@ spec:
             tls: []
             # - secretName: thanosruler-general-tls
             #   hosts:
-            #   - thanosruler.example.com
+            #   - ${THIS_KUBE_PROMETHEUS_STACK_THANOS_HOST}.${THIS_DOMAIN}
         
           # -- BETA: Configure the gateway routes for the chart here.
           # More routes can be added by adding a dictionary key like the 'main' route.
