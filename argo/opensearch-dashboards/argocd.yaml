@@ -53,9 +53,9 @@ spec:
             server:
               name: dashboards
               host: "{{ .Values.serverHost }}"
-        		data_source.enabled: true
-        		workspace.enabled: true
-        		explore.enabled: true
+            data_source.enabled: true
+            workspace.enabled: true
+            explore.enabled: true
         
           #  opensearch_dashboards.yml:
           #   server:
