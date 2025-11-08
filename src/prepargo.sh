@@ -9,7 +9,6 @@ main () {
   set -eu
   src/wait_argo.sh
   argocd admin initial-password
-  exit 1
   echo 'init argo pass'
   if [[ ${THIS_INIT_ARGO_PASS_METH} == 'argocd' ]]; then
     src/argocd-init-pass.sh
