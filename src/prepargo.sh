@@ -15,6 +15,8 @@ main () {
     src/argocd-init-pass.sh
   elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'kubectl' ]]; then
     src/argocd-init-pass-kubectl.sh
+  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'patch' ]]; then
+    src/argocd-init-pass-patch.sh
   elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'htpasswd' ]]; then
     src/argocd-init-pass-htpasswd.sh
   else
