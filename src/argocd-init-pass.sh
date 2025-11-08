@@ -6,47 +6,38 @@ main () {
     set -x
   fi
   set -u
-  countzero=0
-  result=1
-  set +e
-  while [[ ! $result -eq 0 ]]; do
-    argocd admin initial-password -n argocd
-    result=$?
-    if [[ $countzero -gt 9 ]]; then
-      break
-    fi
-    sleep 3
-  done
-  PASSWORD_ARGO=$(argocd admin initial-password -n argocd|head -n 1)
 
-  #set -x
-  countzero=0
-  result=1
-  while [[ ! $result -eq 0 ]]; do
-    argocd login ${THIS_ARGO_HOST}.${THIS_DOMAIN} \
-      --password ${PASSWORD_ARGO} \
-      --username admin \
-      --grpc-web
-    result=$?
-    if [[ $countzero -gt 9 ]]; then
-      break
-    fi
-    sleep 3
+  echo "Waiting for argocd-secret to be created..."
+  until kubectl -n argocd get secret argocd-secret > /dev/null 2>&1; do
+    sleep 2
   done
-  set -e
+  echo "argocd-secret found."
 
-  admin_pass=$(yq '.data|."argocdadmin-password"' ${SECRET_FILE}|sed 's/"//g'|base64 -d)
+  admin_pass=$(yq e '.data."argocdadmin-password"' ${SECRET_FILE}|sed 's/"//g'|base64 -d)
   admin_pass=${admin_pass//$'\n'/}
 
-  argocd account update-password \
-    --current-password ${PASSWORD_ARGO} \
-    --new-password  ${admin_pass} \
-    --grpc-web
+  echo "Generating bcrypt hash for the admin password..."
+  bcrypt_hash=$(htpasswd -nbBC 10 "" "$admin_pass" | tr -d ':\n' | sed 's/\$2y/\$2a/')
+  mtime=$(date -u +%FT%TZ)
 
-  argocd login ${THIS_ARGO_HOST}.${THIS_DOMAIN} \
-    --password  ${admin_pass} \
-    --username admin \
-    --grpc-web
+  patch_json=$(jq -n \
+    --arg hash "$bcrypt_hash" \
+    --arg mtime "$mtime" \
+    '{stringData: {"admin.password": $hash, "admin.passwordMtime": $mtime}}')
+
+  echo "Patching argocd-secret with the new password..."
+  kubectl -n argocd patch secret argocd-secret \
+    --type merge \
+    --patch "$patch_json"
+
+  echo "Restarting argocd-server to apply the new password and clear any login locks..."
+  kubectl -n argocd rollout restart deployment argocd-server
+
+  echo "Waiting for argocd-server to be ready..."
+  kubectl -n argocd wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server --timeout=120s
+
+  echo "Password has been updated successfully."
+  echo "You can now log in with the password from your secrets file."
 }
 
 time main
