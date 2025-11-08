@@ -17,8 +17,8 @@ main () {
     fi
     sleep 3
   done
-  #PASSWORD_ARGO=$(argocd admin initial-password -n argocd|head -n 1)
-  PASSWORD_ARGO=$(kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 --decode)
+  PASSWORD_ARGO=$(argocd admin initial-password -n argocd|head -n 1)
+  #PASSWORD_ARGO=$(kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 --decode)
 
   #set -x
   countzero=0
