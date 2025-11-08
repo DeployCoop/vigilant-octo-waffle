@@ -13,11 +13,14 @@ main () {
     src/argocd-init-pass.sh
   elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'kubectl' ]]; then
     src/argocd-init-pass-kubectl.sh
+  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'htpasswd' ]]; then
+    src/argocd-init-pass-htpasswd.sh
   else
-    echo "unknown INIT_ARGO_PASS_METH $INIT_ARGO_PASS_METH"
+    echo "unknown THIS_INIT_ARGO_PASS_METH ${THIS_INIT_ARGO_PASS_METH}"
     exit 1
   fi
 }
 
 
 time main
+exit 0
