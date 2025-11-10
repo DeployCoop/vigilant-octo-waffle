@@ -11,16 +11,17 @@ main () {
   echo 'init argo pass'
   if [[ ${THIS_INIT_ARGO_PASS_METH} == 'argocd' ]]; then
     src/argocd-init-pass-argocd.sh
-  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'kubectl' ]]; then
+  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'bcrypt' ]]; then
     src/argocd-init-pass-kubectl.sh
-  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'patch' ]]; then
-    src/argocd-init-pass-patch.sh
+  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'patch-file' ]]; then
+    src/argocd-init-pass-patch-file.sh
   elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'htpasswd' ]]; then
     src/argocd-init-pass-htpasswd.sh
   else
     echo "unknown THIS_INIT_ARGO_PASS_METH ${THIS_INIT_ARGO_PASS_METH}"
     exit 1
   fi
+  argocd-update-pass.sh
 }
 
 
