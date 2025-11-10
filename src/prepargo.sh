@@ -10,7 +10,7 @@ main () {
   src/wait_argo.sh
   echo 'init argo pass'
   if [[ ${THIS_INIT_ARGO_PASS_METH} == 'argocd' ]]; then
-    src/argocd-init-pass.sh
+    src/argocd-init-pass-argocd.sh
   elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'kubectl' ]]; then
     src/argocd-init-pass-kubectl.sh
   elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'patch' ]]; then
