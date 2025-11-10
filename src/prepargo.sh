@@ -7,6 +7,7 @@ main () {
     set -x
   fi
   set -eu
+  sleep 5
   src/wait_argo.sh
   echo 'init argo pass'
   if [[ ${THIS_INIT_ARGO_PASS_METH} == 'argocd' ]]; then
