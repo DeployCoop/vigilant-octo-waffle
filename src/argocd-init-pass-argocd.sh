@@ -37,6 +37,9 @@ main () {
   done
   set -e
 
+  #admin_pass=$(yq '.data|."argocdadmin-password"' ${SECRET_FILE}|sed 's/"//g'|base64 -d)
+  admin_pass=$(kubectl get secret -n example example-secrets -o json|jq -r '.data."argocdadmin-password"'|base64 -d)
+  #admin_pass=${admin_pass//$'\n'/}
 
   argocd account update-password \
     --current-password ${PASSWORD_ARGO} \
