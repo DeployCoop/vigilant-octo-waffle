@@ -22,7 +22,7 @@ main () {
     echo "unknown THIS_INIT_ARGO_PASS_METH ${THIS_INIT_ARGO_PASS_METH}"
     exit 1
   fi
-  src/argocd-update-pass.sh
+  #src/argocd-update-pass.sh
 }
 
 
