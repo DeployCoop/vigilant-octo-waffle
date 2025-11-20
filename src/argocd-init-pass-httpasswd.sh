@@ -13,7 +13,7 @@ main () {
   done
   echo "argocd-secret found."
 
-  admin_pass=$(kubectl get secret -n example example-secrets -o json|jq -r '.data."argocdadmin-password"'|base64 -d)
+  admin_pass=$(kubectl get secret -n ${THIS_NAME} ${THIS_NAME}-secrets -o json|jq -r '.data."argocdadmin-password"'|base64 -d)
 
   echo "Generating bcrypt hash for the admin password..."
   bcrypt_hash=$(htpasswd -nbBC 10 "" "$admin_pass" | tr -d ':\n' | sed 's/\$2y/\$2a/')

@@ -20,7 +20,7 @@ EOF
   rm "$PATCH_FILE"
 }
 
-admin_pass=$(kubectl get secret -n example example-secrets -o json|jq -r '.data."argocdadmin-password"'|base64 -d)
+admin_pass=$(kubectl get secret -n ${THIS_NAME} ${THIS_NAME}-secrets -o json|jq -r '.data."argocdadmin-password"'|base64 -d)
 hash_pass=$(argocd account bcrypt --password ${admin_pass})
 
 time patch_file
