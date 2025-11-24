@@ -1,5 +1,6 @@
 127.0.0.1 ${THIS_DOMAIN}
 127.0.0.1 alertmanager.${THIS_DOMAIN}
+127.0.0.1 ar80-mosquitto.${THIS_DOMAIN}
 127.0.0.1 argocd.${THIS_DOMAIN}
 127.0.0.1 bao.${THIS_DOMAIN}
 127.0.0.1 baoui.${THIS_DOMAIN}
@@ -17,8 +18,10 @@
 127.0.0.1 minio.${THIS_DOMAIN}
 127.0.0.1 minio-api.${THIS_DOMAIN}
 127.0.0.1 minio-console.${THIS_DOMAIN}
+127.0.0.1 mosquitto.${THIS_DOMAIN}
 127.0.0.1 nextcloud.${THIS_DOMAIN}
 127.0.0.1 nextjsdocker.${THIS_DOMAIN}
+127.0.0.1 opencti.${THIS_DOMAIN}
 127.0.0.1 openebs-monitoring.${THIS_DOMAIN}
 127.0.0.1 openproject.${THIS_DOMAIN}
 127.0.0.1 opensearch.${THIS_DOMAIN}
@@ -30,3 +33,4 @@
 127.0.0.1 sloth.${THIS_DOMAIN}
 127.0.0.1 supa.${THIS_DOMAIN}
 127.0.0.1 traefik.${THIS_DOMAIN}
+127.0.0.1 urban-mosquitto.${THIS_DOMAIN}

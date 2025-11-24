@@ -1,3 +1,4 @@
+src/ar80-mosquitto.sh
 src/bao.sh
 src/cvat.sh
 src/drupal.sh
@@ -13,6 +14,7 @@ src/minio-tenant.sh
 src/nextcloud.sh
 src/nextjs-docker.sh
 src/node-feature-discovery.sh
+src/opencti.sh
 src/openebs-monitoring.sh
 src/openldap.sh
 src/openproject.sh
@@ -21,6 +23,9 @@ src/opensearch-operator.sh
 src/opensearch.sh
 src/opentelemetry-operator.sh
 src/rancher.sh
+src/raymii-mosquitto.sh
 src/sloth.sh
 src/supabase.sh
+src/urban-mosquitto.sh
 src/velero.sh
+src/vmq-operator.sh

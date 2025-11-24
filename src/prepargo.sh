@@ -8,17 +8,23 @@ main () {
   fi
   set -eu
   sleep 5
-  echo "argocd admin initial-password -n argocd"
-  echo 'w8 argocd'
-  if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
-    w8_ingress argocd argocd-server-ingress 
-  elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
-    echo 'w8 wip'
-    sleep 5
-  fi
-  sleep 15
+  src/wait_argo.sh
   echo 'init argo pass'
-  src/argocd-init-pass.sh
+  if [[ ${THIS_INIT_ARGO_PASS_METH} == 'argocd' ]]; then
+    src/argocd-init-pass-argocd.sh
+  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'bcrypt' ]]; then
+    src/argocd-init-pass-kubectl.sh
+  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'patch-file' ]]; then
+    src/argocd-init-pass-patch-file.sh
+  elif [[ ${THIS_INIT_ARGO_PASS_METH} == 'htpasswd' ]]; then
+    src/argocd-init-pass-htpasswd.sh
+  else
+    echo "unknown THIS_INIT_ARGO_PASS_METH ${THIS_INIT_ARGO_PASS_METH}"
+    exit 1
+  fi
+  #src/argocd-update-pass.sh
 }
 
+
 time main
+exit 0

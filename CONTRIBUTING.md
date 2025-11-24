@@ -6,27 +6,26 @@ Join our [matrix](https://matrix.to/#/#vigilant-octo-waffle:matrix.org) to chat 
 
 ## Updating charts in the urban-disco repo
 
-I usually just delete the chart and `helm fetch --untar` it again, 
-and then do `git diff` to study mainly the differences in the values.yaml file
-to see if the structure has changed and values need to be updated or moved, 
-for example an ingress might be moved to a subordinate service:
-
-```yaml
-ingress:
-  enabled: false
-  className: nginx
-```
-
-to:
-
-```yaml
-web:
-  ingress:
-    enabled: false
-    className: nginx
-```
+Visit the sister [repo urban-disco](https://github.com/DeployCoop/urban-disco), and help add additional charts and update old ones.
 
 Then those values must be updated in the `argo` directory as well.
+
+## useful regex
+
+This one readies an env var for the defaults.env
+```
+s/^\(.*\)=\(.*\)/: "${\1:=\2}"/
+```
+
+prep a values.yaml to be embedded in argo.yaml:
+```
+'<,'>s/^/        /
+```
+
+change a storageClass line to use our variable:
+```
+s/\(storageClass:\).*/\1 "${THIS_STORAGECLASS}"
+```
 
 ## Adding applications
 

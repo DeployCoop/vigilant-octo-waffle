@@ -1,0 +1,18 @@
+# https://www.haproxy.com/documentation/kubernetes-ingress/ingress-tutorials/tcp/
+apiVersion: ingress.v1.haproxy.org/v1
+kind: TCP
+metadata:
+  name: mqtt-service1-tcp
+  annotations:
+    ingress.class: haproxy
+spec:
+  - name: mqtt-tcp
+    frontend:
+      name: mqtt-frontend
+      tcplog: true
+      binds:
+        - name: mqtt
+          port: 1883
+    service:
+      name: raymii-mosquitto-svc
+      port: 1883

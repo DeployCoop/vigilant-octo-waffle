@@ -9,6 +9,8 @@ main () {
     initializer "${this_cwd}/init/pre-${THIS_THING}"
   elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     echo 'nginx'
+  elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
+    echo 'haproxy'
   else
     echo 'unrecognized ingress'
     exit 1

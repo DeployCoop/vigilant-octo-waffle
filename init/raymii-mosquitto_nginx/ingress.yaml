@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+    #traefik.ingress.kubernetes.io/router.middlewares: example-redirect-https@kubernetescrd
+    kubernetes.io/ingress.class: ${THIS_CLUSTER_INGRESS}
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP" # Important for WebSocket upgrade
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600" # Increase timeout for long-lived connections
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade "websocket";
+      proxy_set_header Connection "Upgrade";
+  labels:
+    app.kubernetes.io/instance: raymii-mosquitto
+  name: raymii-mosquitto
+  namespace: ${THIS_NAMESPACE}
+spec:
+  ingressClassName: ${THIS_CLUSTER_INGRESS}
+  rules:
+  - host: ${THIS_RAYMII_MOSQUITTO_HOST}.${THIS_DOMAIN}
+    http:
+      paths:
+      - backend:
+          service:
+            name: raymii-mosquitto-dev/raymii-mosquitto-svc
+            port:
+              number: 8084
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - ${THIS_RAYMII_MOSQUITTO_HOST}.${THIS_DOMAIN}
+    secretName: chart-${THIS_NAMESPACE}-${THIS_RAYMII_MOSQUITTO_HOST}-tls

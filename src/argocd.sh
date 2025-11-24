@@ -30,6 +30,8 @@ if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
   initializer "$this_cwd/init/argocd_nginx"
 elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
   initializer "$this_cwd/init/argocd_traefik"
+elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
+  initializer "$this_cwd/init/argocd_haproxy"
 fi
 
 src/prepargo.sh

@@ -1,0 +1,36 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    logs:
+      general:
+        level: "DEBUG"
+      access:
+        enabled: false
+    ports:
+      web:
+        port: 80
+        expose:
+          default: true
+      websecure:
+        port: 443
+        expose:
+          default: true
+      raymii-mosquitto-dev-mqtt:
+        port: 1883
+        expose:
+          default: true
+        exposedPort: 1883
+      raymii-mosquitto-dev-mqtt-primary:
+        port: 2883
+        expose:
+          default: true
+        exposedPort: 2883
+      raymii-mosquitto-dev-mqtt-secondary:
+        port: 3883
+        expose:
+          default: true
+        exposedPort: 3883
