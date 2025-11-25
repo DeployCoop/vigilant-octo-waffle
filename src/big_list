@@ -24,6 +24,7 @@ src/opensearch.sh
 src/opentelemetry-operator.sh
 src/rancher.sh
 src/raymii-mosquitto.sh
+src/resourcespace.sh
 src/sloth.sh
 src/supabase.sh
 src/urban-mosquitto.sh
