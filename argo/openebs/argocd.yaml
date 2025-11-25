@@ -252,7 +252,7 @@ spec:
             # -- Labels to enable scraping on, at-least one of these labels should be present.
             labels:
               openebs.io/logging: true
-            # -- X-Scope-OrgID to pe populated which pushing logs. Make sure the caller also uses the same.
+            # -- X-Scope-OrgID to be populated which pushing logs. Make sure the caller also uses the same.
             tenant_id: openebs
         
           alloy:
@@ -285,7 +285,7 @@ spec:
                       {{- end }}
                     ]
                     separator     = ";"
-                    regex         = "^{{ include "regex_or" (dict "labels" $labels "keys" $keys) }}$"
+                    regex         = "^{{ include \"regex_or\" (dict \"labels\" $labels \"keys\" $keys) }}$"
                     action        = "keep"
                   }
         
@@ -345,7 +345,7 @@ spec:
                   stage.docker { }
         
                   stage.replace {
-                    expression = "(\\n)"
+                    expression = "(\n)"
                     replace = ""
                   }
         
