@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 source src/merge2yaml.bash
+: ${ARGOCD_DEBUG:=""}
 
 argoRunner () {
   TMP=$(mktemp -d --suffix .tmp.d)
@@ -22,7 +23,7 @@ argoRunner () {
   else
     cp -a "argo/${THIS_THING}" "${TMP}/"
   fi
-  envsubst < "${TMP}/${THIS_THING}/argocd.yaml" | argocd app create --name "${THIS_THING}" --grpc-web -f -
+  envsubst < "${TMP}/${THIS_THING}/argocd.yaml" | argocd app create ${ARGOCD_DEBUG} --name "${THIS_THING}" --grpc-web -f -
 
   cd "${this_cwd}"
 }
