@@ -23,16 +23,22 @@ spec:
             volumeSnapshots:
               enabled: true
               keep: true
+        
+        # Refer to https://github.com/openebs/dynamic-localpv-provisioner/blob/v4.2.0/deploy/helm/charts/values.yaml for complete set of values.
         localpv-provisioner:
           rbac:
             create: true
+        
+        # Refer to https://github.com/openebs/zfs-localpv/blob/v2.7.1/deploy/helm/charts/values.yaml for complete set of values.
         zfs-localpv:
           crds:
             zfsLocalPv:
-              enabled: false
+              enabled: true
             csi:
               volumeSnapshots:
                 enabled: false
+        
+        # Refer to https://github.com/openebs/lvm-localpv/blob/lvm-localpv-1.6.2/deploy/helm/charts/values.yaml for complete set of values.
         lvm-localpv:
           crds:
             lvmLocalPv:
@@ -40,12 +46,69 @@ spec:
             csi:
               volumeSnapshots:
                 enabled: false
+        
+        # Refer to https://github.com/openebs/rawfile-localpv/blob/v0.11.0/deploy/helm/rawfile-localpv/values.yaml for complete set of values.
+        rawfile-localpv:
+          crds:
+            csi:
+              volumeSnapshots:
+                enabled: false
+        
+        # Refer to https://github.com/openebs/mayastor-extensions/blob/v2.8.0/chart/values.yaml for complete set of values.
+        mayastor:
+          csi:
+            node:
+              initContainers:
+                enabled: true
+          etcd:
+            # -- Kubernetes Cluster Domain
+            clusterDomain: cluster.local
+          localpv-provisioner:
+            enabled: false
+          crds:
+            enabled: false
+          loki:
+            enabled: false
+          alloy:
+            enabled: false
+        
+        # This runs only for upgrades from openebs v3 to v4. Uses the localpv-provisioner deployment to decide if it's v3 or v4.
+        preUpgradeHook:
+          # -- Enable/Disable openebs pre-upgrade hook
+          enabled: true
+          # -- Node tolerations for server scheduling to nodes with taints
+          ## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+          ##
+          tolerations: []
+          # -- Optional array of imagePullSecrets containing private registry credentials
+          ## Ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+          imagePullSecrets: []
+          # - name: secretName
+          # Labels to be added to the pod hook job
+          podLabels:
+            openebs.io/logging: "true"
+          # This helps in debugging by leaving the Job/Pod instances lying around
+          annotations:
+            "helm.sh/hook-delete-policy": "hook-succeeded,before-hook-creation"
+          image:
+            # -- The container image registry URL for the hook job
+            registry: docker.io
+            # -- The container repository for the hook job
+            repo: openebs/kubectl
+            # -- The container image tag for the hook job
+            tag: "1.25.15"
+            # -- The imagePullPolicy for the container
+            pullPolicy: IfNotPresent
+        
         engines:
           local:
             lvm:
               enabled: ${THIS_OPENEBS_ENGINE_LVM}
             zfs:
               enabled: ${THIS_OPENEBS_ENGINE_ZFS}
+            rawfile:
+              # Disabled by default since rawfile is not marked as stable yet.
+              enabled: false
           replicated:
             mayastor:
               enabled: ${THIS_OPENEBS_ENGINE_MAYASTOR}
@@ -176,6 +239,9 @@ spec:
             replicas: 0
           bloomGateway:
             replicas: 0
+          sidecar:
+            image:
+              repository: docker.io/kiwigrid/k8s-sidecar
         
         alloy:
           enabled: true
@@ -188,3 +254,133 @@ spec:
               openebs.io/logging: true
             # -- X-Scope-OrgID to pe populated which pushing logs. Make sure the caller also uses the same.
             tenant_id: openebs
+        
+          alloy:
+            mounts:
+              varlog: true
+            configMap:
+              create: true
+              content: |
+                {{- $releaseName := .Release.Name | replace "-" "_" -}}
+        
+                livedebugging {
+                  enabled = {{ .Values.logging_config.debugging }}
+                }
+        
+                discovery.kubernetes "{{ $releaseName }}_pods_name" {
+                  role = "pod"
+                }
+        
+                discovery.relabel "{{ $releaseName }}_pods_name" {
+                  targets = discovery.kubernetes.{{ $releaseName }}_pods_name.targets
+        
+                  {{- $labels := .Values.logging_config.labels }}
+                  {{- if $labels }}
+                  {{- $keys := (keys $labels | sortAlpha) }}
+        
+                  rule {
+                    source_labels = [
+                      {{- range $key := $keys }}
+                      "__meta_kubernetes_pod_label_{{ $key | replace "." "_" | replace "/" "_" }}",
+                      {{- end }}
+                    ]
+                    separator     = ";"
+                    regex         = "^{{ include "regex_or" (dict "labels" $labels "keys" $keys) }}$"
+                    action        = "keep"
+                  }
+        
+                  {{- end }}
+        
+                  rule {
+                    regex  = "__meta_kubernetes_pod_label_(.+)"
+                    action = "labelmap"
+                  }
+        
+                  rule {
+                    regex  = "__meta_kubernetes_pod_label_(.+)"
+                    action = "labelmap"
+                  }
+        
+                  rule {
+                    source_labels = ["__meta_kubernetes_namespace"]
+                    separator     = "/"
+                    target_label  = "job"
+                  }
+        
+                  rule {
+                    source_labels = ["__meta_kubernetes_pod_name"]
+                    target_label  = "pod"
+                  }
+        
+                  rule {
+                    source_labels = ["__meta_kubernetes_pod_container_name"]
+                    target_label  = "container"
+                  }
+        
+                  rule {
+                    source_labels = ["__meta_kubernetes_pod_node_name"]
+                    target_label  = "hostname"
+                  }
+        
+                  rule {
+                    source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+                    separator     = "/"
+                    target_label  = "__path__"
+                    replacement   = "/var/log/pods/*$1/*.log"
+                  }
+                }
+        
+                local.file_match "{{ $releaseName }}_pod_files" {
+                  path_targets = discovery.relabel.{{ $releaseName }}_pods_name.output
+                }
+        
+                loki.source.file "{{ $releaseName }}_pod_logs" {
+                  targets    = local.file_match.{{ $releaseName }}_pod_files.targets
+                  forward_to = [loki.process.{{ $releaseName }}_process_logs.receiver]
+                }
+        
+                loki.process "{{ $releaseName }}_process_logs" {
+                  forward_to = [loki.write.default.receiver]
+        
+                  stage.docker { }
+        
+                  stage.replace {
+                    expression = "(\\n)"
+                    replace = ""
+                  }
+        
+                  stage.multiline {
+                    firstline = "^  \\x1b\\[2m(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}).(\\d{6})Z"
+                  }
+        
+                  stage.multiline {
+                    firstline = "^  (\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}).(\\d{6})Z"
+                  }
+                }
+        
+                loki.write "default" {
+                    endpoint {
+                    url       = "http://{{ .Release.Name }}-loki:3100/loki/api/v1/push"
+                    tenant_id = "{{ .Values.logging_config.tenant_id }}"
+                  }
+                  external_labels = {}
+                }
+        
+                {{- define "regex_or" -}}
+                {{- $labels := .labels -}}
+                {{- $keys := .keys -}}
+                {{- $numKeys := len $keys -}}
+                {{- $regexParts := list -}}
+                {{- range $i, $key := $keys -}}
+                {{- $part := list -}}
+                {{- range $j := until $numKeys -}}
+                {{- if eq $j $i -}}
+                {{- $part = append $part (get $labels $key) -}}
+                {{- else -}}
+                {{- $part = append $part ".*" -}}
+                {{- end -}}
+                {{- end -}}
+                {{- $regexParts = append $regexParts (join ";" $part) -}}
+                {{- end -}}
+                {{- join "|" $regexParts -}}
+                {{- end -}}
