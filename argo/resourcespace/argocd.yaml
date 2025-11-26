@@ -88,7 +88,7 @@ spec:
             # This is the version of the main application.
             # Leave it to blank to use the Chart "AppVersion" value.
             # key: resourcespace.repository.tag
-            tag: ""
+            tag: "latest"
         
           # key: resourcespace.persistence
           persistence:
