@@ -13,7 +13,7 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/resourcespace_docker
+    path: charts/resourcespace
     repoURL: ${THIS_REPO_URL}
     targetRevision: HEAD
     helm:
