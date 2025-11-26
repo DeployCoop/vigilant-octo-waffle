@@ -15,6 +15,8 @@
 127.0.0.1 keycloak.${THIS_DOMAIN}
 127.0.0.1 kubeshark.${THIS_DOMAIN}
 127.0.0.1 ltb.${THIS_DOMAIN}
+127.0.0.1 mariadb-operator.${THIS_DOMAIN}
+127.0.0.1 mariadb-operator-crds.${THIS_DOMAIN}
 127.0.0.1 minio.${THIS_DOMAIN}
 127.0.0.1 minio-api.${THIS_DOMAIN}
 127.0.0.1 minio-console.${THIS_DOMAIN}

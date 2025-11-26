@@ -1,0 +1,83 @@
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: MariaDB
+metadata:
+  name: mariadb-galera
+spec:
+  rootPasswordSecretKeyRef:
+    name: "${THIS_MARIADB_ROOT_USER}"
+    key: "${THIS_MARIADB_ROOT_PASS}"
+
+  # Point to an existing MaxScale instance. Doing this will delegate operations such as primary failover to MaxScale.
+  # maxScaleRef:
+  #   name: maxscale-galera
+
+  storage:
+    size: "${THIS_MARIADB_STORAGE_SIZE}"
+    storageClassName: "${THIS_MARIADB_STORAGECLASS}"
+
+  replicas: 3
+
+  galera:
+    enabled: true
+
+  service:
+    type: LoadBalancer
+    metadata:
+      annotations:
+        metallb.universe.tf/loadBalancerIPs: 172.18.0.150
+
+  primaryService:
+    type: LoadBalancer
+    metadata:
+      annotations:
+        metallb.universe.tf/loadBalancerIPs: 172.18.0.160
+
+  secondaryService:
+    type: LoadBalancer
+    metadata:
+      annotations:
+        metallb.universe.tf/loadBalancerIPs: 172.18.0.161
+
+  metrics:
+    enabled: true
+
+  tls:
+    enabled: true
+    # Enforce TLS in all connections.
+    # required: true
+    # Issue certificates with an existing cert-manager ClusterIssuer.
+    # serverCertIssuerRef:
+    #   name: root-ca
+    #   kind: ClusterIssuer
+    # clientCertIssuerRef:
+    #   name: root-ca
+    #   kind: ClusterIssuer
+    # Bring your own Certificate Authority.
+    # serverCASecretRef:
+    #   name: mariadb-server-ca
+    # clientCASecretRef:
+    #   name: mariadb-client-ca
+    # Configure existing certificates available in a Secret.
+    # serverCASecretRef:
+    #   name: mariadb-server-ca
+    # serverCertSecretRef:
+    #   name: mariadb-galera-server-tls
+    # clientCASecretRef:
+    #   name: mariadb-client-ca
+    # clientCertSecretRef:
+    #   name: mariadb-galera-client-tls
+
+  # Configure Pod anti-affinity and schedule Pods only in given set of nodes defined by the nodeAffinity.
+  # affinity:
+  #   antiAffinityEnabled: true
+    # Custom anti-affinity rules
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #     - matchExpressions:
+    #       - key: node-role.kubernetes.io/control-plane
+    #         operator: DoesNotExist
+    #       - key: kubernetes.io/arch
+    #         operator: In
+    #         values: 
+    #         - amd64

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 source src/util.bash
 source src/merge2yaml.bash
+: ${ARGOCD_CREATE_APP_EXTRA_ARGS:' '}
 
 argoRunner () {
   ARGORUNNER_TMP=$(mktemp -d --suffix .tmp.d)
@@ -41,6 +42,6 @@ argoRunner () {
   #envsubst "${ENV_SUBST_EXCLUDES}"
   bash ${ARGORUNNER_ENVSUBST} 
     < "${ARGORUNNER_TMP}/${THIS_THING}/argocd.yaml"
-  argocd app create --name "${THIS_THING}" --grpc-web -f ${ARGORUNNR_INSTALL_TMP}
+  argocd app create ${ARGOCD_CREATE_APP_EXTRA_ARGS} --name "${THIS_THING}" --grpc-web -f ${ARGORUNNR_INSTALL_TMP}
   cd "${this_cwd}"
 }

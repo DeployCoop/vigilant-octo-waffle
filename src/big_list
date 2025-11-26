@@ -9,6 +9,8 @@ src/gpu-operator.sh
 src/harbor.sh
 src/kube-prometheus-stack.sh
 src/kubeshark.sh
+src/mariadb-operator-crds.sh
+src/mariadb-operator.sh
 src/minio-operator.sh
 src/minio-tenant.sh
 src/nextcloud.sh
