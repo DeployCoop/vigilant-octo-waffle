@@ -30,7 +30,8 @@ argoRunner () {
   echo 'envsubst \' >> ${ARGORUNNER_ENVSUBST}
   #cat src/default.env|grep -v '^$'|grep -v '^#'|awk '{print $2}'|sed 's/"\${\(.*\):=.*/${\1}/'|tr '\n' ' '|sed "s/^/' /"|sed "s/$/'/"| sed 's/$/ \\\n/' >> ${ARGORUNNER_ENVSUBST}
   convert_default_env_to_envsubst >> ${ARGORUNNER_ENVSUBST}
-  echo '< src/openebs-values.tpl \' >> ${ARGORUNNER_ENVSUBST}
+  # Use the generated ArgoCD manifest as the input to envsubst
+  echo "< \"${ARGORUNNER_TMP}/${THIS_THING}/argocd.yaml\" \\" >> ${ARGORUNNER_ENVSUBST}
   echo "> ${ARGORUNNR_INSTALL_TMP}" >> ${ARGORUNNER_ENVSUBST}
   #bash ${OPENEBS_ENVSUBST} 
   # envsubst "${ENV_SUBST_EXCLUDES}"
