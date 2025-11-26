@@ -84,7 +84,7 @@ spec:
           # key: resourcespace.repository
           repository:
             # key: resourcespace.repository.image
-            image: ""
+            image: "ghcr.io/joshuacox/resourcespace_docker/resourcespace"
             # This is the version of the main application.
             # Leave it to blank to use the Chart "AppVersion" value.
             # key: resourcespace.repository.tag
@@ -99,9 +99,9 @@ spec:
               # storageClass: "" means do not specify
               # storageClass: "foo" means use that storageClass
               # key: resourcespace.persistence.filestore.storageClass
-              storageClass: '-'
+              storageClass: "${THIS_RESOURCESPACE_STORAGECLASS}"
               # key: resourcespace.persistence.filestore.size
-              size: 1Gi
+              size: "${THIS_RESOURCESPACE_STORAGE_SIZE}"
               # key: resourcespace.persistence.filestore.accessMode
               accessMode:
                 - ReadWriteOnce
