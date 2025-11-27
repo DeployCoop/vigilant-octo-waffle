@@ -15,13 +15,11 @@ main () {
   src/kmod.sh nvme_tcp
   #kubectl krew install mayastor openebs
   echo '#!/bin/sh' > ${OPENEBS_ENVSUBST}
-  echo 'set -eu' > ${OPENEBS_ENVSUBST}
+  echo 'set -eux' > ${OPENEBS_ENVSUBST}
   echo 'envsubst \' >> ${OPENEBS_ENVSUBST}
   convert_default_env_to_envsubst >> ${OPENEBS_ENVSUBST}
-  cat src/default.env|grep -v '^$'|grep -v '^#'|awk '{print $2}'|sed 's/"\${\(.*\):=.*/${\1}/'|tr '\n' ' '|sed "s/^/' /"|sed "s/$/'/"| sed 's/$/ \\\n/' >> ${OPENEBS_ENVSUBST}
   echo '< src/openebs-values.tpl \' >> ${OPENEBS_ENVSUBST}
   echo "> ${OPENEBS_INSTALL_TMP}" >> ${OPENEBS_ENVSUBST}
-
 
   if [[ ${THIS_OPENEBS_INSTALL_METHOD} == "argocd" ]]; then
     argoRunner "$THIS_THING"

@@ -25,7 +25,8 @@ log_debug() {
 }
 
 convert_default_env_to_envsubst () {
-  cat src/default.env|grep -v '^$'|grep -v '^#'|awk '{print $2}'|sed 's/"\${\(.*\):=.*/${\1}/'|tr '\n' ' '|sed "s/^/' /"|sed "s/$/'/"| sed 's/$/ \\\n/'
+  #cat src/default.env|grep -v '^$'|grep -v '^#'|awk '{print $2}'|sed 's/"\${\(.*\):=.*/${\1}/'|tr '\n' ' '|sed "s/^/' /"|sed "s/$/'/"| sed 's/$/ \\\n/'
+  grep -v '^$' src/default.env|grep -v '^#'|awk '{print $2}'|sed 's/"\${\(.*\):=.*/${\1}/'|tr '\n' ' '|sed "s/^/' /"|sed "s/$/'/"| sed 's/$/ \\\n/'
 }
 
 # Check if a command exists in the system PATH
