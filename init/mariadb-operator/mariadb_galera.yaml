@@ -4,8 +4,8 @@ metadata:
   name: mariadb-galera
 spec:
   rootPasswordSecretKeyRef:
-    name: "${THIS_MARIADB_ROOT_USER}"
-    key: "${THIS_MARIADB_ROOT_PASS}"
+    name: "${THIS_MARIADB_ROOT_SECRET}"
+    key: "${THIS_MARIADB_ROOT_KEY}"
 
   # Point to an existing MaxScale instance. Doing this will delegate operations such as primary failover to MaxScale.
   # maxScaleRef:
