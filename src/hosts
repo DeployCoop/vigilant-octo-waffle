@@ -1,5 +1,6 @@
 127.0.0.1 ${THIS_DOMAIN}
 127.0.0.1 airflow.${THIS_DOMAIN}
+127.0.0.1 api-airflow.${THIS_DOMAIN}
 127.0.0.1 alertmanager.${THIS_DOMAIN}
 127.0.0.1 ar80-mosquitto.${THIS_DOMAIN}
 127.0.0.1 argocd.${THIS_DOMAIN}
@@ -8,6 +9,7 @@
 127.0.0.1 collabora.${THIS_DOMAIN}
 127.0.0.1 cvat.${THIS_DOMAIN}
 127.0.0.1 drupal.${THIS_DOMAIN}
+127.0.0.1 flower-airflow.${THIS_DOMAIN}
 127.0.0.1 fluent-bit.${THIS_DOMAIN}
 127.0.0.1 fluentd.${THIS_DOMAIN}
 127.0.0.1 fossbilling.${THIS_DOMAIN}
@@ -30,11 +32,13 @@
 127.0.0.1 opensearch.${THIS_DOMAIN}
 127.0.0.1 opensearch-dashboards.${THIS_DOMAIN}
 127.0.0.1 opentelemetry.${THIS_DOMAIN}
+127.0.0.1 pgbounder-airflow.${THIS_DOMAIN}
 127.0.0.1 phpldapadmin.${THIS_DOMAIN}
 127.0.0.1 prometheus.${THIS_DOMAIN}
 127.0.0.1 rancher.${THIS_DOMAIN}
 127.0.0.1 resourcespace.${THIS_DOMAIN}
 127.0.0.1 sloth.${THIS_DOMAIN}
+127.0.0.1 statsd-airflow.${THIS_DOMAIN}
 127.0.0.1 supa.${THIS_DOMAIN}
 127.0.0.1 traefik.${THIS_DOMAIN}
 127.0.0.1 urban-mosquitto.${THIS_DOMAIN}
