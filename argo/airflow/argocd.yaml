@@ -2782,7 +2782,7 @@ spec:
         # Configuration for postgresql subchart
         # Not recommended for production
         postgresql:
-          enabled: true
+          enabled: false
           auth:
             enablePostgresUser: true
             postgresPassword: postgres
