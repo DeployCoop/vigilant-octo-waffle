@@ -11,6 +11,11 @@ fi
 # load the defaults which should be ignored 
 # if a value was previously set in the .env
   set -a && source ./src/default.env && set +a
+# set the ENV_SUBST_EXCLUDES
+#intermediary_string=$(cat src/default.env|grep -v '^$'|grep -v '^#'|awk '{print $2}'|sed 's/"\${\(.*\):=.*/${\1}/'|tr '\n' ' '|sed "s/^/' /"|sed "s/$/'/")
+#ENV_SUBST_EXCLUDES=$(printf "'%s'" $intermediary_string)
+#ENV_SUBST_EXCLUDES="$(printf "%s" $intermediary_string)"
+
 
 source ./src/argoRunner.bash
 source ./src/check_cmd.bash
