@@ -43,12 +43,14 @@ main () {
 
   # certmanager
   src/certmanager.sh
+  w8_all_namespace cert-manager
 
   kubectl apply -f .secrets/${THIS_SECRETS}.yaml
   if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
     src/traefik.sh
   elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
     src/nginx.sh
+    w8_all_namespace ingress-nginx
   elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
     src/haproxy.sh
   else

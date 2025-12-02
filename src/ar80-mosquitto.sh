@@ -22,5 +22,6 @@ main () {
     exit 1
   fi
   w8_pod "${THIS_NAMESPACE}" "${THIS_THING}-${THIS_NAME}"
+  w8_all_namespace "${THIS_NAMESPACE}" 
 }
 time main

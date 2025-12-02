@@ -11,7 +11,7 @@ main () {
   # no stop error block for the w8s which might have errant errors as they wait
   set +e
   w8_pod ${THIS_NAMESPACE}  ${THIS_THING}-${THIS_NAME}-database-0
-  w8_native_wait ${THIS_NAMESPACE} ${THIS_THING}-${THIS_NAME}-database-0
+  w8_all_namespace "${THIS_NAMESPACE}" 
   sleep 2
   ./src/test_harbor_db.sh
   set -e

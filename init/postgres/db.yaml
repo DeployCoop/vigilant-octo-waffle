@@ -36,3 +36,8 @@ spec:
             secretKeyRef:
               name: ${THIS_SECRETS}
               key: op-db-password 
+      - name: POSTGRES_AIRFLOW_DB_PASSWORD
+        valueFrom:
+            secretKeyRef:
+              name: ${THIS_SECRETS}
+              key: airflow-db-password 

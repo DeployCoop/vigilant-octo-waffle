@@ -23,6 +23,7 @@ main () {
     echo 'w8 wip'
     sleep 5
   fi
+  w8_all_namespace argocd 
 }
 
 

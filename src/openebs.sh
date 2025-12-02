@@ -47,6 +47,7 @@ main () {
   w8_pod ${THIS_OPENEBS_NAMESPACE} openebs-${THIS_NAME}-localpv-provisioner
   w8_pod ${THIS_OPENEBS_NAMESPACE} openebs-${THIS_NAME}-lvm-localpv-controller
   w8_pod ${THIS_OPENEBS_NAMESPACE} openebs-${THIS_NAME}-lvm-localpv-node
+  w8_all_namespace "${THIS_OPENEBS_NAMESPACE}" 
   set -e
   initializer "$this_cwd/init/openebs"
 }

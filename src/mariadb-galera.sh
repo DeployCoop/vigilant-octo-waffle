@@ -6,5 +6,6 @@ main () {
   set -eu
   src/mksecret.sh "${THIS_MARIADB_ROOT_SECRET}" "${THIS_MARIADB_ROOT_KEY}" "${THIS_MARIADB_ROOT_PASSWORD}"
   initializer "${this_cwd}/init/${THIS_THING}"
+  w8_all_namespace "${THIS_NAMESPACE}" 
 }
 time main
