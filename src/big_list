@@ -1,3 +1,4 @@
+src/airflow.sh
 src/ar80-mosquitto.sh
 src/bao.sh
 src/cvat.sh
