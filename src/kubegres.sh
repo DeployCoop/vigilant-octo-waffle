@@ -9,7 +9,7 @@ set +e
 w8_pod kubegres-system kubegres-controller-manager
 # wait on kubegres to settle
 sleep 2
-kubectl_native_wait kubegres-system $(kubectl get po -n kubegres-system|grep kubegres-controller-manager|cut -f1 -d ' ')
+w8_native_wait kubegres-system $(kubectl get po -n kubegres-system|grep kubegres-controller-manager|cut -f1 -d ' ')
 set -e
 initializer "$this_cwd/init/postgres"
 sleep 2

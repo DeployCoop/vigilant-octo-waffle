@@ -3,10 +3,10 @@
 : ${VERBOSITY:=100}
 source ./src/squawk.bash
 
-kubectl_native_wait () {
+w8_native_wait () {
   if [[ $# -eq 2 ]]; then
     TARGET_NAMESPACE=$1
-    TARGET_POD=$2
+    TARGET_POD=$(kubectl get pod -n ${TARGET_NAMESPACE} |grep $2|awk '{print $2}')
     kubectl wait \
       --namespace $TARGET_NAMESPACE \
       --for=condition=ready pod $TARGET_POD \
@@ -14,6 +14,23 @@ kubectl_native_wait () {
   else
     echo 'ERROR: wrong number of arguments!'
     echo "$0 NAMESPACE POD"
+    exit 1
+  fi
+}
+
+w8_all_namespace () {
+  if [[ $# -eq 1 ]]; then
+    TARGET_NAMESPACE=$1
+    kubectl wait \
+      --for=condition=Ready \
+      pod \
+      --all \
+      --namespace=${TARGET_NAMESPACE} \
+      --timeout=300s
+  else
+    echo 'ERROR: wrong number of arguments!'
+    echo "$0 NAMESPACE"
+    exit 1
   fi
 }
 

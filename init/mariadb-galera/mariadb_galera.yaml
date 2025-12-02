@@ -2,6 +2,7 @@ apiVersion: k8s.mariadb.com/v1alpha1
 kind: MariaDB
 metadata:
   name: mariadb-galera
+  namespace: ${THIS_NAMESPACE}
 spec:
   rootPasswordSecretKeyRef:
     name: "${THIS_MARIADB_ROOT_SECRET}"
