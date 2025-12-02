@@ -8,6 +8,8 @@ main () {
   #
   # initializer "${this_cwd}/init/pre-${THIS_THING}"
   # ARGOCD_CREATE_APP_EXTRA_ARGS='--helm-skip-crds'
+  #src/mksecret.sh "${THIS_AIRFLOW_ROOT_SECRET}" "${THIS_AIRFLOW_ROOT_KEY}" "${THIS_AIRFLOW_ROOT_PASSWORD}"
+  src/mksecret.sh "${THIS_AIRFLOW_REDIS_SECRET}" "${THIS_AIRFLOW_REDIS_KEY}" "${THIS_AIRFLOW_REDIS_PASSWORD}"
   argoRunner "${THIS_THING}"
   # w8_pod "${THIS_NAMESPACE}" "${THIS_THING}-${THIS_NAME}"
   # initializer "${this_cwd}/init/${THIS_THING}"
