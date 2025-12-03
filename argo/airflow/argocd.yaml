@@ -520,8 +520,8 @@ spec:
         
         # Fernet key settings
         # Note: fernetKey can only be set during install, not upgrade
-        fernetKey: ~
-        fernetKeySecretName: ~
+        fernetKey: fernet-key
+        fernetKeySecretName: airflow-fernet-key
         # Add custom annotations to the fernet key secret
         fernetKeySecretAnnotations: {}
         
