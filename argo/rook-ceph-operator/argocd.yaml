@@ -1,0 +1,24 @@
+metadata:
+  name: rook-ceph-operator-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: charts/rook-ceph
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      values: |
+        monitoring:
+          # -- Enable monitoring. Requires Prometheus to be pre-installed.
+          # Enabling will also create RBAC rules to allow Operator to create ServiceMonitors
+          enabled: ${THIS_ROOK_CEPH_MONITORING}

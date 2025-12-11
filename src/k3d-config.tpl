@@ -12,6 +12,10 @@ volumes: # repeatable flags are represented as YAML lists
     nodeFilters:
       - server:0
       - agent:*
+  - volume: ${THIS_STORAGE_PATH}/rancher:/var/lib/rook
+    nodeFilters:
+      - server:0
+      - agent:*
   - volume: ${THIS_STORAGE_PATH}/udev:/run/udev
     nodeFilters:
       - server:*

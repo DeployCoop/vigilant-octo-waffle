@@ -1,7 +1,7 @@
 127.0.0.1 ${THIS_DOMAIN}
 127.0.0.1 airflow.${THIS_DOMAIN}
-127.0.0.1 api-airflow.${THIS_DOMAIN}
 127.0.0.1 alertmanager.${THIS_DOMAIN}
+127.0.0.1 api-airflow.${THIS_DOMAIN}
 127.0.0.1 ar80-mosquitto.${THIS_DOMAIN}
 127.0.0.1 argocd.${THIS_DOMAIN}
 127.0.0.1 bao.${THIS_DOMAIN}
