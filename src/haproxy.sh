@@ -12,5 +12,6 @@ helm upgrade --install haproxy-kubernetes-ingress kubernetes-ingress \
   -f src/ingress-haproxy-values.yaml
 
 source ./src/w8.bash
+w8_all_namespace "${THIS_NAMESPACE}" 
 #w8_pod ingress-haproxy ingress-haproxy-controller
 #w8_pod kube-system svclb-ingress-haproxy-controller

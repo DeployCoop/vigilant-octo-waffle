@@ -8,5 +8,6 @@ main () {
   argoRunner "${THIS_THING}"
   #w8_pod "${THIS_NAMESPACE}" "opensearch-operator-${THIS_NAME}-controller-manager"
   #initializer "${this_cwd}/init/${THIS_THING}"
+  w8_all_namespace "${THIS_NAMESPACE}" 
 }
 time main

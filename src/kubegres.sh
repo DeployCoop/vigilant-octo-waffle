@@ -9,10 +9,11 @@ set +e
 w8_pod kubegres-system kubegres-controller-manager
 # wait on kubegres to settle
 sleep 2
-w8_native_wait kubegres-system $(kubectl get po -n kubegres-system|grep kubegres-controller-manager|cut -f1 -d ' ')
+w8_all_namespace kubegres-system
 set -e
 initializer "$this_cwd/init/postgres"
 sleep 2
 set +e 
 w8_pod "${THIS_NAMESPACE}" "${THIS_NAME}-postgres-1-0"
+w8_all_namespace "${THIS_NAMESPACE}" 
 set -e 

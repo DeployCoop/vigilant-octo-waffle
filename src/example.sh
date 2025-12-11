@@ -25,5 +25,6 @@ main () {
   #   echo 'unrecognized ingress'
   #   exit 1
   # fi
+  w8_all_namespace "${THIS_NAMESPACE}" 
 }
 time main
