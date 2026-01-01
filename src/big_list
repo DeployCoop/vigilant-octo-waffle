@@ -28,7 +28,6 @@ src/opentelemetry-operator.sh
 src/rancher.sh
 src/raymii-mosquitto.sh
 src/resourcespace.sh
-src/rook-ceph-operator.sh
 src/sloth.sh
 src/supabase.sh
 src/urban-mosquitto.sh
