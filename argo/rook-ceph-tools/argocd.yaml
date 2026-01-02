@@ -1,0 +1,23 @@
+metadata:
+  name: rook-ceph-tools-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: charts/rook-ceph-tools
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      values: |
+        global:
+          extraEnv:
+            ENV_VAR1: ${THIS_ENV_VAR1}
