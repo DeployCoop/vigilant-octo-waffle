@@ -8,6 +8,7 @@ src/fluentd.sh
 src/FOSSBilling.sh
 src/gpu-operator.sh
 src/harbor.sh
+src/kubeflow.sh
 src/kube-prometheus-stack.sh
 src/kubeshark.sh
 src/mariadb-operator-crds.sh
