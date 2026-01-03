@@ -68,6 +68,7 @@ main () {
   src/argocd.sh
   #openEBS
   src/openebs.sh
+  src/rook-ceph-operator.sh
   src/csi-driver-nfs.sh
   # kubegres
   src/kubegres.sh
