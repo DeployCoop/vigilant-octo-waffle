@@ -18,7 +18,8 @@ main () {
   echo 'set -eux' > ${OPENEBS_ENVSUBST}
   echo 'envsubst \' >> ${OPENEBS_ENVSUBST}
   convert_default_env_to_envsubst >> ${OPENEBS_ENVSUBST}
-  echo '< src/openebs-values.tpl \' >> ${OPENEBS_ENVSUBST}
+  echo -n "< ${THIS_OPENEBS_HELM_TEMPLATE} " >> ${OPENEBS_ENVSUBST}
+  echo '\' >> ${OPENEBS_ENVSUBST}
   echo "> ${OPENEBS_INSTALL_TMP}" >> ${OPENEBS_ENVSUBST}
 
   if [[ ${THIS_OPENEBS_INSTALL_METHOD} == "argocd" ]]; then
