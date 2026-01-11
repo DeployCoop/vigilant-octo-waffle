@@ -33,7 +33,7 @@ spec:
               paths:
                 - path: /
                   backend:
-                    serviceName: "opensearch-dashboards-${THIS_NAME}"
+                    serviceName: "opensearch-dashboards"
                     servicePort: 5601
           tls:
             - secretName: ${THIS_NAME}-opensearch-dashboards-tls
