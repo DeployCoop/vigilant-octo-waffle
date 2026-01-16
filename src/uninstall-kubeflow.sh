@@ -10,8 +10,8 @@ main () {
   # ARGOCD_CREATE_APP_EXTRA_ARGS='--helm-skip-crds'
   # argoRunner "${THIS_THING}"
   # w8_pod "${THIS_NAMESPACE}" "${THIS_THING}-${THIS_NAME}"
-  kubectl delete -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=${THIS_KUBEFLOW_PIPELINE_VERSION}"
   kubectl delete -k "github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic?ref=${THIS_KUBEFLOW_PIPELINE_VERSION}"
+  kubectl delete -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=${THIS_KUBEFLOW_PIPELINE_VERSION}"
   kubectl delete ns kubeflow
   # if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
   #   initializer "${this_cwd}/init/${THIS_THING}_traefik"

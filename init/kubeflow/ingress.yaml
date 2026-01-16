@@ -5,6 +5,7 @@ metadata:
     cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
     nginx.ingress.kubernetes.io/rewrite-target: /
     spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+    #traefik.ingress.kubernetes.io/router.middlewares: example-redirect-https@kubernetescrd
   labels:
     app.kubernetes.io/instance: ml-pipeline-ui
   name: ml-pipeline-ui
