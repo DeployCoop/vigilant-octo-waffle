@@ -13,7 +13,7 @@ main () {
   kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=${THIS_KUBEFLOW_PIPELINE_VERSION}"
   kubectl wait --for condition=established --timeout=60s crd/applications.app.k8s.io
   kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic?ref=${THIS_KUBEFLOW_PIPELINE_VERSION}"
-  initializer "${this_cwd}/init/${THIS_THING}"
+  # initializer "${this_cwd}/init/${THIS_THING}"
   # if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
   #   initializer "${this_cwd}/init/${THIS_THING}_traefik"
   # elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
