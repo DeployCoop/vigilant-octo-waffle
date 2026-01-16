@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+  labels:
+    app.kubernetes.io/instance: ml-pipeline-ui
+  name: ml-pipeline-ui
+  namespace: ${THIS_NAMESPACE}
+spec:
+  ingressClassName: ${THIS_CLUSTER_INGRESS}
+  rules:
+  - host: ${THIS_ML_PIPELINE_UI_HOST}.${THIS_DOMAIN}
+    http:
+      paths:
+      - backend:
+          service:
+            name: ml-pipeline-ui
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - ${THIS_ML_PIPELINE_UI_HOST}.${THIS_DOMAIN}
+    secretName: chart-${THIS_NAMESPACE}-${THIS_ML_PIPELINE_UI_HOST}-tls

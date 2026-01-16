@@ -10,6 +10,10 @@ main () {
   # ARGOCD_CREATE_APP_EXTRA_ARGS='--helm-skip-crds'
   # argoRunner "${THIS_THING}"
   # w8_pod "${THIS_NAMESPACE}" "${THIS_THING}-${THIS_NAME}"
+  # export PIPELINE_VERSION=2.14.3
+  kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=$PIPELINE_VERSION"
+  kubectl wait --for condition=established --timeout=60s crd/applications.app.k8s.io
+  kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic?ref=$PIPELINE_VERSION"
   initializer "${this_cwd}/init/${THIS_THING}"
   # if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
   #   initializer "${this_cwd}/init/${THIS_THING}_traefik"
