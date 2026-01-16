@@ -20,7 +20,7 @@ spec:
           service:
             name: ml-pipeline-ui
             port:
-              number: 3000
+              number: 80
         path: /
         pathType: Prefix
   tls:
