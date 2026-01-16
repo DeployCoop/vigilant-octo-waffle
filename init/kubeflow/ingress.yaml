@@ -12,7 +12,7 @@ metadata:
 spec:
   ingressClassName: ${THIS_CLUSTER_INGRESS}
   rules:
-  - host: ${THIS_ML_PIPELINE_UI_HOST}.${THIS_DOMAIN}
+  - host: ${THIS_KUBEFLOW_ML_PIPELINE_UI_HOST}.${THIS_DOMAIN}
     http:
       paths:
       - backend:
@@ -24,5 +24,5 @@ spec:
         pathType: Prefix
   tls:
   - hosts:
-    - ${THIS_ML_PIPELINE_UI_HOST}.${THIS_DOMAIN}
-    secretName: chart-${THIS_NAMESPACE}-${THIS_ML_PIPELINE_UI_HOST}-tls
+    - ${THIS_KUBEFLOW_ML_PIPELINE_UI_HOST}.${THIS_DOMAIN}
+    secretName: chart-${THIS_NAMESPACE}-${THIS_KUBEFLOW_ML_PIPELINE_UI_HOST}-tls
