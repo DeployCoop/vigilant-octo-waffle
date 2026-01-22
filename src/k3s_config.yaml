@@ -1,4 +1,5 @@
 protect-kernel-defaults: true
+embedded-registry: true
 secrets-encryption: true
 kube-apiserver-arg:
   - "enable-admission-plugins=NodeRestriction,EventRateLimit"
