@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 THIS_FILE=./.secrets/k3s_init_node.sh
-THIS_IP=$(curl icanhazip.com)
+: "${THIS_IP:=$(curl icanhazip.com)}"
 : "${FLANNEL_BACKEND=wireguard-native}"
 : "${INSTALL_K3S_EXEC_COMMON=server --tls-san $THIS_IP --flannel-backend=wireguard-native --embedded-registry --disable=traefik --secrets-encryption}"
 
