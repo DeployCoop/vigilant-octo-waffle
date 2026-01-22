@@ -17,7 +17,8 @@ curl -sfL https://get.k3s.io | sh -s -
 # grab the token 
 SECRET=$(cat /var/lib/rancher/k3s/server/node-token)
 
-echo "export K3S_TOKEN='${SECRET}'" >> ./.secrets/k3s_token
+echo "export K3S_TOKEN='${SECRET}'" > ./.secrets/k3s_env
+echo "export INSTALL_K3S_EXEC='${INSTALL_K3S_EXEC_COMMON}'" >> ./.secrets/k3s_env
 # make the k3s init node script
 echo '#!/bin/bash' > ${THIS_FILE}
 echo 'export THIS_IP=$(curl icanhazip.com)' >> ${THIS_FILE}
