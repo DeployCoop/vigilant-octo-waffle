@@ -42,6 +42,11 @@ argoRunner () {
   #envsubst "${ENV_SUBST_EXCLUDES}"
   bash ${ARGORUNNER_ENVSUBST} 
     < "${ARGORUNNER_TMP}/${THIS_THING}/argocd.yaml"
-  argocd app create --upsert ${ARGOCD_CREATE_APP_EXTRA_ARGS} --name "${THIS_THING}" --grpc-web -f ${ARGORUNNR_INSTALL_TMP}
+  argocd app create \
+    --upsert ${ARGOCD_CREATE_APP_EXTRA_ARGS} \
+    --name "${THIS_THING}" \
+    --loglevel ${THIS_ARGO_LOG_LEVEL} \
+    --grpc-web \
+    -f ${ARGORUNNR_INSTALL_TMP}
   cd "${this_cwd}"
 }
