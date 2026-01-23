@@ -40,7 +40,7 @@ spec:
           - data
           - remote_cluster_client
         
-        replicas: 3
+        replicas: "${THIS_OPENSEARCH_NODEPOOL_REPLICAS}"
         
         # if not set, falls back to parsing .Values.imageTag, then .Chart.appVersion.
         majorVersion: ""
