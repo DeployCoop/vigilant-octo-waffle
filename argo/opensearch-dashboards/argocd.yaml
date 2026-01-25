@@ -70,7 +70,8 @@ spec:
           #   certificate: /usr/share/opensearch-dashboards/certs/dashboards-crt.pem
         
           # determines how dashboards will verify certificates (needs to be none for default opensearch certificates to work)
-          # opensearch:
-          #   ssl:
+          opensearch:
+            ssl:
+            verficationMode: ${THIS_OPENSEARCH_SSL_VERIFICATION_MODE}
           #     certificateAuthorities: /usr/share/opensearch-dashboards/certs/dashboards-root-ca.pem
           #     if utilizing custom CA certs for connection to opensearch, provide the CA here
