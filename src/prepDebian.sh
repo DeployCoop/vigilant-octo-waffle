@@ -3,3 +3,4 @@ apt-get install -y libnss3-tools mkcert zsh rsync git curl btop htop vim net-too
 src/installHelm.sh
 src/installArgoCLI.sh
 src/install-yq-go.sh
+src/install_istioctl.sh

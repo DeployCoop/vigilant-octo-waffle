@@ -658,7 +658,7 @@ spec:
           # enablePVC will create a pvc for filer for data persistence.
           enablePVC: true
           # storage should be set to the disk size of the attached volume.
-          storage: 25Gi
+          # storage: 25Gi
           storage: ${THIS_SEAWEEDFS_STORAGE_SIZE}
           # storageClass is the class of storage which defaults to null (the Kube cluster will pick the default).
           storageClass: "${THIS_SEAWEEEDFS_STORAGECLASS}"
