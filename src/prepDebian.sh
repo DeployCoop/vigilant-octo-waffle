@@ -4,3 +4,4 @@ src/installHelm.sh
 src/installArgoCLI.sh
 src/install-yq-go.sh
 src/install_istioctl.sh
+src/install_k3ai.sh

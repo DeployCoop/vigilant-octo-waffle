@@ -5,3 +5,4 @@ sudo pacman -S argocd kustomize helm mkcert zsh rsync git curl \
   parallel pwgen sshuttle python-bcrypt
 src/install-yq-go.sh
 src/install_istioctl.sh
+src/install_k3ai.sh
