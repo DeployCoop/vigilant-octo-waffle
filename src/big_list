@@ -34,6 +34,7 @@ src/rook-ceph-test-cluster.sh
 src/rook-ceph-tools.sh
 src/seaweedFS.sh
 src/sloth.sh
+src/spegel.sh
 src/supabase.sh
 src/urban-mosquitto.sh
 src/velero.sh
