@@ -3,7 +3,7 @@
 if [[ -f .env ]]; then
   set -a && source .env && set +a
 else
-  echo ".env file does not exist, copy .env.example to .env and start there"
+  echo "WARN: .env file does not exist, copy .env.example to .env and start there"
 fi
 if [[ ${VERBOSITY} -gt ${THIS_DEBUG_THRESH} ]]; then
   set -x
