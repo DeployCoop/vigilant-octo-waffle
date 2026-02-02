@@ -8,6 +8,7 @@ src/fluentd.sh
 src/FOSSBilling.sh
 src/gpu-operator.sh
 src/harbor.sh
+src/kubeflow.sh
 src/kube-prometheus-stack.sh
 src/kubeshark.sh
 src/mariadb-operator-crds.sh
@@ -31,7 +32,9 @@ src/resourcespace.sh
 src/rook-ceph-prod-cluster.sh
 src/rook-ceph-test-cluster.sh
 src/rook-ceph-tools.sh
+src/seaweedFS.sh
 src/sloth.sh
+src/spegel.sh
 src/supabase.sh
 src/urban-mosquitto.sh
 src/velero.sh

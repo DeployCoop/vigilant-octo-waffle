@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Set your platform variables (adjust as needed)
-VERSION=v4.2.0
+VERSION=v4.50.1
 PLATFORM=linux_amd64
 
 # Download compressed binary

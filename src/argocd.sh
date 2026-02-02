@@ -32,6 +32,11 @@ elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
   initializer "$this_cwd/init/argocd_traefik"
 elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
   initializer "$this_cwd/init/argocd_haproxy"
+elif [[ ${THIS_CLUSTER_INGRESS} == "istio" ]]; then
+  initializer "$this_cwd/init/argocd_istio"
+else
+  echo 'ERROR: unknown ingress!'
+  exit 1
 fi
 
 src/prepargo.sh

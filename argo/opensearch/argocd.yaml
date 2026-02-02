@@ -21,6 +21,7 @@ spec:
         ---
         clusterName: "opensearch-cluster"
         nodeGroup: "master"
+        antiAffinity: "${THIS_OPENSEARCH_ANTIAFFINITY}"
         
         # If discovery.type in the opensearch configuration is set to "single-node",
         # this should be set to "true"
@@ -39,7 +40,7 @@ spec:
           - data
           - remote_cluster_client
         
-        replicas: 3
+        replicas: "${THIS_OPENSEARCH_NODEPOOL_REPLICAS}"
         
         # if not set, falls back to parsing .Values.imageTag, then .Chart.appVersion.
         majorVersion: ""

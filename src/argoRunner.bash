@@ -2,11 +2,12 @@
 source src/util.bash
 source src/merge2yaml.bash
 : ${ARGOCD_CREATE_APP_EXTRA_ARGS:=' '}
+: "${DEBUG:=false}"
 
 argoRunner () {
   ARGORUNNER_TMP=$(mktemp -d --suffix .tmp.d)
   ARGORUNNER_ENVSUBST=${ARGORUNNER_TMP}/envsubst.sh
-  ARGORUNNR_INSTALL_TMP=${ARGORUNNER_TMP}/argorunnr.sh
+  ARGORUNNR_INSTALL_TMP=${ARGORUNNER_TMP}/argorunnr.yaml
   trap "rm -rf ${ARGORUNNER_TMP}" EXIT
   this_cwd=$(pwd)
   if [[ $# -eq 1 ]]; then
@@ -26,7 +27,7 @@ argoRunner () {
   else
     cp -a "argo/${THIS_THING}" "${ARGORUNNER_TMP}/"
   fi
-  echo '#!/bin/sh' > ${ARGORUNNER_ENVSUBST}
+  echo '#!/usr/bin/env bash' > ${ARGORUNNER_ENVSUBST}
   echo 'set -eu' > ${ARGORUNNER_ENVSUBST}
   echo 'envsubst \' >> ${ARGORUNNER_ENVSUBST}
   #cat src/default.env|grep -v '^$'|grep -v '^#'|awk '{print $2}'|sed 's/"\${\(.*\):=.*/${\1}/'|tr '\n' ' '|sed "s/^/' /"|sed "s/$/'/"| sed 's/$/ \\\n/' >> ${ARGORUNNER_ENVSUBST}
@@ -40,8 +41,17 @@ argoRunner () {
   #   | argocd app create --name "${THIS_THING}" --grpc-web -f -
   #
   #envsubst "${ENV_SUBST_EXCLUDES}"
+    #< "${ARGORUNNER_TMP}/${THIS_THING}/argocd.yaml"
   bash ${ARGORUNNER_ENVSUBST} 
-    < "${ARGORUNNER_TMP}/${THIS_THING}/argocd.yaml"
-  argocd app create --upsert ${ARGOCD_CREATE_APP_EXTRA_ARGS} --name "${THIS_THING}" --grpc-web -f ${ARGORUNNR_INSTALL_TMP}
+  if [[ ${DEBUG} == 'true' ]]; then
+    cat "${ARGORUNNR_INSTALL_TMP}"
+  fi
+  argocd app create \
+    --upsert \
+    ${ARGOCD_CREATE_APP_EXTRA_ARGS} \
+    --name "${THIS_THING}" \
+    --loglevel ${THIS_ARGO_LOG_LEVEL} \
+    --grpc-web \
+    -f ${ARGORUNNR_INSTALL_TMP}
   cd "${this_cwd}"
 }

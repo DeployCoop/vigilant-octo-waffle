@@ -6,3 +6,4 @@ parameters:
   storage: "lvm"
   volgroup: "${THIS_LVM_VG}"
 provisioner: local.csi.openebs.io
+volumeBindingMode: WaitForFirstConsumer

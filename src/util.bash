@@ -183,6 +183,8 @@ sorterrr () {
 linerrr () {
   if [[ ! $# -eq 2 ]]; then
     echo "wrong args $#"
+    echo "useage:"
+    echo "$0 line_to_add file_to_add_to"
     exit 1
   fi
   line_to_add=$1
