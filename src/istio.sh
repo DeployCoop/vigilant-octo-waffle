@@ -27,7 +27,7 @@ main () {
   # fi
   istioctl install \
     --set profile=${THIS_ISTIO_PROFILE} \
-    ${ISTIOCTL_EXTRA_ARGS} \
+    ${ISTIO_EXTRA_ARGS} \
     --skip-confirmation
   sleep 5
   w8_all_namespace "${THIS_NAMESPACE}" 
