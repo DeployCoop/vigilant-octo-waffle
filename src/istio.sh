@@ -28,7 +28,6 @@ main () {
   istioctl install \
     --set profile=${THIS_ISTIO_PROFILE} \
     ${THIS_ISTIO_EXTRA_ARGS} \
-    --server-side --force-conflicts \
     --skip-confirmation
   sleep 5
   w8_all_namespace istio-system
