@@ -1,0 +1,297 @@
+metadata:
+  name: ams-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    path: charts/ams
+    repoURL: ${THIS_REPO_URL}
+    targetRevision: HEAD
+    helm:
+      values: |
+        # Default values for antmedia-helm.
+        # This is a YAML-formatted file.
+        # Declare variables to be passed into your templates.
+        #
+        
+        replicaCount: ${THIS_AMS_REPLICAS}
+        
+        image:
+          repository: nginx
+          pullPolicy: IfNotPresent
+          # Overrides the image tag whose default is the chart appVersion.
+          tag: 2.17.0
+        
+        imagePullSecrets: []
+        nameOverride: ""
+        fullnameOverride: ""
+        
+        serviceAccount:
+          # Specifies whether a service account should be created
+          create: true
+          # Annotations to add to the service account
+          annotations: {}
+          # The name of the service account to use.
+          # If not set and create is true, a name is generated using the fullname template
+          name: ""
+        
+        podAnnotations: {}
+        
+        podSecurityContext: {}
+          # fsGroup: 2000
+        
+        securityContext: {}
+          # capabilities:
+          #   drop:
+          #   - ALL
+          # readOnlyRootFilesystem: true
+          # runAsNonRoot: true
+          # runAsUser: 1000
+        
+        service:
+          type: ClusterIP
+          port: 80
+        
+        
+        resources: 
+          # We usually recommend not to specify default resources and to leave this as a conscious
+          # choice for the user. This also increases chances charts run on environments with little
+          # resources, such as Minikube. If you do want to specify resources, uncomment the following
+          # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+          # limits:
+          #   cpu: 100m
+          #   memory: 128Mi
+          requests:
+            cpu: 4000m
+          #   memory: 128Mi
+        
+        autoscalingEdge:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 10
+          targetCPUUtilizationPercentage: 60
+          # targetMemoryUtilizationPercentage: 80
+        
+        autoscalingOrigin:
+          enabled: true
+          minReplicas: 1
+          maxReplicas: 10
+          targetCPUUtilizationPercentage: 60
+          # targetMemoryUtilizationPercentage: 80
+        
+        
+        tolerations: []
+        
+        affinity: {}
+        
+        origin: {}
+        edge: {}
+        
+        
+        licenseKey: ""
+        # The license key for the Ant Media Server
+        # This is commond license key for both Origin and Edge
+        # This is required for the server to run
+        # If you are using a trial version, you can leave this empty
+        # and the server will run in trial mode
+        # licenseKey: "YOUR_LICENSE_KEY"
+        
+        originLicense:
+          Key: ""
+          # If you have a license key for the Origin server, you can set it here
+        
+        edgeLicense:
+          Key: ""
+          # If you have a license key for the Edge server, you can set it here
+        
+        persistence:
+          enabled: true
+          storageClassName: "${THIS_STORAGECLASS}"
+          accessMode: ReadWriteOnce
+          size: 10Gi
+        
+        
+        mongoDB:
+          external: false
+          connectionString: ""
+          replicaSet: false
+          default: mongo
+        
+        hostNetwork: true
+        
+        image:
+          repository: antmedia/enterprise
+          tag: 2.17.0
+          pullPolicy: IfNotPresent
+        
+        provider:
+          aws: false
+          default: true
+        
+        aws.ssl.arn: {}
+        
+        annotations:
+          default: {
+            nginx.ingress.kubernetes.io/affinity: "cookie",
+            nginx.ingress.kubernetes.io/proxy-body-size: "0m",
+            nginx.ingress.kubernetes.io/session-cookie-name: "route",
+            nginx.ingress.kubernetes.io/session-cookie-expires: "172800",
+            nginx.ingress.kubernetes.io/session-cookie-max-age: "172800",
+            nginx.ingress.kubernetes.io/force-ssl-redirect: "true",
+            nginx.ingress.kubernetes.io/healthcheck-interval: "5s",
+            nginx.ingress.kubernetes.io/healthcheck-path: /,
+            nginx.ingress.kubernetes.io/healthcheck-port: "5080",
+            nginx.ingress.kubernetes.io/healthcheck-timeout: "3s",
+            nginx.ingress.kubernetes.io/proxy-next-upstream: error timeout http_502,
+            nginx.ingress.kubernetes.io/proxy-next-upstream-tries: "3",
+            nginx.ingress.kubernetes.io/ssl-protocols: TLSv1.2 TLSv1.3
+          }
+          aws: {
+            alb.ingress.kubernetes.io/scheme: internet-facing,
+            alb.ingress.kubernetes.io/target-type: ip,
+            alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTP":80}]',
+            alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}',
+            alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true
+          }
+        
+        OriginNodeSelector:
+          key: ""
+          values: ""
+        
+        EdgeNodeSelector:
+          key: ""
+          values: ""
+        
+        MongoDBNodeSelector:
+          key: ""
+          values: ""
+        
+        OriginCpu: {}
+        EdgeCpu: {}
+        kafkaURL:
+        
+        UseGlobalIP: true
+        UseServerName: true
+        ReplaceCandidateAddress: true
+        
+        TurnStunServerURL: 
+        TurnUsername: 
+        TurnPassword: 
+        
+        ingress:
+          ## @param ingress.enabled Enable ingress record generation for WordPress
+          ##
+          enabled: ${THIS_AMS_INGRESS}
+          ## @param ingress.pathType Ingress path type
+          ##
+          pathType: ImplementationSpecific
+          ## @param ingress.apiVersion Force Ingress API version (automatically detected if not set)
+          ##
+          apiVersion: ""
+          ## @param ingress.ingressClassName IngressClass that will be be used to implement the Ingress (Kubernetes 1.18+)
+          ## This is supported in Kubernetes 1.18+ and required if you have more than one IngressClass marked as the default for your cluster .
+          ## ref: https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/
+          ##
+          className: ${THIS_CLUSTER_INGRESS}
+          ingressClassName: ${THIS_CLUSTER_INGRESS}
+          ## @param ingress.hostname Default host for the ingress record
+          ##
+          hostname: ${THIS_AMS_EDGE_HOST}.${THIS_DOMAIN}
+          ## @param ingress.path Default path for the ingress record
+          ## NOTE: You may need to set this to '/*' in order to use this with ALB ingress controllers
+          ##
+          path: /
+          ## @param ingress.annotations Additional annotations for the Ingress resource. To enable certificate autogeneration, place here your cert-manager annotations.
+          ## For a full list of possible ingress annotations, please see
+          ## ref: https://github.com/kubernetes/ingress-nginx/blob/master/docs/user-guide/nginx-configuration/annotations.md
+          ## Use this parameter to set the required annotations for cert-manager, see
+          ## ref: https://cert-manager.io/docs/usage/ingress/#supported-annotations
+          ##
+          ## e.g:
+          ## annotations:
+          ##   kubernetes.io/ingress.class: nginx
+          ##   cert-manager.io/cluster-issuer: cluster-issuer-name
+          ##
+          annotations:
+            nginx.ingress.kubernetes.io/rewrite-target: /
+            cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+            spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+            kubernetes.io/ingress.class: ${THIS_CLUSTER_INGRESS}
+            kubernetes.io/tls-acme: "true"
+          ## @param ingress.tls Enable TLS configuration for the host defined at `ingress.hostname` parameter
+          ## TLS certificates will be retrieved from a TLS secret with name: `{{- printf "%s-tls" .Values.ingress.hostname }}`
+          ## You can:
+          ##   - Use the `ingress.secrets` parameter to create this TLS secret
+          ##   - Relay on cert-manager to create it by setting the corresponding annotations
+          ##   - Relay on Helm to create self-signed certificates by setting `ingress.selfSigned=true`
+          ##
+          tls:
+            - secretName: ant-media-server-origin
+              hosts:
+                - ${THIS_AMS_ORIGIN_HOST}.${THIS_DOMAIN}
+              autoGenerated: true
+              enabled: true
+            - secretName: ant-media-server-edge
+              hosts:
+                - ${THIS_AMS_EDGE_HOST}.${THIS_DOMAIN}
+              autoGenerated: true
+              enabled: true
+          ## @param ingress.selfSigned Create a TLS secret for this ingress record using self-signed certificates generated by Helm
+          ##
+          selfSigned: true
+          ## @param ingress.extraHosts An array with additional hostname(s) to be covered with the ingress record
+          ## e.g:
+          ## extraHosts:
+          ##   - name: wordpress.local
+          ##     path: /
+          ##
+          extraHosts: []
+          ## @param ingress.extraPaths An array with additional arbitrary paths that may need to be added to the ingress under the main host
+          ## e.g:
+          ## extraPaths:
+          ## - path: /*
+          ##   backend:
+          ##     serviceName: ssl-redirect
+          ##     servicePort: use-annotation
+          ##
+          extraPaths: []
+          ## @param ingress.extraTls TLS configuration for additional hostname(s) to be covered with this ingress record
+          ## ref: https://kubernetes.io/docs/concepts/services-networking/ingress/#tls
+          ## e.g:
+          ## extraTls:
+          ## - hosts:
+          ##     - wordpress.local
+          ##   secretName: wordpress.local-tls
+          ##
+          extraTls: []
+          ## @param ingress.secrets Custom TLS certificates as secrets
+          ## NOTE: 'key' and 'certificate' are expected in PEM format
+          ## NOTE: 'name' should line up with a 'secretName' set further up
+          ## If it is not set and you're using cert-manager, this is unneeded, as it will create a secret for you with valid certificates
+          ## If it is not set and you're NOT using cert-manager either, self-signed certificates will be created valid for 365 days
+          ## It is also possible to create and manage the certificates outside of this helm chart
+          ## Please see README.md for more information
+          ## e.g:
+          ## secrets:
+          ##   - name: wordpress.local-tls
+          ##     key: |-
+          ##       -----BEGIN RSA PRIVATE KEY-----
+          ##       ...
+          ##       -----END RSA PRIVATE KEY-----
+          ##     certificate: |-
+          ##       -----BEGIN CERTIFICATE-----
+          ##       ...
+          ##       -----END CERTIFICATE-----
+          ##
+          secrets: []
+        
+        
