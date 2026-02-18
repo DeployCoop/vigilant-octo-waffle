@@ -8,7 +8,19 @@ main () {
   #
   # initializer "${this_cwd}/init/pre-${THIS_THING}"
   # ARGOCD_CREATE_APP_EXTRA_ARGS='--helm-skip-crds'
-  argoRunner "${THIS_THING}"
+
+  if [[ ${THIS_AMS_INSTALL_METHOD} == 'helm' ]]
+  then
+    helm install antmedia antmedia/antmedia \
+      --set origin=${THIS_AMS_ORIGIN_HOST}.${THIS_DOMAIN} \
+      --set edge=${THIS_AMS_EDGE_HOST}.${THIS_DOMAIN} \
+      --namespace antmedia \
+      --create-namespace
+  elif [[ ${THIS_AMS_INSTALL_METHOD} == 'argocd' ]]
+  then
+    argoRunner "${THIS_THING}"
+  fi
+
   # w8_pod "${THIS_NAMESPACE}" "${THIS_THING}-${THIS_NAME}"
   # initializer "${this_cwd}/init/${THIS_THING}"
   # if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
