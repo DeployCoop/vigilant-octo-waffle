@@ -310,6 +310,8 @@ Log in using credentials from your `.env` file.
 
 To delete the cluster and all resources there are two scripts depending on which cluster type you deployed:
 
+> ⚠️ Warning: This will remove all data stored in the cluster.
+
 ### KIND
 ```bash
 ./src/kindDown.sh
@@ -319,7 +321,6 @@ To delete the cluster and all resources there are two scripts depending on which
 ./src/k3dDown.sh
 ```
 
-> ⚠️ Warning: This will remove all data stored in the cluster.
 
 ---
 
