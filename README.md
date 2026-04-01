@@ -313,14 +313,13 @@ To delete the cluster and all resources there are two scripts depending on which
 > ⚠️ Warning: This will remove all data stored in the cluster.
 
 ### KIND
-```bash
-./src/kindDown.sh
-```
+  ```bash
+  ./src/kindDown.sh
+  ```
 ### K3D
-```bash
-./src/k3dDown.sh
-```
-
+  ```bash
+  ./src/k3dDown.sh
+  ```
 
 ---
 
