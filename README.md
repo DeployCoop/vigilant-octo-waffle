@@ -312,7 +312,7 @@ To delete the cluster and all resources there are two scripts depending on which
 
 > ⚠️ Warning: This will remove all data stored in the cluster.
 
-1. **KIND**
+1. **Kind**
   ```bash
   ./src/kindDown.sh
   ```
