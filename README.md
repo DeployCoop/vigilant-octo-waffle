@@ -308,9 +308,15 @@ Log in using credentials from your `.env` file.
 
 ## 🧹 Teardown
 
-To delete the cluster and all resources:
+To delete the cluster and all resources there are two scripts depending on which cluster type you deployed:
+
+### KIND
 ```bash
 ./src/kindDown.sh
+```
+### K3D
+```bash
+./src/k3dDown.sh
 ```
 
 > ⚠️ Warning: This will remove all data stored in the cluster.
