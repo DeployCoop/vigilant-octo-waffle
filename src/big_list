@@ -39,4 +39,5 @@ src/spegel.sh
 src/supabase.sh
 src/urban-mosquitto.sh
 src/velero.sh
+src/vigil.sh
 src/vmq-operator.sh
