@@ -8,7 +8,7 @@ main () {
   #
   # initializer "${this_cwd}/init/pre-${THIS_THING}"
   # ARGOCD_CREATE_APP_EXTRA_ARGS='--helm-skip-crds'
-  # argoRunner "${THIS_THING}"
+  argoRunner "${THIS_THING}"
   # w8_pod "${THIS_NAMESPACE}" "${THIS_THING}-${THIS_NAME}"
   # initializer "${this_cwd}/init/${THIS_THING}"
   # if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
