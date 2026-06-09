@@ -427,7 +427,7 @@ spec:
         
           # Required when DEV_MODE=false (see env.example). Generate with:
           #   python -c "import secrets; print(secrets.token_urlsafe(64))"
-          jwtSecretKey: ""
+          jwtSecretKey: "${THIS_VIGIL_JWT_SECRET_KEY}"
         
           # Optional data-source integrations.
           splunkPassword: ""
@@ -472,7 +472,7 @@ spec:
         # -----------------------------------------------------------------------------
         config:
           # Development Mode — MUST be false in production.
-          DEV_MODE: "false"
+          DEV_MODE: "${THIS_VIGIL_DEV_MODE}"
         
           # Secrets / auth policy
           SECRETS_BACKEND: "dotenv"
