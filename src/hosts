@@ -49,4 +49,6 @@
 127.0.0.1 statsd-airflow.${THIS_DOMAIN}
 127.0.0.1 supa.${THIS_DOMAIN}
 127.0.0.1 traefik.${THIS_DOMAIN}
+127.0.0.1 trino.${THIS_DOMAIN}
 127.0.0.1 urban-mosquitto.${THIS_DOMAIN}
+127.0.0.1 vigil.${THIS_DOMAIN}
