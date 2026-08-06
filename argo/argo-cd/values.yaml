@@ -2332,6 +2332,9 @@ server:
       nginx.ingress.kubernetes.io/ssl-passthrough: "true"
       traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
       traefik.ingress.kubernetes.io/router.tls: "true"
+      nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 
     # -- Defines which ingress controller will implement the resource
     ingressClassName: ${THIS_CLUSTER_INGRESS}
@@ -2601,7 +2604,9 @@ repoServer:
   extraArgs: []
 
   # -- Environment variables to pass to repo server
-  env: []
+  env:
+    - name: ARGOCD_EXEC_TIMEOUT
+      value: "300s"
 
   # -- envFrom to pass to repo server
   # @default -- `[]` (See [values.yaml])

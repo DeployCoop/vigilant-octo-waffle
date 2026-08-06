@@ -5,13 +5,13 @@ export this_cwd=$(pwd)
 TMP=$(mktemp -d --suffix .tmp.d )
 trap 'rm -rf ${TMP}' EXIT
 set -eu
-envsubst < argo/argo-cd/values.yaml > "${TMP}/values.yaml"
 if [[ ${THIS_ARGO_METHOD} == 'helm' ]]; then
   # helm repo add argo https://argoproj.github.io/argo-helm
   # helm repo update
   # helm install archocd argo/argo-cd \
   # --wait \
   #   -f "${TMP}/values.yaml"
+  envsubst < argo/argo-cd/values.yaml > "${TMP}/values.yaml"
   helm upgrade --install \
     argocd argo-cd \
     --repo https://argoproj.github.io/argo-helm \
