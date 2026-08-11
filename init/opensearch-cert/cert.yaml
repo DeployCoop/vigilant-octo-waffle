@@ -2,7 +2,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: opensearch-certs
-  namespace: opensearch # Change to your actual namespace
+  namespace: ${THIS_OPENSEARCH_NAMESPACE}
 spec:
   secretName: opensearch-tls-secret
   duration: 2160h # 90 days
