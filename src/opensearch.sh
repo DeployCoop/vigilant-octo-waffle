@@ -24,6 +24,7 @@ main() {
     set -x
   fi
   set -eu
+  src/namespacer.sh opensearch
   initializer "$this_cwd/init/opensearch-cert"
   opensearch_initial_admin_secret_maker "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}" "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
   argoRunner "${THIS_THING}"

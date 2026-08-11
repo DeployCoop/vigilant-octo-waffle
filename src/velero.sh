@@ -4,6 +4,7 @@ source src/common.sh
 
 main () {
   set -eu
+  src/namespacer.sh velero
   #initializer "${this_cwd}/init/pre-${THIS_THING}"
   argoRunner "${THIS_THING}"
   #initializer "${this_cwd}/init/${THIS_THING}"

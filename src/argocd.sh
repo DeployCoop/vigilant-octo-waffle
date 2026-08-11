@@ -10,7 +10,7 @@ main() {
   if [[ ${VERBOSITY} -gt 99 ]]; then
     set -x
   fi
-  kubectl create namespace argocd
+  src/namespacer.sh argocd
   if [[ ${THIS_ARGO_METHOD} == 'helm' ]]; then
     # helm repo add argo https://argoproj.github.io/argo-helm
     # helm repo update

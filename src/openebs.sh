@@ -11,6 +11,7 @@ trap "rm -f ${OPENEBS_ENVSUBST} ${OPENEBS_INSTALL_TMP}" EXIT
 main() {
   #set -eux
   set -eu
+  src/namespacer.sh openebs
 
   src/kmod.sh nvme_tcp
   #kubectl krew install mayastor openebs

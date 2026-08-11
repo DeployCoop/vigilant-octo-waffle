@@ -2,8 +2,9 @@
 THIS_THING=minio-operator
 source src/common.sh
 
-main () {
+main() {
   set -eu
+  src/namespacer.sh minio
   #kubectl krew install minio
   #initializer "${this_cwd}/init/pre-${THIS_THING}"
   argoRunner "${THIS_THING}"

@@ -4,6 +4,7 @@ source src/common.sh
 
 main () {
   set -eu
+  src/namespacer.sh minio
   if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
     initializer "${this_cwd}/init/pre-${THIS_THING}-traefik"
   elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
