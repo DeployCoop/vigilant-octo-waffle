@@ -2,43 +2,49 @@
 THIS_THING=argocd
 source src/common.sh
 export this_cwd=$(pwd)
-TMP=$(mktemp -d --suffix .tmp.d )
+TMP=$(mktemp -d --suffix .tmp.d)
 trap 'rm -rf ${TMP}' EXIT
-set -eu
-if [[ ${THIS_ARGO_METHOD} == 'helm' ]]; then
-  # helm repo add argo https://argoproj.github.io/argo-helm
-  # helm repo update
-  # helm install archocd argo/argo-cd \
-  # --wait \
-  #   -f "${TMP}/values.yaml"
-  envsubst < argo/argo-cd/values.yaml > "${TMP}/values.yaml"
-  helm upgrade --install \
-    argocd argo-cd \
-    --repo https://argoproj.github.io/argo-helm \
-    --wait \
-    -f "${TMP}/values.yaml"
-else
-  #kubectl delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+main() {
+  set -eu
+  if [[ ${VERBOSITY} -gt 99 ]]; then
+    set -x
+  fi
   kubectl create namespace argocd
-  kubectl apply -n argocd \
-    --server-side --force-conflicts \
-    -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-fi
+  if [[ ${THIS_ARGO_METHOD} == 'helm' ]]; then
+    # helm repo add argo https://argoproj.github.io/argo-helm
+    # helm repo update
+    # helm install archocd argo/argo-cd \
+    # --wait \
+    #   -f "${TMP}/values.yaml"
+    envsubst <argo/argo-cd/values.yaml >"${TMP}/values.yaml"
+    helm upgrade --install \
+      --namespace argocd \
+      argocd argo-cd \
+      --repo https://argoproj.github.io/argo-helm \
+      --wait \
+      -f "${TMP}/values.yaml"
+  else
+    #kubectl delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    kubectl apply -n argocd \
+      --server-side --force-conflicts \
+      -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    # no stop error block for the w8s which might have errant errors as they wait
+    echo "Deploying DeployCoop components:"
+    if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
+      initializer "$this_cwd/init/argocd_nginx"
+    elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
+      initializer "$this_cwd/init/argocd_traefik"
+    elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
+      initializer "$this_cwd/init/argocd_haproxy"
+    elif [[ ${THIS_CLUSTER_INGRESS} == "istio" ]]; then
+      initializer "$this_cwd/init/argocd_istio"
+    else
+      echo 'ERROR: unknown ingress!'
+      exit 1
+    fi
+  fi
+  src/prepargo.sh
+}
 
-
-# no stop error block for the w8s which might have errant errors as they wait
-echo "Deploying DeployCoop components:"
-if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
-  initializer "$this_cwd/init/argocd_nginx"
-elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
-  initializer "$this_cwd/init/argocd_traefik"
-elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
-  initializer "$this_cwd/init/argocd_haproxy"
-elif [[ ${THIS_CLUSTER_INGRESS} == "istio" ]]; then
-  initializer "$this_cwd/init/argocd_istio"
-else
-  echo 'ERROR: unknown ingress!'
-  exit 1
-fi
-
-src/prepargo.sh
+time main

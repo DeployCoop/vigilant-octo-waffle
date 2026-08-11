@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-set -e 
+set -e
 source src/sourceror.bash
 
-main () {
+main() {
   if [[ ${VERBOSITY} -gt 99 ]]; then
     set -x
   fi
@@ -15,7 +15,13 @@ main () {
   w8_pod argocd argocd-application-controller-
   w8_pod argocd argocd-dex-server-
   if [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
-    w8_ingress argocd argocd-server-ingress 
+    if [[ ${THIS_ARGO_METHOD} == "helm" ]]; then
+      w8_ingress argocd argocd-server
+    elif [[ ${THIS_ARGO_METHOD} == "yaml" ]]; then
+      w8_ingress argocd argocd-server-ingress
+    else
+      squawk 3 "WARN: unrecognized argo install method, unable to wait for ingress"
+    fi
   elif [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
     echo 'w8 wip'
     sleep 5
@@ -23,8 +29,7 @@ main () {
     echo 'w8 wip'
     sleep 5
   fi
-  w8_all_namespace argocd 
+  #w8_all_namespace argocd
 }
-
 
 time main

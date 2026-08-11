@@ -130,6 +130,7 @@ configs:
 
     # -- Annotations to be added to argocd-cm configmap
     annotations: {}
+    repo.shallow.clone: "true"
 
     # -- The name of tracking label used by Argo CD for resource pruning
     application.instanceLabelKey: argocd.argoproj.io/instance
@@ -338,6 +339,7 @@ configs:
   # Argo CD configuration parameters
   ## Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/argocd-cmd-params-cm.yaml
   params:
+
     # -- Create the argocd-cmd-params-cm configmap
     # If false, it is expected the configmap will be created by something else.
     create: true
@@ -357,7 +359,11 @@ configs:
     # -- Specifies timeout between application self heal attempts
     controller.self.heal.timeout.seconds: 5
     # -- Repo server RPC call timeout seconds.
-    controller.repo.server.timeout.seconds: 60
+    #controller.repo.server.timeout.seconds: 60
+    # Extends the timeout for the controller talking to the repo server (Default: 60s)
+    controller.repo.server.timeout.seconds: "300"
+    # Extends the timeout for the API server talking to the repo server (Default: 60s)
+    server.repo.server.timeout.seconds: "300"
     # -- Specifies the timeout after which a sync would be terminated. 0 means no timeout
     controller.sync.timeout.seconds: 0
 
@@ -2332,9 +2338,11 @@ server:
       nginx.ingress.kubernetes.io/ssl-passthrough: "true"
       traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
       traefik.ingress.kubernetes.io/router.tls: "true"
-      nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
-      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-      nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-connect-timeout: "300s"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300s"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "300s"
+      nginx.ingress.kubernetes.io/proxy-stream-timeout: "300s"
+
 
     # -- Defines which ingress controller will implement the resource
     ingressClassName: ${THIS_CLUSTER_INGRESS}
@@ -2602,6 +2610,7 @@ repoServer:
 
   # -- Additional command line arguments to pass to repo server
   extraArgs: []
+
 
   # -- Environment variables to pass to repo server
   env:
