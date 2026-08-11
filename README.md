@@ -2,6 +2,14 @@
 
 ![Vigilant Octo Waffle](src/vigilantoctowaffle.png?raw=true "Vigilant Octo Waffle")
 
+Ever have a problem with TLS and your app in production that requires you to post an issue online with an open source project?
+
+But then you don't want to post your production configs because you don't want to clean all the private data out?
+
+So you try to replicate on your laptop with localhost, but TLS is not working so the issue no longer reveals itself.
+
+Vigilant-Octo-Waffle to the rescue! Don't use localhost! Update the hosts file to include an example.com subdomain and test full TLS functionality without leaving your localhost laptop! Using mkcert in the background a local certificate authority is established and used to generate certificates for any domain you like, the CA is installed so that your local web browser trusts the certs so you can debug tricky TLS issues in your apps that others simply will not catch until they have their app behind TLS in production.
+
 This project provides a **Kubernetes cluster setup** using [KinD](https://kind.sigs.k8s.io) or [K3s](https://k3s.io), pre-configured with [ArgoCD](https://argoproj.github.io/argocd/) and a suite of applications. It's ideal for testing, development, and demonstrating Kubernetes-based deployments with TLS, ingress, and secrets management.
 
 ---
