@@ -172,6 +172,7 @@ spec:
           hosts:
             - ${THIS_OPENSEARCH_HOST}.${THIS_DOMAIN}
           tls:
+            #- secretName: opensearch-helm-${THIS_NAME}-ingress-tls
             - secretName: opensearch-helm-${THIS_NAME}-ingress-tls
               hosts:
                 - ${THIS_OPENSEARCH_HOST}.${THIS_DOMAIN}

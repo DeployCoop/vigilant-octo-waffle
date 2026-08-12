@@ -115,7 +115,9 @@ global:
     #   maxUnavailable: 25%
 
   # -- Environment variables to pass to all deployed Deployments
-  env: []
+  env:
+    - name: ARGOCD_EXEC_TIMEOUT
+      value: ${ARGOCD_EXEC_TIMEOUT}
 
   # -- Annotations for the all deployed Certificates
   certificateAnnotations: {}
@@ -735,6 +737,10 @@ controller:
   # -- Application controller name string
   name: application-controller
 
+  repo:
+    server:
+      timeout:
+        seconds: "300s"
   # -- The number of application controller pods to run.
   # Additional replicas will cause sharding of managed clusters across number of replicas.
   ## With dynamic cluster distribution turned on, sharding of the clusters will gracefully
@@ -1852,6 +1858,12 @@ redisSecretInit:
 server:
   # -- Argo CD server name
   name: server
+  secretkey: ${THIS_ARGOCD_SERVER_SECRET_KEY}
+
+  repo:
+    server:
+      timeout:
+        seconds: "300s"
 
   # -- The number of server pods to run
   replicas: 1
@@ -2613,9 +2625,7 @@ repoServer:
 
 
   # -- Environment variables to pass to repo server
-  env:
-    - name: ARGOCD_EXEC_TIMEOUT
-      value: "300s"
+  env: []
 
   # -- envFrom to pass to repo server
   # @default -- `[]` (See [values.yaml])

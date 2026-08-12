@@ -12,21 +12,25 @@ export THIS_OPENSEARCH_ADMIN_PASSHASH=$(src/opensearch-hashpass.py ${THIS_OPENSE
 
 opensearch_initial_admin_secret_maker() {
   local secret_name=$1
-  local secret_pass=$2
+  local secret_key=$2
+  local secret_user=$3
   kubectl create secret generic \
     "${secret_name}" \
-    -n "${THIS_NAMESPACE}" \
-    --from-literal=OPENSEARCH_INITIAL_ADMIN_PASSWORD="${secret_pass}"
+    -n "${THIS_OPENSEARCH_NAMESPACE}" \
+    --from-literal="${secret_key}"="${secret_user}"
+
 }
 
 main() {
   if [[ ${VERBOSITY} -gt 99 ]]; then
-    set -x
+    echo set -x
   fi
   set -eu
   src/namespacer.sh opensearch
   initializer "$this_cwd/init/opensearch-cert"
-  opensearch_initial_admin_secret_maker "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}" "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
+  opensearch_initial_admin_secret_maker "${THIS_OPENSEARCH_ADMIN_CRED_USER}" "OPENSEARCH_INITIAL_ADMIN_USER" "${THIS_OPENSEARCH_ADMIN_USER}"
+  opensearch_initial_admin_secret_maker "${THIS_OPENSEARCH_ADMIN_CRED_SECRET}" "OPENSEARCH_INITIAL_ADMIN_PASSWORD" "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
+  opensearch_initial_admin_secret_maker "${THIS_OPENSEARCH_DASH_ADMIN_CRED_SECRET}" "OPENSEARCH_PASSWORD" "${THIS_OPENSEARCH_ADMIN_PASSWORD}"
   argoRunner "${THIS_THING}"
 }
 time main
