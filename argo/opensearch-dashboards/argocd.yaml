@@ -90,7 +90,7 @@ spec:
           - name: OPENSEARCH_USERNAME
             valueFrom:
               secretKeyRef:
-                name: ${THIS_OPENSEARCH_ADMIN_CRED_USERNAME}
+                name: "${THIS_OPENSEARCH_ADMIN_CRED_USER}"
                 key: OPENSEARCH_INITIAL_ADMIN_USER
           - name: OPENSEARCH_PASSWORD
             valueFrom:
