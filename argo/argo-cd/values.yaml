@@ -1858,7 +1858,6 @@ redisSecretInit:
 server:
   # -- Argo CD server name
   name: server
-  secretkey: ${THIS_ARGOCD_SERVER_SECRET_KEY}
 
   repo:
     server:
