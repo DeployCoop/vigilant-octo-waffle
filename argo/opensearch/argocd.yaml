@@ -3,7 +3,7 @@ metadata:
   namespace: argocd
 spec:
   destination:
-    namespace: ${THIS_NAMESPACE}
+    namespace: ${THIS_OPENSEARCH_NAMESPACE}
     server: https://kubernetes.default.svc
   project: default
   syncPolicy:
@@ -172,6 +172,7 @@ spec:
           hosts:
             - ${THIS_OPENSEARCH_HOST}.${THIS_DOMAIN}
           tls:
+            #- secretName: opensearch-helm-${THIS_NAME}-ingress-tls
             - secretName: opensearch-helm-${THIS_NAME}-ingress-tls
               hosts:
                 - ${THIS_OPENSEARCH_HOST}.${THIS_DOMAIN}

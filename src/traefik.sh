@@ -25,6 +25,7 @@ install_traefik_w_helm () {
     -f "${TMP}/values.yaml"
 }
 
+src/namespacer.sh traefik
 # https://doc.traefik.io/traefik/providers/kubernetes-crd/
 # Install Traefik Resource Definitions:
 kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.5/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
