@@ -802,7 +802,10 @@ controller:
   extraArgs: []
 
   # -- Environment variables to pass to application controller
-  env: []
+  #env: []
+  env:
+    - name: ARGOCD_APPLICATION_CONTROLLER_REPO_SERVER_TIMEOUT_SECONDS
+      value: "300"
 
   # -- envFrom to pass to application controller
   # @default -- `[]` (See [values.yaml])
