@@ -3,7 +3,7 @@
 source ./src/sourceror.bash
 export this_cwd=$(pwd)
 
-main () {
+main() {
   set -e
   src/secrets.sh
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
@@ -35,6 +35,8 @@ main () {
   fi
   set -eu
   set -x
+  src/namespacer.sh monitoring
+  src/namespacer.sh nfs-server
   initializer "$this_cwd/init/cluster"
 
   if [[ ${THIS_EARLY_END} == 'true' ]]; then

@@ -115,7 +115,9 @@ global:
     #   maxUnavailable: 25%
 
   # -- Environment variables to pass to all deployed Deployments
-  env: []
+  env:
+    - name: ARGOCD_EXEC_TIMEOUT
+      value: ${ARGOCD_EXEC_TIMEOUT}
 
   # -- Annotations for the all deployed Certificates
   certificateAnnotations: {}
@@ -130,6 +132,7 @@ configs:
 
     # -- Annotations to be added to argocd-cm configmap
     annotations: {}
+    repo.shallow.clone: "true"
 
     # -- The name of tracking label used by Argo CD for resource pruning
     application.instanceLabelKey: argocd.argoproj.io/instance
@@ -154,7 +157,7 @@ configs:
     timeout.reconciliation: 180s
 
     # -- Timeout to refresh application data as well as target manifests cache
-    timeout.hard.reconciliation: 0s
+    timeout.hard.reconciliation: 300s
 
     # -- Enable Status Badge
     ## Ref: https://argo-cd.readthedocs.io/en/stable/user-guide/status-badge/
@@ -338,6 +341,7 @@ configs:
   # Argo CD configuration parameters
   ## Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/argocd-cmd-params-cm.yaml
   params:
+
     # -- Create the argocd-cmd-params-cm configmap
     # If false, it is expected the configmap will be created by something else.
     create: true
@@ -357,7 +361,11 @@ configs:
     # -- Specifies timeout between application self heal attempts
     controller.self.heal.timeout.seconds: 5
     # -- Repo server RPC call timeout seconds.
-    controller.repo.server.timeout.seconds: 60
+    #controller.repo.server.timeout.seconds: 60
+    # Extends the timeout for the controller talking to the repo server (Default: 60s)
+    controller.repo.server.timeout.seconds: "300"
+    # Extends the timeout for the API server talking to the repo server (Default: 60s)
+    server.repo.server.timeout.seconds: "300"
     # -- Specifies the timeout after which a sync would be terminated. 0 means no timeout
     controller.sync.timeout.seconds: 0
 
@@ -729,6 +737,10 @@ controller:
   # -- Application controller name string
   name: application-controller
 
+  repo:
+    server:
+      timeout:
+        seconds: "300s"
   # -- The number of application controller pods to run.
   # Additional replicas will cause sharding of managed clusters across number of replicas.
   ## With dynamic cluster distribution turned on, sharding of the clusters will gracefully
@@ -790,7 +802,10 @@ controller:
   extraArgs: []
 
   # -- Environment variables to pass to application controller
-  env: []
+  #env: []
+  env:
+    - name: ARGOCD_APPLICATION_CONTROLLER_REPO_SERVER_TIMEOUT_SECONDS
+      value: "300"
 
   # -- envFrom to pass to application controller
   # @default -- `[]` (See [values.yaml])
@@ -1847,6 +1862,11 @@ server:
   # -- Argo CD server name
   name: server
 
+  repo:
+    server:
+      timeout:
+        seconds: "300s"
+
   # -- The number of server pods to run
   replicas: 1
 
@@ -2332,6 +2352,11 @@ server:
       nginx.ingress.kubernetes.io/ssl-passthrough: "true"
       traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
       traefik.ingress.kubernetes.io/router.tls: "true"
+      nginx.ingress.kubernetes.io/proxy-connect-timeout: "300s"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300s"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "300s"
+      nginx.ingress.kubernetes.io/proxy-stream-timeout: "300s"
+
 
     # -- Defines which ingress controller will implement the resource
     ingressClassName: ${THIS_CLUSTER_INGRESS}
@@ -2599,6 +2624,7 @@ repoServer:
 
   # -- Additional command line arguments to pass to repo server
   extraArgs: []
+
 
   # -- Environment variables to pass to repo server
   env: []

@@ -3,10 +3,10 @@
 : ${VERBOSITY:=100}
 source ./src/squawk.bash
 
-w8_native_wait () {
+w8_native_wait() {
   if [[ $# -eq 2 ]]; then
     TARGET_NAMESPACE=$1
-    TARGET_POD=$(kubectl get pod -n ${TARGET_NAMESPACE} |grep $2|awk '{print $2}')
+    TARGET_POD=$(kubectl get pod -n ${TARGET_NAMESPACE} | grep $2 | awk '{print $2}')
     kubectl wait \
       --namespace $TARGET_NAMESPACE \
       --for=condition=ready pod $TARGET_POD \
@@ -18,38 +18,41 @@ w8_native_wait () {
   fi
 }
 
-w8_all_namespace () {
+w8_all_namespace() {
   if [[ $# -eq 1 ]]; then
     TARGET_NAMESPACE=$1
-    kubectl wait \
-      --for=condition=Ready \
-      pod \
-      --all \
-      --namespace=${TARGET_NAMESPACE} \
-      --timeout=300s
+    TARGET_TIMEOUT=600s
+  elif [[ $# -eq 2 ]]; then
+    TARGET_NAMESPACE=$1
+    TARGET_TIMEOUT=$2
   else
-    echo 'ERROR: wrong number of arguments!'
+    echo "ERROR: wrong number of arguments! $#"
     echo "$0 NAMESPACE"
     exit 1
   fi
+  kubectl wait \
+    --for=condition=Ready \
+    pod \
+    --all \
+    --namespace=${TARGET_NAMESPACE} \
+    --timeout=${TARGET_TIMEOUT}
 }
 
-w8_kubedns () {
+w8_kubedns() {
   squawk 3 "wait on Kube-DNS to become available" -n
   sleep 1
 
   # while loop
   kubedns_countone=1
   # timeout for 15 minutes
-  while [[ $kubedns_countone -lt 151 ]]
-  do
+  while [[ $kubedns_countone -lt 151 ]]; do
     squawk 1 '.' -n
-    RESULT=$(kubectl --kubeconfig=$KUBECONFIG get po --namespace kube-system |grep kube-dns|grep Running)
+    RESULT=$(kubectl --kubeconfig=$KUBECONFIG get po --namespace kube-system | grep kube-dns | grep Running)
     if [[ "$RESULT" ]]; then
-        sleep 3
-        squawk 1 '.' -n
-        squawk 3 "$RESULT"
-        break
+      sleep 3
+      squawk 1 '.' -n
+      squawk 3 "$RESULT"
+      break
     fi
     ((++kubedns_countone))
     sleep 3
@@ -59,7 +62,7 @@ w8_kubedns () {
   sleep 1
 }
 
-w8_kubectl () {
+w8_kubectl() {
   squawk 3 "Wait on the K8S cluster to become available" -n
   squawk 3 "Errors on the first few tries are normal give it a few minutes to spin up" -n
   sleep 15
@@ -69,11 +72,11 @@ w8_kubectl () {
   # timeout for 15 minutes
   while [[ "$countone_w8_kubectl" -lt "$countlimit_w8_kubectl" ]]; do
     squawk 1 '.' -n
-    if [[ "$VERBOSITY" -gt "11" ]] ; then
+    if [[ "$VERBOSITY" -gt "11" ]]; then
       squawk 105 "kubectl --kubeconfig=$KUBECONFIG get pods -n kube-system | grep kube-apiserver"
       kubectl --kubeconfig=$KUBECONFIG get pods -n kube-system | grep kube-apiserver
     fi
-    result=$(kubectl --kubeconfig=$KUBECONFIG get pods -n kube-system 2>/dev/null | grep kube-apiserver |grep Running)
+    result=$(kubectl --kubeconfig=$KUBECONFIG get pods -n kube-system 2>/dev/null | grep kube-apiserver | grep Running)
     squawk 3 "Result is $result"
     if [[ "$result" ]]; then
       squawk 5 "Result nailed $result"
@@ -82,16 +85,16 @@ w8_kubectl () {
     fi
     ((++countone_w8_kubectl))
     squawk 209 "$countone_w8_kubectl"
-    if [[ "$countone_w8_kubectl" -ge "$countlimit_w8_kubectl"  ]]; then
-      croak 3  'Master is not coming up, investigate, breaking'
+    if [[ "$countone_w8_kubectl" -ge "$countlimit_w8_kubectl" ]]; then
+      croak 3 'Master is not coming up, investigate, breaking'
     fi
     sleep 5
   done
-  squawk 3  "."
+  squawk 3 "."
   squawk 1 "kubectl commands are now able to interact with the kubernetes cluster"
 }
 
-w8_node () {
+w8_node() {
   node_name=$1
   squawk 3 "Wait on the K8S node $node_name to become available"
   sleep 5
@@ -102,8 +105,8 @@ w8_node () {
   set +e
   while [[ "$countone_w8_node" -lt "$countlimit_w8_node" ]]; do
     squawk 1 '.' -n
-    if [[ "$VERBOSITY" -gt "11" ]] ; then
-      squawk 105  "kubectl --kubeconfig=$KUBECONFIG get node $node_name"
+    if [[ "$VERBOSITY" -gt "11" ]]; then
+      squawk 105 "kubectl --kubeconfig=$KUBECONFIG get node $node_name"
       kubectl --kubeconfig=$KUBECONFIG get node $node_name
     fi
     result=$(kubectl --kubeconfig=$KUBECONFIG get node $node_name | grep -v NotReady | grep Ready)
@@ -118,11 +121,11 @@ w8_node () {
     sleep 3
   done
   set -e
-  squawk 3  "."
-  squawk 3  "kubectl commands are now able to interact with the kubernetes node"
+  squawk 3 "."
+  squawk 3 "kubectl commands are now able to interact with the kubernetes node"
 }
 
-w8_ingress () {
+w8_ingress() {
   if [[ ! $# -eq 2 ]]; then
     echo 'ERROR: wrong number of arguments!'
     echo "$0 NAMESPACE INGRESS"
@@ -138,8 +141,8 @@ w8_ingress () {
   set +e
   while [[ "$countone_w8_ingress" -lt "$countlimit_w8_ingress" ]]; do
     squawk 1 '.' -n
-    if [[ "$VERBOSITY" -gt "11" ]] ; then
-      squawk 105  "kubectl --kubeconfig=$KUBECONFIG get ingress -n $TARGET_NAMESPACE $ingress_name"
+    if [[ "$VERBOSITY" -gt "11" ]]; then
+      squawk 105 "kubectl --kubeconfig=$KUBECONFIG get ingress -n $TARGET_NAMESPACE $ingress_name"
       kubectl --kubeconfig=$KUBECONFIG get ingress -n $TARGET_NAMESPACE $ingress_name
     fi
     result=$(kubectl --kubeconfig=$KUBECONFIG get ingress -n $TARGET_NAMESPACE $ingress_name)
@@ -154,31 +157,30 @@ w8_ingress () {
     sleep 3
   done
   set -e
-  squawk 3  "."
-  squawk 3  "kubernetes ingress $ingress_name is up in the $TARGET_NAMESPACE namespace"
+  squawk 3 "."
+  squawk 3 "kubernetes ingress $ingress_name is up in the $TARGET_NAMESPACE namespace"
 }
 
-while_loop_wait () {
+while_loop_wait() {
   # while loop
   countone=1
   # timeout for 15 minutes
-  while [ $countone -lt 151 ]
-  do
+  while [ $countone -lt 151 ]; do
     echo -n '.'
     set +e
     RESULT=$(kubectl get po --namespace=$TARGET_NAMESPACE | grep $TARGET_POD | grep Running)
     set -e
     if [ "$RESULT" ]; then
-        echo '.'
-        echo "$RESULT"
-        break
+      echo '.'
+      echo "$RESULT"
+      break
     fi
-    countone=`expr $countone + 1`
+    countone=$(expr $countone + 1)
     sleep 3
   done
 }
 
-w8_pod () {
+w8_pod() {
   if [ $# -ne 2 ]; then
     # Print usage
     echo -n 'Error! wrong number of arguments'

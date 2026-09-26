@@ -1,41 +1,60 @@
 # Architecture
 
-Envsubst is the simple templating method that I started this repo.  Most of the functionality in this repo comes from envsubst interpolating variables from .env into the various files in the argo and init directory.
+Vigilant Octo Waffle provides a local Kubernetes-based development and testing environment designed to simulate production-like setups directly on a local laptop—especially for troubleshooting tricky TLS, ingress, and GitOps workflows.
 
-### src
+## 🚀 Key Capabilities
 
-This was the original directory I started dumping scripts into.  Many of the projects have a named script in here, e.g. supabase.sh
+1. **Local Multi-Service Cluster**: Uses **KinD (Kubernetes in Docker)** or **K3s** to run a full Kubernetes cluster locally.
+2. **True TLS Localhost Testing**: Uses **`mkcert`** to establish a local Certificate Authority (CA) on your laptop. It automatically generates trusted local certificates for custom subdomains (e.g., `https://nextcloud.example.com`) by updating your local `/etc/hosts` file.
+3. **GitOps with ArgoCD**: Automates the deployment of local applications using ArgoCD, aligning closely with production deployment practices.
+4. **App Ecosystem**: Provides integration for a wide variety of self-hosted/cloud-native applications including OpenLDAP, Harbor, Nextcloud, OpenProject, Keycloak, Supabase, Drupal, OpenBAO, and more.
+5. **Storage Provisioning**: Includes **OpenEBS** (tested with LVM local PVs and NFS-based RWX storage).
 
-Notable in here is:
-#### [util.bash](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/util.bash) - 
+---
 
-This is the main library of functions, which includes `initializer`
+## 📁 Codebase Structure & Core Loop
 
-Where you can see how I use envsubst to feed `kubectl apply -f -`:
+Envsubst is the simple templating method that powers this repo. Most of the functionality comes from `envsubst` interpolating variables from `.env` (and `.env.enabler`) into the various files in the `argo` and `init` directories.
 
 ```
+       [.env / .env.enabler]
+                 │
+                 ▼
+          [envsubst template]
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+   [init/ manifests]  [argo/ manifests]
+        │                 │
+        ▼                 ▼
+  kubectl apply       ArgoCD App Create
+```
+
+### 1. `src/` (Utilities & Control Scripts)
+
+This was the original directory for orchestration scripts. Many of the projects have a named script here (e.g., `src/supabase.sh`).
+
+Notable files:
+*   #### [util.bash](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/util.bash)
+    This is the main library of functions, which includes `initializer`. It uses `envsubst` to feed `kubectl apply`:
+    ```bash
     envsubst < ${f} | kubectl apply -f -
-```
+    ```
+*   #### [argoRunner.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/argoRunner.sh)
+    This script unifies the application installations by templating and creating ArgoCD applications:
+    ```bash
+    envsubst < argo/${THIS_THING}/argocd.yaml | argocd app create --name ${THIS_THING} --grpc-web -f -
+    ```
+    For example, in [src/bao.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/bao.sh), we initialize the raw manifests first and then run the ArgoCD application creation:
+    ```bash
+    initializer "${this_cwd}/init/bao"
+    argoRunner "$THIS_THING"
+    ```
 
-#### [argoRunner.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/argoRunner.sh) -
+### 2. `argo/` (ArgoCD Applications)
 
-This file is being used to unify the application scripts themselves where argo is also fed by envsubst:
+This is a directory of ArgoCD applications. Each directory is named after the intended application and contains the YAML file for Argo, and optionally a Helm values file.
 
-```
-envsubst < argo/${THIS_THING}/argocd.yaml | argocd app create --name ${THIS_THING} --grpc-web -f -
-```
+### 3. `init/` (Raw Pre-App Manifests)
 
-and in [src/bao.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/bao.sh) you can see an example of how I am unifying the applications with the above shell scripts:
-
-```
-  initializer "${this_cwd}/init/bao"
-  argoRunner "$THIS_THING"
-```
-
-### argo
-
-This is a directory of argocd applications.  Each directoriy will be named after the intended application and will contain the yaml file for argo, and possibly a helm values file.
-
-### init
-
-This directory is for yaml that gets applied to the cluster, usually an ingress or something that was not included in the argo install.  There is a script `src/initializer.bash` that uses envsubst to apply the env vars and then apply them.
+This directory contains Kubernetes YAML manifests that get applied directly to the cluster (such as an ingress, secret setup, or namespace preparation) before or during the application's Argo installation. The `src/util.bash`'s `initializer` function processes these with `envsubst` and applies them directly.
