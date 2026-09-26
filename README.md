@@ -16,11 +16,37 @@ This project provides a **Kubernetes cluster setup** using [KinD](https://kind.s
 
 ## 🚀 Features
 
-- **Local Kubernetes Cluster**: Spin up a KinD or K3s cluster with a single command.
+- **Next.js Web Control Plane**: Modern, responsive full-stack dashboard for managing clusters, services, and configs.
+- **Local Kubernetes Cluster**: Spin up a KinD or K3s cluster with a single command or web click.
 - **ArgoCD Integration**: Automate application deployments using GitOps principles.
 - **TLS with mkcert**: Generate trusted certificates for local development (e.g., `https://example.com`).
-- **Multi-App Support**: Includes OpenLDAP, Harbor, Nextcloud, OpenProject, and more.
-- **Customizable**: Use `.env` and `.env.enabler` to configure services and enable/disable components.
+- **Multi-App Support**: Includes 45+ open-source applications (OpenLDAP, Harbor, Nextcloud, OpenProject, and more).
+- **Customizable**: Use web Config Studio or `.env` and `.env.enabler` to configure services and toggles.
+
+---
+
+## 🌐 Next.js Web Application & Dashboard
+
+Vigilant Octo Waffle is organized as a **pnpm monorepo** containing:
+- `apps/web`: Next.js 15+ App Router dashboard with live streaming console, catalog, and cluster manager.
+- `packages/orchestrator`: Core TypeScript engine for config parsing, templating, YAML merging, secret generation, and process execution.
+
+### Quick Start with pnpm
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start the Next.js development server
+pnpm dev
+
+# Or build and run for production
+pnpm build
+pnpm start
+```
+
+Visit **`http://localhost:3000`** to access the web control plane.
+
 
 ## Apps
 

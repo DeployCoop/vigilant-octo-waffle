@@ -1,0 +1,18 @@
+services:
+  control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vow-control-plane
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.kube:/root/.kube:ro
+      - ./.env:/app/.env
+      - ./.env.enabler:/app/.env.enabler
+      - ./.secrets:/app/.secrets
+      - ./.argo_overrides:/app/.argo_overrides
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
