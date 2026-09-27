@@ -20,6 +20,9 @@ import {
   Key,
   Ship,
   Archive,
+  Database,
+  ShieldCheck,
+  Cloud,
 } from 'lucide-react';
 
 const navItems = [
@@ -28,6 +31,9 @@ const navItems = [
   { name: 'App Store', href: '/apps', icon: Layers },
   { name: 'Architecture Graph', href: '/topology', icon: Network },
   { name: 'Pod Explorer & Shell', href: '/pods', icon: Boxes },
+  { name: 'Data & DB Studio', href: '/data', icon: Database },
+  { name: 'Security Audit', href: '/security', icon: ShieldCheck },
+  { name: 'Cloud Exporter', href: '/export', icon: Cloud },
   { name: 'Storage & Volumes', href: '/storage', icon: HardDrive },
   { name: 'Credentials Vault', href: '/vault', icon: Key },
   { name: 'Helm Releases', href: '/helm', icon: Ship },
@@ -36,6 +42,7 @@ const navItems = [
   { name: 'TLS & DNS', href: '/certificates', icon: ShieldAlert },
   { name: 'Live Terminal', href: '/terminal', icon: Terminal },
 ];
+
 
 export function Sidebar() {
   const pathname = usePathname();

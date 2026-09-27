@@ -12,6 +12,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Terminal,
+  PlusCircle,
+  MinusCircle,
+  Activity,
 } from 'lucide-react';
 
 interface ClusterData {
@@ -32,11 +35,14 @@ interface ClusterData {
   };
 }
 
+
 export default function ClusterPage() {
   const [cluster, setCluster] = useState<ClusterData | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [scaling, setScaling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [nodeMetrics, setNodeMetrics] = useState<Record<string, { cpu: string; memory: string }>>({});
 
   const fetchCluster = async () => {
     try {
@@ -50,11 +56,60 @@ export default function ClusterPage() {
     }
   };
 
+  const fetchNodeMetrics = async () => {
+    try {
+      const res = await fetch('/api/k8s/metrics?type=node');
+      const data = await res.json();
+      if (data.nodes) {
+        const map: Record<string, { cpu: string; memory: string }> = {};
+        data.nodes.forEach((n: any) => {
+          map[n.nodeName] = {
+            cpu: n.cpuFormatted,
+            memory: n.memoryFormatted,
+          };
+        });
+        setNodeMetrics(map);
+      }
+    } catch {}
+  };
+
+  const handleScaleNodes = async (delta: number) => {
+    setScaling(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/cluster/nodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'scale_k3d',
+          clusterName: cluster?.name || 'vigilant-octo-waffle',
+          delta,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage(data.message || `Scaled cluster nodes by ${delta}`);
+        fetchCluster();
+      } else {
+        setMessage(`Scaling notice: ${data.message || data.error}`);
+      }
+    } catch (err: any) {
+      setMessage(`Scale error: ${err.message}`);
+    } finally {
+      setScaling(false);
+    }
+  };
+
   useEffect(() => {
     fetchCluster();
-    const interval = setInterval(fetchCluster, 6000);
+    fetchNodeMetrics();
+    const interval = setInterval(() => {
+      fetchCluster();
+      fetchNodeMetrics();
+    }, 6000);
     return () => clearInterval(interval);
   }, []);
+
 
   const handleAction = async (action: 'start' | 'stop' | 'up') => {
     if (action === 'stop' && !confirm('Are you sure you want to delete the local cluster?')) return;
@@ -160,45 +215,83 @@ export default function ClusterPage() {
         </div>
       </div>
 
-      {/* Live Nodes Section */}
+      {/* Live Nodes & Scaling Section */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-white">Cluster Nodes</h3>
-            <p className="text-xs text-slate-400">Nodes reported by the active Kubernetes API</p>
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <span>Cluster Nodes & Scaling Simulator</span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              Live nodes from Kubernetes API with dynamic K3d worker scaling and CPU/RAM load metrics
+            </p>
           </div>
-          <span className="text-xs px-2.5 py-1 bg-slate-800 text-slate-300 rounded-md font-mono">
-            {cluster?.telemetry?.nodes?.length || 0} Nodes
-          </span>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handleScaleNodes(-1)}
+              disabled={scaling}
+              className="text-xs px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 rounded-lg flex items-center space-x-1.5 disabled:opacity-40 transition cursor-pointer"
+              title="Scale down K3d worker agent node"
+            >
+              <MinusCircle className="w-3.5 h-3.5 text-rose-400" />
+              <span>-1 Worker</span>
+            </button>
+            <button
+              onClick={() => handleScaleNodes(1)}
+              disabled={scaling}
+              className="text-xs px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg flex items-center space-x-1.5 disabled:opacity-40 transition font-medium cursor-pointer"
+              title="Add simulated K3d worker agent node"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+1 Worker</span>
+            </button>
+            <span className="text-xs px-2.5 py-1.5 bg-slate-800 text-slate-300 rounded-md font-mono">
+              {cluster?.telemetry?.nodes?.length || 0} Nodes
+            </span>
+          </div>
         </div>
 
         <div className="divide-y divide-slate-800/60">
           {cluster?.telemetry?.nodes && cluster.telemetry.nodes.length > 0 ? (
-            cluster.telemetry.nodes.map((node) => (
-              <div key={node.name} className="p-4 flex items-center justify-between hover:bg-slate-800/30">
-                <div className="flex items-center space-x-3">
-                  <Cpu className="w-5 h-5 text-sky-400" />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-200">{node.name}</div>
-                    <div className="text-xs text-slate-400 flex items-center space-x-2">
-                      <span>Roles: {node.roles.join(', ')}</span>
+            cluster.telemetry.nodes.map((node) => {
+              const metrics = nodeMetrics[node.name];
+
+              return (
+                <div key={node.name} className="p-4 flex items-center justify-between hover:bg-slate-800/30">
+                  <div className="flex items-center space-x-3">
+                    <Cpu className="w-5 h-5 text-sky-400" />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-200">{node.name}</div>
+                      <div className="text-xs text-slate-400 flex items-center space-x-2">
+                        <span>Roles: {node.roles.join(', ')}</span>
+                        {node.age && <span>• Age: {node.age}</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center space-x-2">
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                      node.status === 'Ready'
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                    }`}
-                  >
-                    {node.status}
-                  </span>
+                  <div className="flex items-center space-x-4">
+                    {metrics && (
+                      <div className="text-xs font-mono text-slate-400 flex items-center space-x-2 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+                        <Activity className="w-3 h-3 text-sky-400" />
+                        <span>CPU: {metrics.cpu}</span>
+                        <span className="text-slate-600">|</span>
+                        <span>RAM: {metrics.memory}</span>
+                      </div>
+                    )}
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                        node.status === 'Ready'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      }`}
+                    >
+                      {node.status}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="p-8 text-center text-sm text-slate-500">
               No nodes detected. The cluster may be stopped or not yet initialized.
@@ -206,6 +299,7 @@ export default function ClusterPage() {
           )}
         </div>
       </div>
+
     </div>
   );
 }

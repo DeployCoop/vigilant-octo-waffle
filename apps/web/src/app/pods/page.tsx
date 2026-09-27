@@ -15,6 +15,10 @@ import {
   Code,
   Send,
   Trash2,
+  Sparkles,
+  Cpu,
+  Activity,
+  Wrench,
 } from 'lucide-react';
 
 interface ContainerInfo {
@@ -22,6 +26,26 @@ interface ContainerInfo {
   image: string;
   ready: boolean;
   restartCount: number;
+}
+
+interface PodMetric {
+  podName: string;
+  namespace: string;
+  cpuFormatted: string;
+  memoryFormatted: string;
+}
+
+interface AIDiagnosis {
+  podName: string;
+  namespace: string;
+  status: string;
+  summary: string;
+  rootCause: string;
+  recommendations: string[];
+  confidence: number;
+  provider: string;
+  eventsSnippet?: string;
+  recentLogs?: string;
 }
 
 interface PodInfo {
@@ -36,11 +60,21 @@ interface PodInfo {
   containers: ContainerInfo[];
 }
 
+
 export default function PodsPage() {
   const [pods, setPods] = useState<PodInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNamespace, setSelectedNamespace] = useState('all');
   const [search, setSearch] = useState('');
+
+  // Metrics state
+  const [metricsMap, setMetricsMap] = useState<Record<string, { cpu: string; memory: string }>>({});
+
+  // AI Diagnostic state
+  const [activeDiagnosePod, setActiveDiagnosePod] = useState<PodInfo | null>(null);
+  const [aiDiagnosis, setAiDiagnosis] = useState<AIDiagnosis | null>(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Log viewer state
   const [activeLogPod, setActiveLogPod] = useState<PodInfo | null>(null);
@@ -69,12 +103,55 @@ export default function PodsPage() {
       const res = await fetch(url);
       const data = await res.json();
       setPods(data.pods || []);
+
+      // Fetch live metrics
+      fetch('/api/k8s/metrics?type=pod')
+        .then((r) => r.json())
+        .then((m) => {
+          if (m.pods) {
+            const map: Record<string, { cpu: string; memory: string }> = {};
+            m.pods.forEach((p: any) => {
+              map[`${p.namespace}/${p.podName}`] = {
+                cpu: p.cpuFormatted,
+                memory: p.memoryFormatted,
+              };
+            });
+            setMetricsMap(map);
+          }
+        })
+        .catch(() => {});
     } catch {
       // offline
     } finally {
       setLoading(false);
     }
   };
+
+  const openAiDiagnose = async (pod: PodInfo) => {
+    setActiveDiagnosePod(pod);
+    setLoadingAi(true);
+    setAiError(null);
+    setAiDiagnosis(null);
+
+    try {
+      const res = await fetch('/api/ai/diagnose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          podName: pod.name,
+          namespace: pod.namespace,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Diagnostic failed');
+      setAiDiagnosis(data);
+    } catch (err: any) {
+      setAiError(err.message || 'AI diagnostic encountered an error');
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
 
   useEffect(() => {
     fetchPods();
@@ -308,6 +385,7 @@ export default function PodsPage() {
                 <th className="px-5 py-3 font-semibold">Namespace</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
                 <th className="px-5 py-3 font-semibold">Ready</th>
+                <th className="px-5 py-3 font-semibold">CPU / Mem</th>
                 <th className="px-5 py-3 font-semibold">Restarts</th>
                 <th className="px-5 py-3 font-semibold">Node</th>
                 <th className="px-5 py-3 font-semibold text-right">Actions</th>
@@ -316,7 +394,7 @@ export default function PodsPage() {
             <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
               {filteredPods.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-slate-500">
+                  <td colSpan={8} className="px-5 py-8 text-center text-slate-500">
                     No pods found matching query.
                   </td>
                 </tr>
@@ -324,6 +402,7 @@ export default function PodsPage() {
                 filteredPods.map((pod) => {
                   const isRunning = pod.status === 'Running';
                   const isCompleted = pod.status === 'Completed';
+                  const metric = metricsMap[`${pod.namespace}/${pod.name}`];
 
                   return (
                     <tr key={`${pod.namespace}/${pod.name}`} className="hover:bg-slate-800/40 transition-colors">
@@ -347,6 +426,18 @@ export default function PodsPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-slate-300">{pod.ready}</td>
+                      <td className="px-5 py-3.5 text-slate-400">
+                        {metric ? (
+                          <span className="inline-flex items-center space-x-1 text-[11px] text-sky-400">
+                            <Cpu className="w-3 h-3 text-slate-500" />
+                            <span>{metric.cpu}</span>
+                            <span className="text-slate-600">/</span>
+                            <span>{metric.memory}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-600 text-[11px]">--</span>
+                        )}
+                      </td>
                       <td className="px-5 py-3.5">
                         <span className={pod.restarts > 0 ? 'text-amber-400 font-bold' : 'text-slate-500'}>
                           {pod.restarts}
@@ -356,8 +447,16 @@ export default function PodsPage() {
                       <td className="px-5 py-3.5 text-right font-sans">
                         <div className="inline-flex items-center space-x-1.5">
                           <button
+                            onClick={() => openAiDiagnose(pod)}
+                            className="px-2 py-1 bg-purple-950/70 hover:bg-purple-600 hover:text-white text-purple-300 border border-purple-800/50 rounded transition-colors text-xs inline-flex items-center space-x-1 cursor-pointer"
+                            title="AI Incident Diagnostic Copilot"
+                          >
+                            <Sparkles className="w-3 h-3 text-purple-400" />
+                            <span>Diagnose</span>
+                          </button>
+                          <button
                             onClick={() => openLogViewer(pod)}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-sky-600 hover:text-white text-slate-300 border border-slate-700 rounded transition-colors text-xs inline-flex items-center space-x-1"
+                            className="px-2 py-1 bg-slate-800 hover:bg-sky-600 hover:text-white text-slate-300 border border-slate-700 rounded transition-colors text-xs inline-flex items-center space-x-1"
                             title="View Pod Stdout/Stderr Logs"
                           >
                             <Terminal className="w-3 h-3" />
@@ -366,7 +465,7 @@ export default function PodsPage() {
                           <button
                             onClick={() => openExecShell(pod)}
                             disabled={!isRunning}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-300 border border-slate-700 rounded transition-colors text-xs inline-flex items-center space-x-1 disabled:opacity-40"
+                            className="px-2 py-1 bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-300 border border-slate-700 rounded transition-colors text-xs inline-flex items-center space-x-1 disabled:opacity-40"
                             title={isRunning ? 'Open Interactive Shell in Container' : 'Pod must be Running to exec'}
                           >
                             <Code className="w-3 h-3" />
@@ -378,6 +477,7 @@ export default function PodsPage() {
                   );
                 })
               )}
+
             </tbody>
           </table>
         </div>
@@ -570,6 +670,126 @@ export default function PodsPage() {
           </div>
         </div>
       )}
+
+      {/* AI Incident Diagnostic Copilot Modal Drawer */}
+      {activeDiagnosePod && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-950 border border-purple-800/50 rounded-xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-sm font-bold text-white font-mono">{activeDiagnosePod.name}</h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800/40">
+                      OctoPilot AI
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">Namespace: {activeDiagnosePod.namespace}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => openAiDiagnose(activeDiagnosePod)}
+                  disabled={loadingAi}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 cursor-pointer"
+                  title="Re-run Diagnostic"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingAi ? 'animate-spin text-purple-400' : ''}`} />
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveDiagnosePod(null);
+                    setAiDiagnosis(null);
+                  }}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded border border-slate-700 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 p-6 overflow-y-auto space-y-6">
+              {loadingAi ? (
+                <div className="p-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center space-y-3">
+                  <RefreshCw className="w-6 h-6 animate-spin text-purple-400" />
+                  <span className="text-slate-300 font-medium">Gathering pod logs, K8s events, and running AI diagnostic...</span>
+                  <span className="text-slate-500 text-[11px]">Connecting to in-cluster Ollama LLM / Diagnostic Engine</span>
+                </div>
+              ) : aiError ? (
+                <div className="bg-rose-950/30 border border-rose-800/50 rounded-xl p-4 text-xs text-rose-300 flex items-start space-x-3">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">Diagnostic Failure:</span>
+                    <p className="mt-1 font-mono">{aiError}</p>
+                  </div>
+                </div>
+              ) : aiDiagnosis ? (
+                <div className="space-y-6">
+                  {/* Provider & Confidence pill */}
+                  <div className="flex items-center justify-between bg-slate-900/60 p-3 rounded-lg border border-slate-800 text-xs">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-400">Diagnosis Engine:</span>
+                      <span className="font-mono text-purple-300">{aiDiagnosis.provider}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-400">Confidence:</span>
+                      <span className="font-semibold text-emerald-400">{Math.round(aiDiagnosis.confidence * 100)}%</span>
+                    </div>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-1.5">
+                    <span className="text-xs uppercase font-bold text-slate-400 tracking-wider">Executive Summary</span>
+                    <p className="text-sm text-slate-200 leading-relaxed">{aiDiagnosis.summary}</p>
+                  </div>
+
+                  {/* Root Cause */}
+                  <div className="bg-purple-950/20 p-4 rounded-xl border border-purple-800/30 space-y-1.5">
+                    <span className="text-xs uppercase font-bold text-purple-400 tracking-wider flex items-center space-x-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Probable Root Cause</span>
+                    </span>
+                    <p className="text-sm text-purple-200 leading-relaxed font-mono">{aiDiagnosis.rootCause}</p>
+                  </div>
+
+                  {/* Recommended Actions */}
+                  <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <span className="text-xs uppercase font-bold text-emerald-400 tracking-wider flex items-center space-x-1.5">
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Recommended Remediation Steps</span>
+                    </span>
+                    <ul className="space-y-2 pt-1">
+                      {aiDiagnosis.recommendations.map((rec, i) => (
+                        <li key={i} className="flex items-start space-x-2 text-xs text-slate-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                          <span className="font-mono">{rec}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Diagnostic Context / Snippets */}
+                  {aiDiagnosis.eventsSnippet && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-semibold text-slate-400">Kubernetes Events Context</span>
+                      <pre className="p-3 bg-black rounded-lg border border-slate-800 font-mono text-[11px] text-slate-400 overflow-x-auto max-h-40">
+                        {aiDiagnosis.eventsSnippet}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

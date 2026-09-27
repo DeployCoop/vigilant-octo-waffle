@@ -21,7 +21,9 @@ import {
   Plus,
   X,
   Activity,
+  Zap,
 } from 'lucide-react';
+
 
 interface AppItem {
   id: string;
@@ -225,6 +227,29 @@ export default function AppsPage() {
     }
   };
 
+  const handleInstantSync = async (appId?: string) => {
+    if (appId) setUpdatingId(appId);
+    setActionMessage(appId ? `Dispatching hard refresh for ${appId}...` : 'Dispatching Git push webhook to ArgoCD...');
+    try {
+      const res = await fetch('/api/argo/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(appId ? { action: 'accelerate', appName: appId, hardRefresh: true } : { action: 'webhook' }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error);
+      setActionMessage(data.message || 'Hard refresh initiated! Sub-second sync completed.');
+      setTimeout(() => setActionMessage(null), 4000);
+      fetchTelemetry();
+    } catch (err: any) {
+      setActionMessage(`Instant sync error: ${err.message}`);
+      setTimeout(() => setActionMessage(null), 5000);
+    } finally {
+      if (appId) setUpdatingId(null);
+    }
+  };
+
+
   const handleCreateCustomApp = async () => {
     if (!customName.trim() || !customRepo.trim()) return;
     setSubmittingCustom(true);
@@ -299,8 +324,16 @@ export default function AppsPage() {
 
         <div className="flex items-center space-x-3">
           <button
+            onClick={() => handleInstantSync()}
+            className="px-3 py-1.5 bg-amber-600/90 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+            title="Trigger synthetic Git push webhook to accelerate ArgoCD sync"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Dispatch Webhook</span>
+          </button>
+          <button
             onClick={() => setShowAddModal(true)}
-            className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
+            className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Custom App</span>
@@ -309,6 +342,7 @@ export default function AppsPage() {
             {enabledApps.length} Enabled / {apps.length} Total
           </span>
         </div>
+
       </div>
 
       {/* Laptop Profiler & Memory Estimator Bar */}
@@ -558,15 +592,27 @@ export default function AppsPage() {
                   )}
                 </div>
 
-                <button
-                  onClick={() => handleDeploy(app)}
-                  disabled={updatingId === app.id || !app.enabled}
-                  className="text-xs px-2.5 py-1.5 bg-slate-800 hover:bg-sky-600 hover:text-white text-slate-300 border border-slate-700 rounded-md transition-colors flex items-center space-x-1.5 disabled:opacity-40 disabled:hover:bg-slate-800"
-                >
-                  <Play className="w-3 h-3" />
-                  <span>Deploy / Sync</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleInstantSync(app.id)}
+                    disabled={updatingId === app.id || !app.enabled}
+                    className="text-xs px-2.5 py-1.5 bg-amber-950/70 hover:bg-amber-600 hover:text-white text-amber-300 border border-amber-800/60 rounded-md transition-colors flex items-center space-x-1.5 disabled:opacity-40 disabled:hover:bg-amber-950/70 cursor-pointer"
+                    title="Sub-Second Hard Refresh & Git Sync"
+                  >
+                    <Zap className="w-3 h-3 text-amber-400" />
+                    <span>Instant Sync</span>
+                  </button>
+                  <button
+                    onClick={() => handleDeploy(app)}
+                    disabled={updatingId === app.id || !app.enabled}
+                    className="text-xs px-2.5 py-1.5 bg-slate-800 hover:bg-sky-600 hover:text-white text-slate-300 border border-slate-700 rounded-md transition-colors flex items-center space-x-1.5 disabled:opacity-40 disabled:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <Play className="w-3 h-3" />
+                    <span>Deploy</span>
+                  </button>
+                </div>
               </div>
+
             </div>
           );
         })}
