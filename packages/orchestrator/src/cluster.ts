@@ -87,17 +87,25 @@ export class ClusterOrchestrator {
   /**
    * Tears down the cluster
    */
-  public stopCluster(): TaskRun {
+  public stopCluster(platformOverride?: 'kind' | 'k3d' | 'k3s', clusterName?: string): TaskRun {
     const config = loadProjectConfig(this.projectRoot);
-    const platform = config.cluster.k8sPlatform;
+    const platform = platformOverride || config.cluster.k8sPlatform;
 
     if (platform === 'kind') {
-      return processManager.runCommand('kind', ['delete', 'cluster'], {
+      const args = ['delete', 'cluster'];
+      if (clusterName) {
+        args.push('--name', clusterName);
+      }
+      return processManager.runCommand('kind', args, {
         cwd: this.projectRoot,
         env: config.raw,
       });
     } else if (platform === 'k3d') {
-      return processManager.runCommand('k3d', ['cluster', 'delete'], {
+      const args = ['cluster', 'delete'];
+      if (clusterName) {
+        args.push(clusterName);
+      }
+      return processManager.runCommand('k3d', args, {
         cwd: this.projectRoot,
         env: config.raw,
       });

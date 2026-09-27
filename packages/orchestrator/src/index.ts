@@ -8,3 +8,12 @@ export * from './executor.js';
 export * from './cluster.js';
 export * from './argocd.js';
 export * from './k8s.js';
+export * from './dependencies.js';
+export * from './profiles.js';
+export * from './exec.js';
+export * from './health.js';
+export * from './topology.js';
+export * from './scaffold.js';
+export * from './helm.js';
+export * from './backup.js';
+

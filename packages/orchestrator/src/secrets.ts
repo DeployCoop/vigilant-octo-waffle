@@ -131,3 +131,99 @@ export function saveClusterSecrets(
 
   return { secretPath, keyPath };
 }
+
+export interface SecretVaultItem {
+  key: string;
+  category: 'Admin Passwords' | 'Databases' | 'Tokens & Keys' | 'SMTP & Mail';
+  targetApp: string;
+  kubernetesSecret: string;
+  namespace: string;
+  value: string;
+  masked: string;
+  loginSubdomain?: string;
+}
+
+/**
+ * Reads existing generated secrets or generates them dynamically, and maps them to apps
+ */
+export function listClusterSecrets(projectRoot: string, domain = '127.0.0.1.sslip.io'): SecretVaultItem[] {
+  const secretsDir = path.join(projectRoot, '.secrets');
+  const secretYamlPath = path.join(secretsDir, 'cluster-secrets.yaml');
+
+  let items: Record<string, string> = {};
+
+  if (fs.existsSync(secretYamlPath)) {
+    try {
+      const content = fs.readFileSync(secretYamlPath, 'utf-8');
+      // Read data: key: base64
+      const lines = content.split('\n');
+      let inData = false;
+      for (const line of lines) {
+        if (line.trim() === 'data:') {
+          inData = true;
+          continue;
+        }
+        if (inData && line.startsWith('  ') && line.includes(':')) {
+          const parts = line.trim().split(':');
+          const k = parts[0].trim();
+          const b64 = parts[1].trim();
+          items[k] = Buffer.from(b64, 'base64').toString('utf-8');
+        } else if (inData && !line.startsWith('  ') && line.trim()) {
+          inData = false;
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // If no secrets generated yet, provide default template
+  if (Object.keys(items).length === 0) {
+    const generated = generateClusterSecrets({ domainName: domain });
+    items = generated.items;
+  }
+
+  const appMappings: Record<string, { app: string; category: SecretVaultItem['category']; sub?: string }> = {
+    'argocdadmin-password': { app: 'ArgoCD', category: 'Admin Passwords', sub: 'argocd' },
+    'collabora-username': { app: 'Collabora Office', category: 'Admin Passwords', sub: 'collabora' },
+    'collabora-password': { app: 'Collabora Office', category: 'Admin Passwords', sub: 'collabora' },
+    'db-admin-pass': { app: 'PostgreSQL Root', category: 'Databases' },
+    'nc-db-password': { app: 'Nextcloud DB', category: 'Databases' },
+    'nc-db-hostname': { app: 'Nextcloud DB Host', category: 'Databases' },
+    'nc-db-name': { app: 'Nextcloud DB Name', category: 'Databases' },
+    'nc-db-username': { app: 'Nextcloud DB User', category: 'Databases' },
+    'nextcloud-username': { app: 'Nextcloud Admin', category: 'Admin Passwords', sub: 'nextcloud' },
+    'nextcloud-password': { app: 'Nextcloud Admin', category: 'Admin Passwords', sub: 'nextcloud' },
+    'nextcloud-token': { app: 'Nextcloud Secret Token', category: 'Tokens & Keys' },
+    'op-db-password': { app: 'OpenProject DB', category: 'Databases' },
+    'airflow-db-password': { app: 'Apache Airflow DB', category: 'Databases' },
+    'redis-pass': { app: 'Redis Cache', category: 'Databases' },
+    'replicationUserPassword': { app: 'PostgreSQL Replication', category: 'Databases' },
+    'smtp-username': { app: 'SMTP Mailer', category: 'SMTP & Mail' },
+    'smtp-password': { app: 'SMTP Mailer', category: 'SMTP & Mail' },
+    'smtp-host': { app: 'SMTP Mailer Host', category: 'SMTP & Mail' },
+    'HARBOR_ADMIN_PASSWORD': { app: 'Harbor Registry', category: 'Admin Passwords', sub: 'harbor' },
+    'OPENSEARCH_INITIAL_ADMIN_PASSWORD': { app: 'OpenSearch', category: 'Admin Passwords', sub: 'opensearch' },
+  };
+
+  const results: SecretVaultItem[] = [];
+
+  for (const [k, v] of Object.entries(items)) {
+    const meta = appMappings[k] || { app: 'Cluster', category: 'Tokens & Keys' };
+    const masked = v.length > 4 ? `${v.substring(0, 2)}${'•'.repeat(Math.min(16, v.length - 4))}${v.substring(v.length - 2)}` : '••••••••';
+
+    results.push({
+      key: k,
+      category: meta.category,
+      targetApp: meta.app,
+      kubernetesSecret: 'cluster-secrets',
+      namespace: 'default',
+      value: v,
+      masked,
+      loginSubdomain: meta.sub,
+    });
+  }
+
+  return results;
+}
+

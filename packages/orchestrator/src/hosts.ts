@@ -57,6 +57,31 @@ export const DEFAULT_SUBDOMAINS = [
   'vigil',
 ];
 
+export type DnsMode = 'sslip' | 'nip' | 'hosts' | 'custom';
+
+/**
+ * Returns wildcard domain (e.g. 127.0.0.1.sslip.io or 127.0.0.1.nip.io)
+ */
+export function getWildcardDomain(mode: 'sslip' | 'nip' = 'sslip', ip = '127.0.0.1'): string {
+  return `${ip}.${mode}.io`;
+}
+
+/**
+ * Formats a subdomain for a given domain and mode
+ */
+export function formatIngressHostname(
+  subdomain: string,
+  domain: string,
+  mode: DnsMode = 'hosts',
+  ip = '127.0.0.1'
+): string {
+  if (mode === 'sslip' || mode === 'nip') {
+    const base = getWildcardDomain(mode, ip);
+    return subdomain ? `${subdomain}.${base}` : base;
+  }
+  return subdomain ? `${subdomain}.${domain}` : domain;
+}
+
 export function getFullHostnames(domain: string): string[] {
   return DEFAULT_SUBDOMAINS.map((sub) => (sub ? `${sub}.${domain}` : domain));
 }
@@ -99,6 +124,22 @@ export function generateCloudflareRecords(domain: string, targetIps: string[]): 
   }
 
   return blocks.join('\n');
+}
+
+/**
+ * Generates CoreDNS Corefile snippet for fully offline wildcard DNS
+ */
+export function generateCoreDnsConfig(domain = 'example.com', ip = '127.0.0.1'): string {
+  return `.:53 {
+    forward . 8.8.8.8 1.1.1.1
+    template IN A ${domain} {
+        match .*\\.${domain.replace('.', '\\.')}
+        answer "{{ .Name }} 60 IN A ${ip}"
+        fallthrough
+    }
+    log
+    errors
+}`;
 }
 
 /**

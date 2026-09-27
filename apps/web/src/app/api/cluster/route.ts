@@ -11,8 +11,20 @@ export async function GET() {
     const k8s = new K8sClient();
     const telemetry = await k8s.getTelemetry();
 
+    const effectivePlatform =
+      telemetry.isConnected && telemetry.detectedPlatform !== 'unknown'
+        ? telemetry.detectedPlatform
+        : status.platform;
+
+    const effectiveName =
+      telemetry.isConnected && telemetry.detectedClusterName
+        ? telemetry.detectedClusterName
+        : status.name;
+
     return NextResponse.json({
       ...status,
+      platform: effectivePlatform,
+      name: effectiveName,
       isRunning: telemetry.isConnected,
       telemetry,
     });
@@ -48,7 +60,15 @@ export async function DELETE() {
   try {
     const root = getProjectRoot();
     const orchestrator = new ClusterOrchestrator(root);
-    const task = orchestrator.stopCluster();
+
+    const k8s = new K8sClient();
+    const telemetry = await k8s.getTelemetry();
+    const activePlatform =
+      telemetry.isConnected && telemetry.detectedPlatform !== 'unknown'
+        ? telemetry.detectedPlatform
+        : undefined;
+
+    const task = orchestrator.stopCluster(activePlatform, telemetry.detectedClusterName || undefined);
 
     return NextResponse.json({
       success: true,

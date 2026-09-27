@@ -20,6 +20,16 @@ export interface AppDefinition {
   port?: number;
   docsUrl?: string;
   icon?: string; // lucide icon name
+  estimatedMemoryMb?: number;
+  dependencies?: string[];
+}
+
+export interface DeploymentPreset {
+  id: string;
+  name: string;
+  description: string;
+  estimatedMemoryMb: number;
+  apps: string[];
 }
 
 export const APP_CATALOG: AppDefinition[] = [
@@ -35,6 +45,7 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://argo-cd.readthedocs.io/',
     icon: 'GitBranch',
+    estimatedMemoryMb: 512,
   },
   {
     id: 'goharbor',
@@ -47,6 +58,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://goharbor.io/docs/',
     icon: 'Container',
+    estimatedMemoryMb: 1024,
+    dependencies: ['kubegres'],
   },
   {
     id: 'rancher',
@@ -59,6 +72,7 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://rancher.com/docs/',
     icon: 'LayoutGrid',
+    estimatedMemoryMb: 1536,
   },
   {
     id: 'velero',
@@ -69,6 +83,7 @@ export const APP_CATALOG: AppDefinition[] = [
     argoPath: 'argo/velero',
     docsUrl: 'https://velero.io/docs/',
     icon: 'Archive',
+    estimatedMemoryMb: 256,
   },
   {
     id: 'spegel',
@@ -80,6 +95,7 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'spegel',
     docsUrl: 'https://spegel.dev/',
     icon: 'Share2',
+    estimatedMemoryMb: 128,
   },
   {
     id: 'nextjs-docker',
@@ -91,6 +107,7 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'nextjsdocker',
     port: 443,
     icon: 'AppWindow',
+    estimatedMemoryMb: 256,
   },
 
   // Security & Identity
@@ -106,6 +123,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://www.keycloak.org/documentation',
     icon: 'ShieldCheck',
+    estimatedMemoryMb: 1024,
+    dependencies: ['kubegres'],
   },
   {
     id: 'bao',
@@ -119,6 +138,7 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://openbao.org/docs/',
     icon: 'KeyRound',
+    estimatedMemoryMb: 256,
   },
   {
     id: 'openldap',
@@ -131,6 +151,7 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://www.openldap.org/doc/',
     icon: 'Users',
+    estimatedMemoryMb: 256,
   },
   {
     id: 'certmanager',
@@ -141,6 +162,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/certmanager-mkcert',
     docsUrl: 'https://cert-manager.io/docs/',
     icon: 'Lock',
+    estimatedMemoryMb: 256,
   },
 
   // Databases & Storage
@@ -153,6 +175,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/kubegres',
     docsUrl: 'https://www.kubegres.io/',
     icon: 'Database',
+    estimatedMemoryMb: 512,
   },
   {
     id: 'mariadb-operator',
@@ -164,6 +187,7 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'mariadb-operator',
     docsUrl: 'https://mariadb.com/kb/en/mariadb-kubernetes-operator/',
     icon: 'Database',
+    estimatedMemoryMb: 384,
   },
   {
     id: 'minio-tenant',
@@ -177,6 +201,7 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://min.io/docs/minio/kubernetes/upstream/',
     icon: 'HardDrive',
+    estimatedMemoryMb: 512,
   },
   {
     id: 'seaweedfs',
@@ -188,6 +213,7 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'seaweedfs',
     docsUrl: 'https://github.com/seaweedfs/seaweedfs',
     icon: 'Layers',
+    estimatedMemoryMb: 512,
   },
   {
     id: 'openebs',
@@ -199,6 +225,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/openebs',
     docsUrl: 'https://openebs.io/docs',
     icon: 'Server',
+    estimatedMemoryMb: 512,
   },
   {
     id: 'rook-ceph-operator',
@@ -210,6 +237,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/pre-rook-ceph-operator',
     docsUrl: 'https://rook.io/docs/rook/latest/',
     icon: 'Cpu',
+    estimatedMemoryMb: 1024,
   },
   {
     id: 'supabase',
@@ -223,6 +251,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://supabase.com/docs',
     icon: 'Zap',
+    estimatedMemoryMb: 1024,
+    dependencies: ['kubegres'],
   },
   {
     id: 'trino',
@@ -234,6 +264,7 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'trino',
     docsUrl: 'https://trino.io/docs/current/',
     icon: 'Search',
+    estimatedMemoryMb: 1024,
   },
 
   // Observability & Monitoring
@@ -248,6 +279,7 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://prometheus-community.github.io/helm-charts/',
     icon: 'LineChart',
+    estimatedMemoryMb: 1536,
   },
   {
     id: 'opensearch',
@@ -260,6 +292,7 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://opensearch.org/docs/latest/',
     icon: 'SearchCode',
+    estimatedMemoryMb: 2048,
   },
   {
     id: 'kubeshark',
@@ -272,6 +305,7 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://docs.kubeshark.co/',
     icon: 'Radio',
+    estimatedMemoryMb: 512,
   },
   {
     id: 'opentelemetry-operator',
@@ -283,6 +317,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/opentelemetry-operator',
     docsUrl: 'https://opentelemetry.io/docs/',
     icon: 'Activity',
+    estimatedMemoryMb: 256,
   },
   {
     id: 'fluent-bit',
@@ -293,6 +328,7 @@ export const APP_CATALOG: AppDefinition[] = [
     argoPath: 'argo/fluent-bit',
     docsUrl: 'https://fluentbit.io/documentation/',
     icon: 'FileText',
+    estimatedMemoryMb: 128,
   },
   {
     id: 'sloth',
@@ -304,6 +340,7 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'sloth',
     docsUrl: 'https://sloth.dev/',
     icon: 'Gauge',
+    estimatedMemoryMb: 128,
   },
   {
     id: 'vigil',
@@ -315,6 +352,7 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'vigil',
     docsUrl: 'https://github.com/valeriansaliou/vigil',
     icon: 'BellRing',
+    estimatedMemoryMb: 128,
   },
 
   // Collaboration & Business
@@ -329,6 +367,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://docs.nextcloud.com/',
     icon: 'Cloud',
+    estimatedMemoryMb: 1024,
+    dependencies: ['kubegres', 'openebs'],
   },
   {
     id: 'openproject',
@@ -341,6 +381,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://www.openproject.org/docs/',
     icon: 'CheckSquare',
+    estimatedMemoryMb: 1024,
+    dependencies: ['kubegres'],
   },
   {
     id: 'drupal',
@@ -353,6 +395,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://www.drupal.org/docs',
     icon: 'FileCode',
+    estimatedMemoryMb: 512,
+    dependencies: ['mariadb-operator'],
   },
   {
     id: 'fossbilling',
@@ -366,6 +410,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://fossbilling.org/docs',
     icon: 'CreditCard',
+    estimatedMemoryMb: 256,
+    dependencies: ['mariadb-operator'],
   },
   {
     id: 'opencti',
@@ -379,6 +425,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://docs.opencti.io/',
     icon: 'ShieldAlert',
+    estimatedMemoryMb: 1024,
+    dependencies: ['opensearch', 'minio-tenant'],
   },
   {
     id: 'resourcespace',
@@ -391,6 +439,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://www.resourcespace.com/knowledge-base/',
     icon: 'Image',
+    estimatedMemoryMb: 512,
+    dependencies: ['mariadb-operator'],
   },
 
   // AI, ML & GPU
@@ -404,6 +454,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/kubeflow',
     docsUrl: 'https://www.kubeflow.org/docs/',
     icon: 'Sparkles',
+    estimatedMemoryMb: 4096,
   },
   {
     id: 'gpu-operator',
@@ -415,6 +466,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/pre-gpu-operator',
     docsUrl: 'https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/',
     icon: 'Cpu',
+    estimatedMemoryMb: 512,
   },
   {
     id: 'cvat',
@@ -427,6 +479,8 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://opencv.github.io/cvat/docs/',
     icon: 'Video',
+    estimatedMemoryMb: 1024,
+    dependencies: ['kubegres'],
   },
   {
     id: 'node-feature-discovery',
@@ -438,6 +492,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/pre-node-feature-discovery',
     docsUrl: 'https://kubernetes-sigs.github.io/node-feature-discovery/',
     icon: 'Microchip',
+    estimatedMemoryMb: 128,
   },
 
   // Messaging & IoT
@@ -451,6 +506,7 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'ar80-mosquitto',
     docsUrl: 'https://mosquitto.org/documentation/',
     icon: 'RadioTower',
+    estimatedMemoryMb: 128,
   },
   {
     id: 'vmq-operator',
@@ -462,6 +518,7 @@ export const APP_CATALOG: AppDefinition[] = [
     initPath: 'init/vmq-operator',
     docsUrl: 'https://vernemq.com/docs/',
     icon: 'Share2',
+    estimatedMemoryMb: 256,
   },
   {
     id: 'airflow',
@@ -474,5 +531,52 @@ export const APP_CATALOG: AppDefinition[] = [
     port: 443,
     docsUrl: 'https://airflow.apache.org/docs/',
     icon: 'Workflow',
+    estimatedMemoryMb: 1536,
+    dependencies: ['kubegres'],
+  },
+];
+
+export const DEPLOYMENT_PRESETS: DeploymentPreset[] = [
+  {
+    id: 'minimal',
+    name: 'Core / Minimal',
+    description: 'ArgoCD + Ingress + Cert-Manager (Ideal for low-resource laptops)',
+    estimatedMemoryMb: 1536,
+    apps: ['argocd', 'certmanager'],
+  },
+  {
+    id: 'storage',
+    name: 'Dev & Storage',
+    description: 'Core + PostgreSQL (Kubegres) + MinIO S3 + OpenEBS',
+    estimatedMemoryMb: 3584,
+    apps: ['argocd', 'certmanager', 'kubegres', 'minio-tenant', 'openebs'],
+  },
+  {
+    id: 'observability',
+    name: 'Observability Stack',
+    description: 'Core + Prometheus, Grafana, OpenSearch & Dashboards, Sloth, Vigil',
+    estimatedMemoryMb: 6144,
+    apps: ['argocd', 'certmanager', 'kube-prometheus-stack', 'opensearch', 'sloth', 'vigil'],
+  },
+  {
+    id: 'ai',
+    name: 'AI & Machine Learning',
+    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery',
+    estimatedMemoryMb: 9216,
+    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery'],
+  },
+  {
+    id: 'collaboration',
+    name: 'Productivity & Business',
+    description: 'Core + Nextcloud, OpenProject, Drupal CMS, Keycloak IAM',
+    estimatedMemoryMb: 6144,
+    apps: ['argocd', 'certmanager', 'kubegres', 'openebs', 'keycloak', 'nextcloud', 'openproject', 'drupal'],
+  },
+  {
+    id: 'full',
+    name: 'Full Suite',
+    description: 'All 45+ applications and operators (High-memory workstation / 32GB+ RAM)',
+    estimatedMemoryMb: 24576,
+    apps: APP_CATALOG.map((a) => a.id),
   },
 ];

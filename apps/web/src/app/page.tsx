@@ -15,10 +15,14 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
+  Boxes,
+  HardDrive,
+  Cpu,
 } from 'lucide-react';
 
 interface ClusterInfo {
   platform: string;
+  name?: string;
   isRunning: boolean;
   ingress: string;
   clusterIssuer: string;
@@ -187,7 +191,7 @@ export default function DashboardPage() {
             <Server className="w-4 h-4 text-sky-400" />
           </div>
           <div className="flex items-baseline space-x-2">
-            <span className="text-2xl font-bold text-white capitalize">
+            <span className="text-2xl font-bold text-white uppercase">
               {cluster?.platform || 'KinD'}
             </span>
             <span
@@ -201,6 +205,7 @@ export default function DashboardPage() {
             </span>
           </div>
           <p className="text-xs text-slate-400">
+            {cluster?.name ? <span className="text-sky-400 font-medium">{cluster.name} · </span> : null}
             {cluster?.telemetry?.nodeCount || 0} Nodes · {cluster?.telemetry?.podCount || 0} Pods
           </p>
         </div>
@@ -245,6 +250,69 @@ export default function DashboardPage() {
           </div>
           <p className="text-xs text-slate-400">cert-manager automated local CA</p>
         </div>
+      </div>
+
+      {/* Quick Navigation Panels */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link
+          href="/pods"
+          className="p-4 bg-slate-900/90 border border-slate-800 hover:border-sky-500/50 rounded-xl transition-all group"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-sky-950/80 rounded-lg border border-sky-800/40 text-sky-400 group-hover:scale-105 transition-transform">
+              <Boxes className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-200 group-hover:text-sky-400">Pod Explorer</div>
+              <div className="text-xs text-slate-400">Live logs & restarts</div>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/storage"
+          className="p-4 bg-slate-900/90 border border-slate-800 hover:border-emerald-500/50 rounded-xl transition-all group"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-emerald-950/80 rounded-lg border border-emerald-800/40 text-emerald-400 group-hover:scale-105 transition-transform">
+              <HardDrive className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-200 group-hover:text-emerald-400">Storage Allocation</div>
+              <div className="text-xs text-slate-400">PV, PVC & StorageClass</div>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/apps"
+          className="p-4 bg-slate-900/90 border border-slate-800 hover:border-indigo-500/50 rounded-xl transition-all group"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-indigo-950/80 rounded-lg border border-indigo-800/40 text-indigo-400 group-hover:scale-105 transition-transform">
+              <Cpu className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-200 group-hover:text-indigo-400">Presets & RAM Profiler</div>
+              <div className="text-xs text-slate-400">Workload resource sizing</div>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/certificates"
+          className="p-4 bg-slate-900/90 border border-slate-800 hover:border-amber-500/50 rounded-xl transition-all group"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-amber-950/80 rounded-lg border border-amber-800/40 text-amber-400 group-hover:scale-105 transition-transform">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-200 group-hover:text-amber-400">Zero-Sudo DNS & TLS</div>
+              <div className="text-xs text-slate-400">sslip.io & cert-manager</div>
+            </div>
+          </div>
+        </Link>
       </div>
 
       {/* Quick Action Strip & Ingress Applications */}

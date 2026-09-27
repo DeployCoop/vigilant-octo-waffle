@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Settings,
   Save,
@@ -12,6 +12,9 @@ import {
   Server,
   Mail,
   Globe,
+  Download,
+  Upload,
+  FileCode,
 } from 'lucide-react';
 
 export default function ConfigPage() {
@@ -20,6 +23,10 @@ export default function ConfigPage() {
   const [saving, setSaving] = useState(false);
   const [secretLoading, setSecretLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Profile export/import state
+  const [profileName, setProfileName] = useState('vow-profile');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchConfig = async () => {
     try {
@@ -78,6 +85,48 @@ export default function ConfigPage() {
     }
   };
 
+  const handleExportProfile = async () => {
+    try {
+      const res = await fetch(`/api/profiles?name=${encodeURIComponent(profileName)}`);
+      const bundle = await res.json();
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${profileName}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMessage(`Exported configuration bundle: ${profileName}.json`);
+    } catch (err: any) {
+      setMessage(`Export failed: ${err.message}`);
+    }
+  };
+
+  const handleImportProfileFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      const res = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bundle),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage(`Imported profile '${data.name}' with overrides and enablers successfully!`);
+        fetchConfig();
+      } else {
+        setMessage(`Import error: ${data.error}`);
+      }
+    } catch (err: any) {
+      setMessage(`Failed parsing profile JSON: ${err.message}`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
       {/* Title */}
@@ -117,6 +166,53 @@ export default function ConfigPage() {
           <span>{message}</span>
         </div>
       )}
+
+      {/* Profiles & Portability Bundle */}
+      <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center space-x-2">
+            <FileCode className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
+              Profile Snapshot & Portability
+            </h3>
+          </div>
+          <span className="text-[11px] text-slate-500">Exports .env, enablers, and all .argo_overrides</span>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <input
+            type="text"
+            value={profileName}
+            onChange={(e) => setProfileName(e.target.value)}
+            placeholder="Profile name"
+            className="w-full sm:w-64 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono text-xs"
+          />
+
+          <button
+            onClick={handleExportProfile}
+            className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-sky-400" />
+            <span>Export Snapshot (.json)</span>
+          </button>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".json"
+            onChange={handleImportProfileFile}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Import Snapshot (.json)</span>
+          </button>
+        </div>
+      </div>
 
       {/* Settings Sections */}
       <div className="space-y-6">

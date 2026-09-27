@@ -11,3 +11,4 @@ dist/
 .vow-cache/
 .kind-config.rendered.yaml
 .k3d-config.rendered.yaml
+*.tsbuildinfo

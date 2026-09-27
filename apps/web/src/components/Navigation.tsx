@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -11,12 +12,26 @@ import {
   Terminal,
   ExternalLink,
   Activity,
+  HardDrive,
+  Boxes,
+  ChevronDown,
+  RefreshCw,
+  Network,
+  Key,
+  Ship,
+  Archive,
 } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Cluster Control', href: '/cluster', icon: Server },
-  { name: 'App Store (45+)', href: '/apps', icon: Layers },
+  { name: 'App Store', href: '/apps', icon: Layers },
+  { name: 'Architecture Graph', href: '/topology', icon: Network },
+  { name: 'Pod Explorer & Shell', href: '/pods', icon: Boxes },
+  { name: 'Storage & Volumes', href: '/storage', icon: HardDrive },
+  { name: 'Credentials Vault', href: '/vault', icon: Key },
+  { name: 'Helm Releases', href: '/helm', icon: Ship },
+  { name: 'Backups & Snapshots', href: '/backups', icon: Archive },
   { name: 'Config Studio', href: '/config', icon: Settings },
   { name: 'TLS & DNS', href: '/certificates', icon: ShieldAlert },
   { name: 'Live Terminal', href: '/terminal', icon: Terminal },
@@ -76,13 +91,66 @@ export function Sidebar() {
 }
 
 export function Header() {
+  const [contexts, setContexts] = useState<string[]>([]);
+  const [currentContext, setCurrentContext] = useState<string>('');
+  const [switching, setSwitching] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/cluster/contexts')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.contexts) setContexts(data.contexts);
+        if (data.current) setCurrentContext(data.current);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleContextChange = async (newContext: string) => {
+    if (!newContext || newContext === currentContext) return;
+    setSwitching(true);
+    try {
+      const res = await fetch('/api/cluster/contexts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contextName: newContext }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentContext(newContext);
+        // refresh window so all panels reload state under new context
+        window.location.reload();
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   return (
     <header className="h-16 bg-slate-950/80 backdrop-blur border-b border-slate-800 px-6 flex items-center justify-between sticky top-0 z-20">
       <div className="flex items-center space-x-3">
-        <span className="text-xs font-semibold px-2.5 py-1 bg-slate-900 text-slate-300 border border-slate-700 rounded-md flex items-center space-x-1.5">
-          <Activity className="w-3.5 h-3.5 text-sky-400" />
-          <span>Control Plane Active</span>
-        </span>
+        {/* Multi-Cluster Context Selector */}
+        <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
+          <span className="text-slate-500 font-medium">Context:</span>
+          {contexts.length > 0 ? (
+            <select
+              value={currentContext}
+              disabled={switching}
+              onChange={(e) => handleContextChange(e.target.value)}
+              className="bg-transparent text-sky-400 font-mono text-xs focus:outline-none cursor-pointer pr-1"
+            >
+              {contexts.map((ctx) => (
+                <option key={ctx} value={ctx} className="bg-slate-900 text-slate-200">
+                  {ctx}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-slate-400 font-mono text-xs">{currentContext || 'Disconnected'}</span>
+          )}
+          {switching && <RefreshCw className="w-3 h-3 text-sky-400 animate-spin" />}
+        </div>
       </div>
 
       <div className="flex items-center space-x-3">

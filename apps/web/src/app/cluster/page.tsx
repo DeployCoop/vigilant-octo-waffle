@@ -138,8 +138,13 @@ export default function ClusterPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="p-5 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
           <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Runtime Platform</span>
-          <div className="text-xl font-bold text-white capitalize">{cluster?.platform || 'KinD'}</div>
-          <p className="text-xs text-slate-400">Kubernetes in Docker multi-node cluster</p>
+          <div className="text-xl font-bold text-white uppercase flex items-center space-x-2">
+            <span>{cluster?.platform || 'KinD'}</span>
+            {cluster?.name ? <span className="text-xs font-mono font-normal text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/40">({cluster.name})</span> : null}
+          </div>
+          <p className="text-xs text-slate-400">
+            {cluster?.platform === 'k3d' ? 'Rancher K3s in Docker' : cluster?.platform === 'kind' ? 'Kubernetes in Docker' : 'Lightweight Kubernetes'}
+          </p>
         </div>
 
         <div className="p-5 bg-slate-900 border border-slate-800 rounded-xl space-y-2">

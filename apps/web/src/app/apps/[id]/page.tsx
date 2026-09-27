@@ -12,6 +12,7 @@ import {
   FileText,
   AlertCircle,
   CheckCircle2,
+  Columns,
 } from 'lucide-react';
 
 export default function AppDetailPage() {
@@ -21,7 +22,7 @@ export default function AppDetailPage() {
 
   const [data, setData] = useState<any>(null);
   const [overrideYaml, setOverrideYaml] = useState('');
-  const [activeTab, setActiveTab] = useState<'base' | 'override' | 'templated'>('override');
+  const [activeTab, setActiveTab] = useState<'split' | 'override' | 'base' | 'templated'>('split');
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export default function AppDetailPage() {
       if (result.overrideManifest) {
         setOverrideYaml(result.overrideManifest);
       } else {
-        setOverrideYaml('# Write your YAML overrides here. They will be merged into argocd.yaml with yq-style deep merge.\n');
+        setOverrideYaml('# Write your YAML overrides here. They will be merged into argocd.yaml with deep merge.\n');
       }
     } catch {
       // offline
@@ -138,6 +139,17 @@ export default function AppDetailPage() {
         {/* Tabs */}
         <div className="flex border-b border-slate-800 bg-slate-950/50">
           <button
+            onClick={() => setActiveTab('split')}
+            className={`px-4 py-3 text-xs font-semibold transition-colors flex items-center space-x-1.5 ${
+              activeTab === 'split'
+                ? 'border-b-2 border-sky-500 text-sky-400 bg-slate-900/60'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Columns className="w-3.5 h-3.5" />
+            <span>Side-by-Side Diff (Base vs Override)</span>
+          </button>
+          <button
             onClick={() => setActiveTab('override')}
             className={`px-4 py-3 text-xs font-semibold transition-colors flex items-center space-x-2 ${
               activeTab === 'override'
@@ -145,7 +157,7 @@ export default function AppDetailPage() {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>User Override (.argo_overrides/{id}/argocd.yaml)</span>
+            <span>User Override (.argo_overrides)</span>
           </button>
           <button
             onClick={() => setActiveTab('base')}
@@ -155,7 +167,7 @@ export default function AppDetailPage() {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Base Manifest (argo/{id}/argocd.yaml)</span>
+            <span>Base Manifest (argo/{id})</span>
           </button>
           <button
             onClick={() => setActiveTab('templated')}
@@ -165,11 +177,39 @@ export default function AppDetailPage() {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Preview Merged & Substituted YAML</span>
+            <span>Merged & Substituted Preview</span>
           </button>
         </div>
 
         <div className="p-4">
+          {activeTab === 'split' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <div className="text-xs font-mono text-slate-400 px-1 flex items-center justify-between">
+                  <span>argo/{id}/argocd.yaml (Base)</span>
+                  <span className="text-[10px] text-slate-500">Read-Only</span>
+                </div>
+                <pre className="p-4 font-mono text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-300 overflow-x-auto h-[550px] leading-relaxed select-text">
+                  {data.baseManifest || 'No base manifest.'}
+                </pre>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-xs font-mono text-sky-400 px-1 flex items-center justify-between">
+                  <span>.argo_overrides/{id}/argocd.yaml (Custom Overrides)</span>
+                  <span className="text-[10px] text-emerald-400">Editable</span>
+                </div>
+                <textarea
+                  rows={24}
+                  value={overrideYaml}
+                  onChange={(e) => setOverrideYaml(e.target.value)}
+                  className="w-full h-[550px] p-4 font-mono text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-sky-500 leading-relaxed resize-none"
+                  placeholder="# Enter custom values to deep-merge on top of base..."
+                />
+              </div>
+            </div>
+          )}
+
           {activeTab === 'override' && (
             <textarea
               rows={24}
