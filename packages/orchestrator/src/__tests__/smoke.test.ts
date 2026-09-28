@@ -16,6 +16,10 @@ import {
   getK3sJoinInfo,
   resolveK3sServer,
   APP_CATALOG,
+  findAgyBinary,
+  getAntigravityEngineStatus,
+  buildClusterContext,
+  askAntigravity,
 } from '../index.js';
 
 describe('Orchestrator Security & Smoke Tests', () => {
@@ -307,6 +311,43 @@ spec:
           `Malicious ID "${id}" must fail validation and catalog lookup`
         );
       }
+    });
+  });
+
+  describe('Antigravity Cluster Copilot Integration', () => {
+    it('detects Antigravity CLI binary and returns engine status', () => {
+      const status = getAntigravityEngineStatus();
+      assert.ok(typeof status.available === 'boolean');
+      assert.ok(status.defaultModel.includes('gemini'));
+      assert.ok(status.availableModels.length > 0);
+      assert.ok(status.availableModels.includes('gemini-3.8-flash-high'));
+    });
+
+    it('builds live cluster context snapshot with telemetry and apps', async () => {
+      const { promptContext, snapshot } = await buildClusterContext(projectRoot);
+      assert.ok(typeof promptContext === 'string');
+      assert.ok(promptContext.includes('Live Kubernetes Cluster Telemetry'));
+      assert.ok(promptContext.includes('Supported App Store Catalog'));
+      assert.ok(snapshot);
+      assert.ok(typeof snapshot.connected === 'boolean');
+      assert.ok(typeof snapshot.nodeCount === 'number');
+      assert.ok(typeof snapshot.podCount === 'number');
+      assert.ok(Array.isArray(snapshot.unhealthyPods));
+      assert.equal(snapshot.applicationsCount, APP_CATALOG.length);
+    });
+
+    it('answers cluster questions with structured response and snapshot', async () => {
+      const result = await askAntigravity({
+        prompt: 'What is the status of the cluster?',
+        includeClusterContext: true,
+        root: projectRoot,
+      });
+
+      assert.ok(result);
+      assert.ok(result.response && result.response.length > 0);
+      assert.ok(['antigravity-cli', 'cluster-copilot-engine'].includes(result.engineUsed));
+      assert.ok(result.clusterSnapshot);
+      assert.ok(typeof result.clusterSnapshot.nodeCount === 'number');
     });
   });
 });

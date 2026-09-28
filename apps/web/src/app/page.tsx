@@ -18,6 +18,7 @@ import {
   Boxes,
   HardDrive,
   Cpu,
+  Sparkles,
 } from 'lucide-react';
 
 interface ClusterInfo {
@@ -163,6 +164,13 @@ export default function DashboardPage() {
             <Play className="w-4 h-4 fill-white" />
             <span>Run Full Deployment (./up)</span>
           </button>
+          <Link
+            href="/antigravity"
+            className="px-3.5 py-2 bg-gradient-to-r from-sky-600/30 to-indigo-600/30 hover:from-sky-600/40 hover:to-indigo-600/40 text-sky-300 text-sm font-medium rounded-lg border border-sky-500/40 flex items-center space-x-2 transition-colors"
+          >
+            <Sparkles className="w-4 h-4 text-sky-400" />
+            <span>Antigravity Copilot</span>
+          </Link>
           <Link
             href="/terminal"
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg border border-slate-700 flex items-center space-x-2 transition-colors"

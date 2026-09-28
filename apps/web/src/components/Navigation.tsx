@@ -28,11 +28,14 @@ import {
   Lock,
   DollarSign,
   Smartphone,
+  Bot,
+  Sparkles,
 } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Cluster Control', href: '/cluster', icon: Server },
+  { name: 'Antigravity Copilot', href: '/antigravity', icon: Bot },
   { name: 'App Store', href: '/apps', icon: Layers },
   { name: 'Architecture Graph', href: '/topology', icon: Network },
   { name: 'Pod Explorer & Shell', href: '/pods', icon: Boxes },
@@ -174,6 +177,13 @@ export function Header() {
       </div>
 
       <div className="flex items-center space-x-3">
+        <Link
+          href="/antigravity"
+          className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-sky-400 hover:text-sky-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+          <span>Antigravity</span>
+        </Link>
         <Link
           href="/terminal"
           className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"

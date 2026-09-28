@@ -32,5 +32,6 @@ export * from './builder.js';
 export * from './remote.js';
 export * from './flux.js';
 export * from './k3s.js';
+export * from './antigravity.js';
 
 
