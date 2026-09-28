@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
-import { ArgoManager, APP_CATALOG } from '@vow/orchestrator';
+import { ArgoManager, FluxManager, APP_CATALOG, loadProjectConfig } from '@vow/orchestrator';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -14,13 +14,46 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid application ID format' }, { status: 400 });
     }
 
+    const { searchParams } = new URL(req.url);
     const root = getProjectRoot();
+    const config = loadProjectConfig(root);
+    const runner = (searchParams.get('runner') || config.cluster.cdRunner || 'argocd').toLowerCase();
+
     const appDef = APP_CATALOG.find((a) => a.id === id);
 
     if (!appDef) {
       return NextResponse.json({ error: 'App not found in catalog' }, { status: 404 });
     }
 
+    if (runner === 'flux') {
+      const flux = new FluxManager(root);
+      let templatedYaml = '';
+      let baseManifest: string | null = null;
+      let overrideManifest: string | null = null;
+      let source: 'native' | 'synthesized' = 'synthesized';
+
+      try {
+        const prep = flux.prepareAppManifest(id);
+        baseManifest = prep.baseManifest;
+        overrideManifest = prep.overrideManifest || null;
+        templatedYaml = prep.templatedYaml;
+        source = prep.source;
+      } catch (err: any) {
+        // fallback
+      }
+
+      return NextResponse.json({
+        app: appDef,
+        runner: 'flux',
+        baseManifest,
+        overrideManifest,
+        templatedYaml,
+        manifestSource: source,
+        hasOverride: Boolean(overrideManifest),
+      });
+    }
+
+    // Default to ArgoCD
     const baseArgoPath = path.join(root, 'argo', id, 'argocd.yaml');
     const overrideArgoPath = path.join(root, '.argo_overrides', id, 'argocd.yaml');
 
@@ -44,6 +77,7 @@ export async function GET(
 
     return NextResponse.json({
       app: appDef,
+      runner: 'argocd',
       baseManifest,
       overrideManifest,
       templatedYaml,
@@ -65,6 +99,7 @@ export async function POST(
     }
 
     const root = getProjectRoot();
+    const config = loadProjectConfig(root);
     const appDef = APP_CATALOG.find((a) => a.id === id);
 
     if (!appDef) {
@@ -72,21 +107,44 @@ export async function POST(
     }
 
     const body = await req.json().catch(() => ({}));
+    const runner = (body.runner || config.cluster.cdRunner || 'argocd').toLowerCase();
 
     if (body.action === 'deploy') {
+      if (runner === 'flux') {
+        const flux = new FluxManager(root);
+        const task = flux.deployApp(id);
+        return NextResponse.json({
+          success: true,
+          runner: 'flux',
+          taskId: task.id,
+        });
+      }
+
       const argo = new ArgoManager(root);
       const task = argo.deployApp(id);
       return NextResponse.json({
         success: true,
+        runner: 'argocd',
         taskId: task.id,
       });
     }
 
     if (body.action === 'sync') {
+      if (runner === 'flux') {
+        const flux = new FluxManager(root);
+        const task = flux.syncApp(id);
+        return NextResponse.json({
+          success: true,
+          runner: 'flux',
+          taskId: task.id,
+        });
+      }
+
       const argo = new ArgoManager(root);
       const task = argo.syncApp(id);
       return NextResponse.json({
         success: true,
+        runner: 'argocd',
         taskId: task.id,
       });
     }
@@ -96,7 +154,8 @@ export async function POST(
         return NextResponse.json({ error: 'overrideYaml string is required' }, { status: 400 });
       }
 
-      const overridesBase = path.resolve(root, '.argo_overrides');
+      const isFlux = runner === 'flux';
+      const overridesBase = path.resolve(root, isFlux ? '.flux_overrides' : '.argo_overrides');
       const overrideDir = path.resolve(overridesBase, id);
 
       // Path traversal containment check
@@ -108,10 +167,10 @@ export async function POST(
         fs.mkdirSync(overrideDir, { recursive: true });
       }
 
-      const overrideFile = path.join(overrideDir, 'argocd.yaml');
+      const overrideFile = path.join(overrideDir, isFlux ? 'flux.yaml' : 'argocd.yaml');
       fs.writeFileSync(overrideFile, body.overrideYaml, 'utf-8');
 
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, runner: isFlux ? 'flux' : 'argocd' });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

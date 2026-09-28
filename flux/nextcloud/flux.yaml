@@ -1,0 +1,68 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: nextcloud-repo
+  namespace: ${THIS_FLUX_NAMESPACE}
+spec:
+  interval: ${THIS_FLUX_INTERVAL}
+  url: ${THIS_REPO_URL}
+  ref:
+    branch: ${THIS_FLUX_BRANCH}
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: examplenc
+  namespace: ${THIS_NAMESPACE}
+spec:
+  interval: ${THIS_FLUX_INTERVAL}
+  targetNamespace: ${THIS_NAMESPACE}
+  chart:
+    spec:
+      chart: charts/nextcloud
+      sourceRef:
+        kind: GitRepository
+        name: nextcloud-repo
+        namespace: ${THIS_FLUX_NAMESPACE}
+  values:
+    image:
+      repository: nextcloud
+      flavor: fpm
+      tag:
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    ingress:
+      enabled: true
+      className: ${THIS_CLUSTER_INGRESS}
+      tls:
+        - secretName: nextcloud-example-tls
+          hosts:
+            - ${THIS_NC_HOST}.${THIS_DOMAIN}
+      hosts: [ ${THIS_NC_HOST}.${THIS_DOMAIN} ]
+      annotations:
+        spec.ingressClassName: ${THIS_CLUSTER_INGRESS}
+        cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+        nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+        nginx.ingress.kubernetes.io/rewrite-target: /
+    nextcloud:
+      host: ${THIS_NC_HOST}.${THIS_DOMAIN}
+      existingSecret:
+        enabled: true
+        secretName: ${THIS_SECRETS}
+        usernameKey: nextcloud-username
+        passwordKey: nextcloud-password
+        tokenKey: nextcloud-token
+      persistence:
+        storageClass: "${THIS_STORAGECLASS}"
+    internalDatabase:
+      enabled: false
+    externalDatabase:
+      enabled: true
+      type: postgresql
+      existingSecret:
+        enabled: true
+        secretName: ${THIS_SECRETS}
+        usernameKey: nc-db-username
+        passwordKey: nc-db-password
+        hostKey: nc-db-hostname
+        databaseKey: nc-db-name

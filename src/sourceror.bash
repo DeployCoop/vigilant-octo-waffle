@@ -18,6 +18,8 @@ fi
 
 
 source ./src/argoRunner.bash
+source ./src/fluxRunner.bash
+source ./src/cdRunner.bash
 source ./src/check_cmd.bash
 source ./src/squawk.bash
 source ./src/util.bash

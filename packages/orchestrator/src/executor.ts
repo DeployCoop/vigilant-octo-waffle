@@ -9,6 +9,7 @@ export const ALLOWED_EXECUTABLES = new Set([
   'kind',
   'k3d',
   'argocd',
+  'flux',
   'velero',
   'docker',
   'mkcert',

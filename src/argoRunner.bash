@@ -16,9 +16,14 @@ argoRunner () {
     echo "wrong number of args $#"
     exit 1
   fi
-  set -eu
-  set -a && source ./.env && set +a
-  if [[ ${VERBOSITY} -gt 10 ]]; then
+  if [[ -f ./.env ]]; then
+    set -a && source ./.env && set +a
+  fi
+  if [[ "${THIS_CD_RUNNER:-argocd}" == "flux" || "${THIS_CD_RUNNER:-argocd}" == "fluxcd" ]]; then
+    fluxRunner "$@"
+    return 0
+  fi
+  if [[ ${VERBOSITY:-100} -gt 10 ]]; then
     set -x
   fi
   if [[ -f ".argo_overrides/${THIS_THING}/argocd.yaml" ]]; then
@@ -53,5 +58,10 @@ argoRunner () {
     --loglevel ${THIS_ARGO_LOG_LEVEL} \
     --grpc-web \
     -f ${ARGORUNNR_INSTALL_TMP}
+
+  if [[ "${THIS_CD_RUNNER:-argocd}" == "both" ]]; then
+    fluxRunner "$@"
+  fi
+
   cd "${this_cwd}"
 }

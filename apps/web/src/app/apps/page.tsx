@@ -88,7 +88,9 @@ export default function AppsPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  // System, ArgoCD, and Health telemetry
+  // System, ArgoCD, Flux, and Health telemetry
+  const [cdRunner, setCdRunner] = useState<'argocd' | 'flux' | 'both'>('argocd');
+  const [fluxReconciling, setFluxReconciling] = useState(false);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [argoApps, setArgoApps] = useState<Record<string, ArgoAppStatus>>({});
   const [healthMap, setHealthMap] = useState<Record<string, HealthProbe>>({});
@@ -112,10 +114,31 @@ export default function AppsPage() {
       setApps(data.apps || []);
       if (data.presets) setPresets(data.presets);
       if (data.domain) setDomain(data.domain);
+      if (data.cdRunner) setCdRunner(data.cdRunner);
     } catch {
       // offline
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReconcileFlux = async () => {
+    setFluxReconciling(true);
+    try {
+      const res = await fetch('/api/flux', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reconcile-all' }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error);
+      setActionMessage(data.message || 'Flux reconciliation initiated across all Kustomizations and HelmReleases.');
+      setTimeout(() => setActionMessage(null), 4000);
+    } catch (err: any) {
+      setActionMessage(`Flux reconcile error: ${err.message}`);
+      setTimeout(() => setActionMessage(null), 5000);
+    } finally {
+      setFluxReconciling(false);
     }
   };
 
@@ -313,24 +336,54 @@ export default function AppsPage() {
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-slate-900 border border-slate-800 rounded-xl">
         <div className="space-y-1">
-          <div className="flex items-center space-x-2">
-            <Layers className="w-5 h-5 text-sky-400" />
-            <h2 className="text-xl font-bold text-white tracking-tight">Service Catalog & App Store</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center space-x-2">
+              <Layers className="w-5 h-5 text-sky-400" />
+              <h2 className="text-xl font-bold text-white tracking-tight">Service Catalog & App Store</h2>
+            </div>
+            <span
+              className={`text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                cdRunner === 'flux'
+                  ? 'bg-purple-950/60 border-purple-500/50 text-purple-300'
+                  : cdRunner === 'both'
+                  ? 'bg-gradient-to-r from-sky-950/60 to-purple-950/60 border-indigo-500/50 text-indigo-300'
+                  : 'bg-sky-950/60 border-sky-500/50 text-sky-300'
+              }`}
+            >
+              {cdRunner === 'flux' ? 'FluxCD Active' : cdRunner === 'both' ? 'Dual Runner (Argo + Flux)' : 'ArgoCD Active'}
+            </span>
           </div>
           <p className="text-sm text-slate-400">
-            Enable or deploy any of the cloud-native applications via ArgoCD, with live health probing & resource sizing
+            {cdRunner === 'flux'
+              ? 'Enable or deploy cloud-native applications via FluxCD GitOps controller, with live health probing & resource sizing'
+              : cdRunner === 'both'
+              ? 'Enable or deploy applications via dual GitOps orchestration (ArgoCD & FluxCD), with live health probing & resource sizing'
+              : 'Enable or deploy any of the cloud-native applications via ArgoCD, with live health probing & resource sizing'}
           </p>
         </div>
 
         <div className="flex items-center space-x-3">
-          <button
-            onClick={() => handleInstantSync()}
-            className="px-3 py-1.5 bg-amber-600/90 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
-            title="Trigger synthetic Git push webhook to accelerate ArgoCD sync"
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span>Dispatch Webhook</span>
-          </button>
+          {(cdRunner === 'flux' || cdRunner === 'both') && (
+            <button
+              onClick={() => handleReconcileFlux()}
+              disabled={fluxReconciling}
+              className="px-3 py-1.5 bg-purple-600/90 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+              title="Force Flux GitRepository and Kustomization reconciliation"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${fluxReconciling ? 'animate-spin' : ''}`} />
+              <span>Reconcile Flux</span>
+            </button>
+          )}
+          {(cdRunner === 'argocd' || cdRunner === 'both') && (
+            <button
+              onClick={() => handleInstantSync()}
+              className="px-3 py-1.5 bg-amber-600/90 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+              title="Trigger synthetic Git push webhook to accelerate ArgoCD sync"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>Dispatch Webhook</span>
+            </button>
+          )}
           <button
             onClick={() => setShowAddModal(true)}
             className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"

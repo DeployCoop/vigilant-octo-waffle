@@ -8,10 +8,12 @@ export interface VowConfig {
   cluster: {
     k8sPlatform: 'kind' | 'k3d' | 'k3s';
     ingress: 'nginx' | 'traefik' | 'haproxy';
+    cdRunner: 'argocd' | 'flux' | 'both';
     clusterIssuer: string;
     domain: string;
     namespace: string;
     adminUser: string;
+    fluxNamespace: string;
   };
 }
 
@@ -184,6 +186,14 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
   const domain = configMap['THIS_DOMAIN'] || 'example.com';
   const namespace = configMap['THIS_NAMESPACE'] || 'default';
   const adminUser = configMap['THIS_ADMIN_USER'] || 'myadmin';
+  const rawRunner = (configMap['THIS_CD_RUNNER'] || 'argocd').toLowerCase();
+  const cdRunner: 'argocd' | 'flux' | 'both' =
+    rawRunner === 'flux' || rawRunner === 'fluxcd'
+      ? 'flux'
+      : rawRunner === 'both'
+      ? 'both'
+      : 'argocd';
+  const fluxNamespace = configMap['THIS_FLUX_NAMESPACE'] || 'flux-system';
   const clusterIssuer = configMap['THIS_CLUSTER_ISSUER'] || 'mkcert-issuer';
 
   return {
@@ -192,10 +202,12 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
     cluster: {
       k8sPlatform: k8sType,
       ingress,
+      cdRunner,
       clusterIssuer,
       domain,
       namespace,
       adminUser,
+      fluxNamespace,
     },
   };
 }

@@ -38,6 +38,7 @@ export async function GET() {
 
     return NextResponse.json({
       domain,
+      cdRunner: config.cluster.cdRunner || 'argocd',
       apps,
       presets: DEPLOYMENT_PRESETS,
       validation,

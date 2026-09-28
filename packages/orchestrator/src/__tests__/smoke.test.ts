@@ -9,6 +9,7 @@ import {
   loadProjectConfig,
   saveEnvFile,
   saveEnablerFile,
+  FluxManager,
 } from '../index.js';
 
 describe('Orchestrator Security & Smoke Tests', () => {
@@ -114,4 +115,65 @@ describe('Orchestrator Security & Smoke Tests', () => {
       });
     });
   });
+
+  describe('FluxCD & Multi-CD Orchestration', () => {
+    it('allows flux binary in command allowlist', () => {
+      assert.ok(ALLOWED_EXECUTABLES.has('flux'), 'flux must be in ALLOWED_EXECUTABLES');
+      const res = validateCommand('flux', ['get', 'kustomizations'], projectRoot);
+      assert.equal(res.allowed, true);
+      assert.equal(res.normalizedCommand, 'flux');
+    });
+
+    it('loads native Flux manifests when present in flux/<app>', () => {
+      const flux = new FluxManager(projectRoot);
+      const manifest = flux.prepareAppManifest('nextcloud');
+      assert.equal(manifest.source, 'native');
+      assert.ok(manifest.templatedYaml.includes('kind: HelmRelease') || manifest.templatedYaml.includes('kind: Kustomization'));
+      assert.ok(manifest.templatedYaml.includes('metadata:'));
+    });
+
+    it('synthesizes Flux manifests from ArgoCD when native flux.yaml is absent', () => {
+      const flux = new FluxManager(projectRoot);
+      const manifest = flux.prepareAppManifest('drupal');
+      assert.equal(manifest.source, 'synthesized');
+      assert.ok(manifest.templatedYaml.includes('kind: GitRepository'));
+      assert.ok(manifest.templatedYaml.includes('source.toolkit.fluxcd.io/v1'));
+      assert.ok(manifest.templatedYaml.includes('drupal-repo'));
+      assert.ok(manifest.templatedYaml.includes('kind: HelmRelease'));
+    });
+
+    it('synthesizes Flux HelmRelease with valuesObject from ArgoCD spec', () => {
+      const flux = new FluxManager(projectRoot);
+      const sampleArgo = `
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-helm-app
+spec:
+  source:
+    repoURL: https://charts.example.com
+    targetRevision: 1.2.3
+    chart: demo-chart
+    helm:
+      valuesObject:
+        replicaCount: 3
+        image:
+          tag: latest
+  destination:
+    namespace: demo-namespace
+`;
+      const synthesized = flux.synthesizeFluxFromArgo(sampleArgo, 'demo-helm-app', 'flux-system');
+      assert.ok(synthesized.includes('kind: HelmRelease'));
+      assert.ok(synthesized.includes('name: demo-helm-app'));
+      assert.ok(synthesized.includes('replicaCount: 3'));
+      assert.ok(synthesized.includes('tag: latest'));
+    });
+
+    it('supports THIS_CD_RUNNER configuration mapping in config parser', () => {
+      const config = loadProjectConfig(projectRoot);
+      assert.ok(['argocd', 'flux', 'both'].includes(config.cluster.cdRunner));
+      assert.ok(config.cluster.fluxNamespace);
+    });
+  });
 });
+

@@ -22,39 +22,58 @@ Envsubst is the simple templating method that powers this repo. Most of the func
                  ▼
           [envsubst template]
                  │
-        ┌────────┴────────┐
-        ▼                 ▼
-   [init/ manifests]  [argo/ manifests]
-        │                 │
-        ▼                 ▼
-  kubectl apply       ArgoCD App Create
+        ┌────────┼──────────────────────┐
+        ▼        ▼                      ▼
+   [init/]    [argo/ manifests]    [flux/ manifests]
+        │        │                      │
+        ▼        ▼                      ▼
+  kubectl apply  ArgoCD App Create     FluxCD GitRepo / HelmRelease / Kustomization
 ```
 
 ### 1. `src/` (Utilities & Control Scripts)
 
-This was the original directory for orchestration scripts. Many of the projects have a named script here (e.g., `src/supabase.sh`).
+This is the primary directory for core bash orchestration scripts. Many of the projects have a named script here (e.g., `src/supabase.sh`, `src/nextcloud.sh`, `src/bao.sh`).
 
 Notable files:
-*   #### [util.bash](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/util.bash)
-    This is the main library of functions, which includes `initializer`. It uses `envsubst` to feed `kubectl apply`:
+*   #### [util.bash](src/util.bash)
+    The central library of helper functions, which includes `initializer`. It uses `envsubst` to feed `kubectl apply`:
     ```bash
     envsubst < ${f} | kubectl apply -f -
     ```
-*   #### [argoRunner.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/argoRunner.sh)
-    This script unifies the application installations by templating and creating ArgoCD applications:
+*   #### [cdRunner.bash](src/cdRunner.bash)
+    Unified CD orchestrator and multiplexer. Reads `THIS_CD_RUNNER` (`argocd`, `flux`, or `both`) and invokes `argoRunner` and/or `fluxRunner` accordingly:
+    ```bash
+    cdRunner "$THIS_THING"
+    ```
+*   #### [argoRunner.bash](src/argoRunner.bash)
+    Templates and applies ArgoCD applications using `argocd app create`:
     ```bash
     envsubst < argo/${THIS_THING}/argocd.yaml | argocd app create --name ${THIS_THING} --grpc-web -f -
     ```
-    For example, in [src/bao.sh](https://github.com/DeployCoop/vigilant-octo-waffle/blob/main/src/bao.sh), we initialize the raw manifests first and then run the ArgoCD application creation:
-    ```bash
-    initializer "${this_cwd}/init/bao"
-    argoRunner "$THIS_THING"
-    ```
+    If `THIS_CD_RUNNER` is set to `flux`, `argoRunner` transparently delegates to `fluxRunner`. If set to `both`, both runners are executed.
+*   #### [fluxRunner.bash](src/fluxRunner.bash)
+    Templates and applies FluxCD manifests (`GitRepository`, `HelmRelease`, `Kustomization`).
+    - Uses `flux/${THIS_THING}/flux.yaml` when present.
+    - Seamlessly synthesizes Flux resources directly from `argo/${THIS_THING}/argocd.yaml` if no native Flux manifest exists.
+    - Deep-merges user overrides from `.flux_overrides/${THIS_THING}/flux.yaml`.
+*   #### [flux.sh](src/flux.sh) & [installFluxCLI.sh](src/installFluxCLI.sh)
+    Installs FluxCD controllers and prerequisites into the cluster (`flux-system` namespace) and optionally installs the `flux` CLI.
 
 ### 2. `argo/` (ArgoCD Applications)
 
-This is a directory of ArgoCD applications. Each directory is named after the intended application and contains the YAML file for Argo, and optionally a Helm values file.
+Contains ArgoCD application manifests (`argocd.yaml`) and optional Helm value files. Each directory is named after the intended application.
 
-### 3. `init/` (Raw Pre-App Manifests)
+### 3. `flux/` (FluxCD Applications)
 
-This directory contains Kubernetes YAML manifests that get applied directly to the cluster (such as an ingress, secret setup, or namespace preparation) before or during the application's Argo installation. The `src/util.bash`'s `initializer` function processes these with `envsubst` and applies them directly.
+Contains native FluxCD manifests (`flux.yaml`) declaring `GitRepository`, `HelmRelease`, or `Kustomization` CRDs for applications. If an app does not have a native manifest in `flux/`, the orchestrator and `fluxRunner.bash` automatically synthesize an equivalent Flux manifest from `argo/<app>/argocd.yaml`.
+
+### 4. `init/` (Raw Pre-App Manifests)
+
+Contains Kubernetes YAML manifests applied directly to the cluster (such as ingresses, namespaces, or secret setups) before application CD installation. The `initializer` function in `src/util.bash` processes these with `envsubst` and applies them directly.
+
+### 5. Multi-CD Support in Next.js Control Plane (`@vow/orchestrator`)
+
+The Next.js web application provides parity with the bash orchestration:
+- **`FluxManager`**: TypeScript engine mirror of `fluxRunner.bash`. Supports `prepareAppManifest`, `synthesizeFluxFromArgo`, `deployApp`, and `syncApp`.
+- **API Endpoints**: `/api/flux` exposes controller health, reconciliation, and status checks; `/api/apps/[id]` supports `runner=argocd|flux` queries and deployments.
+- **Visual Runner Switching**: Interactive toggle on application detail pages to switch between ArgoCD and FluxCD views, manifests, overrides, and live sync commands.

@@ -20,6 +20,7 @@ export default function AppDetailPage() {
   const router = useRouter();
   const id = params?.id as string;
 
+  const [runner, setRunner] = useState<'argocd' | 'flux'>('argocd');
   const [data, setData] = useState<any>(null);
   const [overrideYaml, setOverrideYaml] = useState('');
   const [activeTab, setActiveTab] = useState<'split' | 'override' | 'base' | 'templated'>('split');
@@ -27,15 +28,19 @@ export default function AppDetailPage() {
   const [deploying, setDeploying] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const fetchAppDetail = async () => {
+  const fetchAppDetail = async (selectedRunner = runner) => {
     try {
-      const res = await fetch(`/api/apps/${id}`);
+      const res = await fetch(`/api/apps/${id}?runner=${selectedRunner}`);
       const result = await res.json();
       setData(result);
       if (result.overrideManifest) {
         setOverrideYaml(result.overrideManifest);
       } else {
-        setOverrideYaml('# Write your YAML overrides here. They will be merged into argocd.yaml with deep merge.\n');
+        setOverrideYaml(
+          selectedRunner === 'flux'
+            ? '# Write your FluxCD YAML overrides here (.flux_overrides)\n'
+            : '# Write your ArgoCD YAML overrides here (.argo_overrides)\n'
+        );
       }
     } catch {
       // offline
@@ -43,8 +48,8 @@ export default function AppDetailPage() {
   };
 
   useEffect(() => {
-    if (id) fetchAppDetail();
-  }, [id]);
+    if (id) fetchAppDetail(runner);
+  }, [id, runner]);
 
   const handleSaveOverride = async () => {
     setSaving(true);
@@ -55,13 +60,14 @@ export default function AppDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'saveOverride',
+          runner,
           overrideYaml,
         }),
       });
       const resData = await res.json();
       if (resData.success) {
-        setMessage('Override saved to .argo_overrides/ successfully!');
-        fetchAppDetail();
+        setMessage(`Override saved to .${runner === 'flux' ? 'flux' : 'argo'}_overrides/ successfully!`);
+        fetchAppDetail(runner);
       }
     } catch (err: any) {
       setMessage(`Error saving: ${err.message}`);
@@ -76,11 +82,11 @@ export default function AppDetailPage() {
       const res = await fetch(`/api/apps/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'deploy' }),
+        body: JSON.stringify({ action: 'deploy', runner }),
       });
       const resData = await res.json();
       if (resData.success) {
-        setMessage(`Deployed ${id} (Task ID: ${resData.taskId})`);
+        setMessage(`Dispatched ${runner.toUpperCase()} deployment for ${id} (Task ID: ${resData.taskId})`);
       }
     } catch (err: any) {
       setMessage(`Deploy failed: ${err.message}`);
@@ -96,7 +102,7 @@ export default function AppDetailPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Top Navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <Link
           href="/apps"
           className="text-xs text-slate-400 hover:text-white flex items-center space-x-1.5 transition-colors"
@@ -105,7 +111,31 @@ export default function AppDetailPage() {
           <span>Back to Catalog</span>
         </Link>
 
-        <div className="flex items-center space-x-3">
+        {/* Runner Selector & Actions */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
+            <button
+              onClick={() => setRunner('argocd')}
+              className={`px-3 py-1 rounded-md transition-colors ${
+                runner === 'argocd'
+                  ? 'bg-sky-600 text-white font-semibold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              ArgoCD
+            </button>
+            <button
+              onClick={() => setRunner('flux')}
+              className={`px-3 py-1 rounded-md transition-colors ${
+                runner === 'flux'
+                  ? 'bg-indigo-600 text-white font-semibold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              FluxCD
+            </button>
+          </div>
+
           <button
             onClick={handleSaveOverride}
             disabled={saving}
@@ -117,10 +147,12 @@ export default function AppDetailPage() {
           <button
             onClick={handleDeploy}
             disabled={deploying}
-            className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors disabled:opacity-50 shadow-sm"
+            className={`px-3.5 py-1.5 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors disabled:opacity-50 shadow-sm ${
+              runner === 'flux' ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-sky-600 hover:bg-sky-500'
+            }`}
           >
             <Play className="w-3.5 h-3.5 fill-white" />
-            <span>Deploy to ArgoCD</span>
+            <span>Deploy with {runner === 'flux' ? 'FluxCD' : 'ArgoCD'}</span>
           </button>
         </div>
       </div>
@@ -157,7 +189,7 @@ export default function AppDetailPage() {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>User Override (.argo_overrides)</span>
+            <span>User Override (.{runner === 'flux' ? 'flux' : 'argo'}_overrides)</span>
           </button>
           <button
             onClick={() => setActiveTab('base')}
@@ -167,7 +199,7 @@ export default function AppDetailPage() {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Base Manifest (argo/{id})</span>
+            <span>Base Manifest ({runner === 'flux' ? `flux/${id} / synthesized` : `argo/${id}`})</span>
           </button>
           <button
             onClick={() => setActiveTab('templated')}
@@ -186,7 +218,13 @@ export default function AppDetailPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <div className="text-xs font-mono text-slate-400 px-1 flex items-center justify-between">
-                  <span>argo/{id}/argocd.yaml (Base)</span>
+                  <span>
+                    {runner === 'flux'
+                      ? data.manifestSource === 'native'
+                        ? `flux/${id}/flux.yaml (Native)`
+                        : `argo/${id}/argocd.yaml → Synthesized Flux Manifest`
+                      : `argo/${id}/argocd.yaml (Base)`}
+                  </span>
                   <span className="text-[10px] text-slate-500">Read-Only</span>
                 </div>
                 <pre className="p-4 font-mono text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-300 overflow-x-auto h-[550px] leading-relaxed select-text">
@@ -196,7 +234,7 @@ export default function AppDetailPage() {
 
               <div className="space-y-1.5">
                 <div className="text-xs font-mono text-sky-400 px-1 flex items-center justify-between">
-                  <span>.argo_overrides/{id}/argocd.yaml (Custom Overrides)</span>
+                  <span>.{runner === 'flux' ? 'flux' : 'argo'}_overrides/{id}/... (Custom Overrides)</span>
                   <span className="text-[10px] text-emerald-400">Editable</span>
                 </div>
                 <textarea

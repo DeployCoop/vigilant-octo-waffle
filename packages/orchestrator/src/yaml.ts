@@ -45,6 +45,8 @@ export function mergeYamlStrings(originalYaml: string, overrideYaml: string): st
   return YAML.stringify(merged);
 }
 
+export const deepMergeYaml = mergeYamlStrings;
+
 /**
  * Parses a YAML string into a JS object.
  */

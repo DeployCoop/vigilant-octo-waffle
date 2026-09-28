@@ -18,7 +18,7 @@ This project provides a **Kubernetes cluster setup** using [KinD](https://kind.s
 
 - **Next.js Web Control Plane**: Modern, responsive full-stack dashboard for managing clusters, services, and configs.
 - **Local Kubernetes Cluster**: Spin up a KinD or K3s cluster with a single command or web click.
-- **ArgoCD Integration**: Automate application deployments using GitOps principles.
+- **Dual GitOps CD Runners (ArgoCD & FluxCD)**: Full support for both [ArgoCD](https://argoproj.github.io/argocd/) and [FluxCD](https://fluxcd.io) (`THIS_CD_RUNNER:=argocd|flux|both`).
 - **TLS with mkcert**: Generate trusted certificates for local development (e.g., `https://example.com`).
 - **Multi-App Support**: Includes 45+ open-source applications (OpenLDAP, Harbor, Nextcloud, OpenProject, and more).
 - **Customizable**: Use web Config Studio or `.env` and `.env.enabler` to configure services and toggles.
@@ -65,6 +65,19 @@ The Next.js control plane does not replace the existing Bash workflow; it provid
 - Cluster actions trigger `./up`, `kind`, or `k3d` directly.
 - Overrides written via the UI merge into `argo/<app>/argocd.yaml` via `.argo_overrides/<app>/argocd.yaml`, identical to the CLI behavior.
 - Developers can freely use `./up` from the shell and monitor/manage through the Web UI simultaneously.
+
+### ⚡ GitOps CD Runners: ArgoCD & FluxCD
+
+Vigilant Octo Waffle supports both **ArgoCD** and **FluxCD** ([fluxcd.io](https://fluxcd.io)), with complete interoperability across CLI and web UI:
+
+- **Configure Active Runner**: Set `THIS_CD_RUNNER` in `.env` (or via Config Studio in the Web UI):
+  - `argocd` (default): Deploys ArgoCD controllers and provisions applications through `argoRunner.bash` / ArgoCD Application CRDs.
+  - `flux`: Deploys FluxCD controllers into `flux-system` and provisions applications via `fluxRunner.bash` (`GitRepository` + `HelmRelease` / `Kustomization`).
+  - `both`: Deploys both GitOps engines concurrently for hybrid or side-by-side migration testing.
+- **Dynamic Manifest Synthesis**: Applications in `argo/` work automatically with FluxCD without requiring duplicate manifests. If no custom file is present in `flux/<app>/flux.yaml`, `fluxRunner.bash` and the web orchestrator dynamically synthesize equivalent Flux `GitRepository` and `HelmRelease`/`Kustomization` manifests.
+- **App Overrides**: ArgoCD overrides are stored in `.argo_overrides/<app>/argocd.yaml`, and FluxCD overrides in `.flux_overrides/<app>/flux.yaml`.
+- **CLI & Web Controls**: Use `src/cdRunner.bash <app>`, `src/fluxRunner.bash <app>`, or the web UI's app detail runner switch to deploy, inspect, and reconcile apps with either runner.
+
 
 
 
