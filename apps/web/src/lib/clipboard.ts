@@ -25,11 +25,14 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     textarea.style.left = '0';
     textarea.style.opacity = '0';
     textarea.style.pointerEvents = 'none';
-    document.body.appendChild(textarea);
+    (document.body || document.documentElement).appendChild(textarea);
     textarea.focus();
     textarea.select();
+    if (textarea.setSelectionRange) {
+      textarea.setSelectionRange(0, textarea.value.length);
+    }
     const successful = document.execCommand('copy');
-    document.body.removeChild(textarea);
+    (document.body || document.documentElement).removeChild(textarea);
     return successful;
   } catch {
     return false;
