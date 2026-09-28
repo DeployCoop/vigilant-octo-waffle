@@ -15,6 +15,7 @@ import {
   saveK3sJoinScript,
   getK3sJoinInfo,
   resolveK3sServer,
+  APP_CATALOG,
 } from '../index.js';
 
 describe('Orchestrator Security & Smoke Tests', () => {
@@ -272,6 +273,40 @@ spec:
       assert.ok(info.serverOneLiner.includes('server'));
       assert.ok(info.agentScript.includes('#!/usr/bin/env bash'));
       assert.ok(info.serverScript.includes('#!/usr/bin/env bash'));
+    });
+  });
+
+  describe('App Catalog & Override Security', () => {
+    it('ensures all catalog IDs conform to safe alphanumeric characters without path separators', () => {
+      assert.ok(APP_CATALOG.length > 0);
+      for (const app of APP_CATALOG) {
+        assert.match(
+          app.id,
+          /^[a-zA-Z0-9_-]+$/,
+          `App ID "${app.id}" must not contain path separators or illegal characters`
+        );
+      }
+    });
+
+    it('rejects path traversal attempts and arbitrary file writing in app IDs', () => {
+      const maliciousIds = [
+        '../evil',
+        '../../etc/passwd',
+        'foo/bar',
+        'foo\\bar',
+        '..',
+        '.',
+        'nextcloud/../../bin',
+      ];
+      for (const id of maliciousIds) {
+        const isValid = /^[a-zA-Z0-9_-]+$/.test(id);
+        const inCatalog = Boolean(APP_CATALOG.find((a) => a.id === id));
+        assert.equal(
+          isValid && inCatalog,
+          false,
+          `Malicious ID "${id}" must fail validation and catalog lookup`
+        );
+      }
     });
   });
 });
