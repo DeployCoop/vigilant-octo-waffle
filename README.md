@@ -47,6 +47,26 @@ pnpm start
 
 Visit **`http://localhost:3000`** to access the web control plane.
 
+### 🛡️ Security Model & Architecture
+
+> [!WARNING]
+> **Localhost Only Warning**: The control plane mounts `/var/run/docker.sock`, cluster credentials (`~/.kube`), and generated secrets (`.secrets`). `docker-compose.yaml` binds port 3000 strictly to `127.0.0.1`. **Do NOT expose port 3000 across public or untrusted local networks.**
+
+- **Localhost & CSRF Protection**: All mutating APIs (`/api/tasks/*`, `/api/cluster`, `/api/apps/*`, `/api/config`) enforce CSRF Origin/Referer verification and are restricted to localhost/local origins.
+- **Optional API Token Guard**: Set `VOW_API_TOKEN` in `.env` to enforce Bearer token verification on mutating API routes (`Authorization: Bearer <token>` or `x-vow-token: <token>`).
+- **Strict Command Allowlist**: Arbitrary shell execution and `shell: true` spawn execution are disabled. Only approved binaries (`kubectl`, `helm`, `kind`, `k3d`, `argocd`, `velero`, `docker`, `mkcert`, `echo`) and approved project scripts (`up`, `src/*.sh`) can be executed through the orchestrator.
+- **Safe Overrides**: App override mutations (`.argo_overrides/`) are strictly validated against `APP_CATALOG` with directory traversal protection.
+- **In-Memory Process Management**: Tasks and log streams are tracked in-memory by `processManager`. Multi-instance or serverless runtimes require an external persistence adapter (e.g. Redis/PostgreSQL).
+
+### 🔄 Coexistence with Bash Orchestration (`./up`)
+
+The Next.js control plane does not replace the existing Bash workflow; it provides a visual management layer over the same configuration and tools:
+- Configuration edits in the UI sync directly to `.env` and `.env.enabler`.
+- Cluster actions trigger `./up`, `kind`, or `k3d` directly.
+- Overrides written via the UI merge into `argo/<app>/argocd.yaml` via `.argo_overrides/<app>/argocd.yaml`, identical to the CLI behavior.
+- Developers can freely use `./up` from the shell and monitor/manage through the Web UI simultaneously.
+
+
 
 ## Apps
 

@@ -14,10 +14,9 @@ export function generateRandomSecret(length = 24, charset = 'alphanumeric'): str
       ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
       : 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+';
 
-  const randomBytes = crypto.randomBytes(length);
   let result = '';
   for (let i = 0; i < length; i++) {
-    result += chars[randomBytes[i] % chars.length];
+    result += chars[crypto.randomInt(0, chars.length)];
   }
   return result;
 }

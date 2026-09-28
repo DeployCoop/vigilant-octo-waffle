@@ -118,13 +118,17 @@ export default function TerminalPage() {
     }
   }, [logs, autoScroll]);
 
-  const handleRunCustom = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customCmd.trim()) return;
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const handleRunCustom = async (e?: React.FormEvent, preset?: string) => {
+    if (e) e.preventDefault();
+    const commandToRun = (preset || customCmd).trim();
+    if (!commandToRun) return;
+
+    setErrorMsg(null);
     setRunningCmd(true);
     try {
-      const parts = customCmd.trim().split(' ');
+      const parts = commandToRun.split(' ').filter(Boolean);
       const command = parts[0];
       const args = parts.slice(1);
 
@@ -134,13 +138,16 @@ export default function TerminalPage() {
         body: JSON.stringify({ command, args }),
       });
       const data = await res.json();
-      if (data.success) {
-        setSelectedTaskId(data.taskId);
-        setCustomCmd('');
-        fetchTasks();
+      if (!res.ok || !data.success) {
+        setErrorMsg(data.error || 'Failed to dispatch command');
+        return;
       }
-    } catch {
-      // error
+
+      setSelectedTaskId(data.taskId);
+      setCustomCmd('');
+      fetchTasks();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Network error while dispatching command');
     } finally {
       setRunningCmd(false);
     }
@@ -255,25 +262,63 @@ export default function TerminalPage() {
         </div>
       </div>
 
-      {/* Command Dispatcher Bar */}
-      <form onSubmit={handleRunCustom} className="flex gap-2 shrink-0">
-        <input
-          type="text"
-          placeholder="Execute command (e.g. bash src/hostr.sh, kubectl get pods -A, bash up)..."
-          value={customCmd}
-          onChange={(e) => setCustomCmd(e.target.value)}
-          disabled={runningCmd}
-          className="flex-1 px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
-        />
-        <button
-          type="submit"
-          disabled={runningCmd || !customCmd.trim()}
-          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors disabled:opacity-40"
-        >
-          <Play className="w-3.5 h-3.5 fill-white" />
-          <span>Execute</span>
-        </button>
-      </form>
+      {/* Security notice & Quick Allowlisted Presets */}
+      <div className="space-y-2 shrink-0">
+        {errorMsg && (
+          <div className="flex items-center space-x-2 p-3 bg-rose-950/60 border border-rose-800 text-rose-300 rounded-lg text-xs font-mono">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-slate-400 text-[11px] font-medium mr-1 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            Allowed Presets:
+          </span>
+          {[
+            'bash up',
+            'bash src/hostr.sh',
+            'kubectl get nodes',
+            'kubectl get pods -A',
+            'helm list -A',
+            'argocd app list',
+          ].map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => handleRunCustom(undefined, preset)}
+              disabled={runningCmd}
+              className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded border border-slate-700 font-mono text-[11px] transition-colors disabled:opacity-50"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+
+        {/* Command Dispatcher Bar */}
+        <form onSubmit={(e) => handleRunCustom(e)} className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Execute allowlisted command (e.g. bash src/hostr.sh, kubectl get pods -A, bash up)..."
+            value={customCmd}
+            onChange={(e) => setCustomCmd(e.target.value)}
+            disabled={runningCmd}
+            className="flex-1 px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg font-mono text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+          />
+          <button
+            type="submit"
+            disabled={runningCmd || !customCmd.trim()}
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors disabled:opacity-40"
+          >
+            <Play className="w-3.5 h-3.5 fill-white" />
+            <span>Execute</span>
+          </button>
+        </form>
+        <p className="text-[10px] text-slate-500 font-mono">
+          Security Guard Active: Shell execution restricted by orchestrator allowlist (kubectl, helm, kind, k3d, argocd, velero, docker, mkcert, or bash with project scripts).
+        </p>
+      </div>
     </div>
   );
 }

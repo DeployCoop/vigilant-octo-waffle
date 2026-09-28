@@ -1,18 +1,29 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
-import { processManager, loadProjectConfig } from '@vow/orchestrator';
+import { processManager, loadProjectConfig, validateCommand } from '@vow/orchestrator';
 
 export async function POST(req: Request) {
   try {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);
-    const { command, args } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { command, args } = body;
 
-    if (!command) {
-      return NextResponse.json({ error: 'Command required' }, { status: 400 });
+    if (!command || typeof command !== 'string') {
+      return NextResponse.json({ error: 'Valid command string required' }, { status: 400 });
     }
 
-    const task = processManager.runCommand(command, args || [], {
+    const cleanArgs = Array.isArray(args) ? args.map(String) : [];
+
+    const validation = validateCommand(command, cleanArgs, root);
+    if (!validation.allowed) {
+      return NextResponse.json(
+        { error: `Command rejected by orchestrator allowlist: ${validation.reason}` },
+        { status: 400 }
+      );
+    }
+
+    const task = processManager.runCommand(command, cleanArgs, {
       cwd: root,
       env: config.raw,
     });

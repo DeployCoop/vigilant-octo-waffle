@@ -6,7 +6,7 @@ import { substituteVariables } from './template.js';
 
 export interface ClusterStatus {
   platform: 'kind' | 'k3d' | 'k3s';
-  isRunning: boolean;
+  isRunning?: boolean;
   name: string;
   ingress: string;
   clusterIssuer: string;
@@ -23,7 +23,6 @@ export class ClusterOrchestrator {
 
     return {
       platform: config.cluster.k8sPlatform,
-      isRunning: false, // Updated dynamically via k8s client or kubectl check
       name: config.raw['THIS_NAME'] || 'example',
       ingress: config.cluster.ingress,
       clusterIssuer: config.cluster.clusterIssuer,
