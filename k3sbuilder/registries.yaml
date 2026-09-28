@@ -1,7 +1,0 @@
-mirrors:
-  "*":
-configs:
-  docker.io:
-    auth:
-      username: "${DOCKER_USERNAME:-}"
-      password: "${DOCKER_PASSWORD:-}"

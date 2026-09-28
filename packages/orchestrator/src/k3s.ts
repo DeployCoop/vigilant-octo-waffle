@@ -662,3 +662,42 @@ export function deployK3sRegistries(projectRoot: string, options?: K3sRegistries
 
   return processManager.runCommand('bash', args, { cwd: projectRoot });
 }
+
+export interface K3sUpOptions {
+  targetsFile?: string;
+  parallel?: number;
+  skipJoin?: boolean;
+  skipTune?: boolean;
+  runPlatformUp?: boolean;
+  registriesFile?: string;
+}
+
+/**
+ * Canonical bring-up for a tuned K3s cluster with multi-node batch provisioning
+ */
+export function upK3sCluster(projectRoot: string, options?: K3sUpOptions): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_up.sh');
+  const args: string[] = [scriptPath];
+
+  if (options?.targetsFile) {
+    args.push('--targets', options.targetsFile.trim());
+  }
+  if (options?.parallel && options.parallel > 1) {
+    args.push('-j', String(options.parallel));
+  }
+  if (options?.skipJoin) {
+    args.push('--skip-join');
+  }
+  if (options?.skipTune) {
+    args.push('--skip-tune');
+  }
+  if (options?.runPlatformUp) {
+    args.push('--run-platform-up');
+  }
+  if (options?.registriesFile) {
+    args.push('--registries-file', options.registriesFile.trim());
+  }
+
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
+}
+

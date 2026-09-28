@@ -21,6 +21,7 @@ import {
   pingK3sNodes,
   killK3sCluster,
   buildK3sCluster,
+  upK3sCluster,
   deployK3sRegistries,
   APP_CATALOG,
   findAgyBinary,
@@ -225,6 +226,7 @@ spec:
         'src/k3s_ping.sh',
         'src/k3s_kill.sh',
         'src/k3s_build.sh',
+        'src/k3s_up.sh',
       ];
 
       for (const scr of scripts) {
@@ -367,6 +369,16 @@ spec:
       assert.ok(buildTask.args.some((a) => a.includes('k3s_build.sh')));
       assert.ok(buildTask.args.includes('--rebuild'));
       assert.ok(buildTask.args.includes('--skip-up'));
+
+      const upTask = upK3sCluster(projectRoot, {
+        targetsFile: 'targets.txt',
+        parallel: 8,
+        skipTune: true,
+      });
+      assert.ok(upTask.id);
+      assert.ok(upTask.args.some((a) => a.includes('k3s_up.sh')));
+      assert.ok(upTask.args.includes('--targets'));
+      assert.ok(upTask.args.includes('--skip-tune'));
     });
   });
 

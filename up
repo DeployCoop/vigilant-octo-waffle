@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-if [[ "${1:-}" == "k3s:add-node" || "${1:-}" == "k3s:join" || "${1:-}" == "add-node" ]]; then
+if [[ "${1:-}" == "k3s:up" || "${1:-}" == "k3s:build" ]]; then
+  shift
+  exec ./src/k3s_up.sh "$@"
+elif [[ "${1:-}" == "k3s:down" || "${1:-}" == "k3s:kill" || "${1:-}" == "kill" ]]; then
+  shift
+  exec ./src/k3s_kill.sh "$@"
+elif [[ "${1:-}" == "k3s:rebuild" ]]; then
+  shift
+  exec ./src/k3s_build.sh --rebuild "$@"
+elif [[ "${1:-}" == "k3s:add-node" || "${1:-}" == "k3s:join" || "${1:-}" == "add-node" ]]; then
   shift
   exec ./src/k3s_add_node.sh "$@"
 elif [[ "${1:-}" == "k3s:tune" || "${1:-}" == "tune" ]]; then
@@ -14,15 +23,6 @@ elif [[ "${1:-}" == "k3s:registries" || "${1:-}" == "registries" ]]; then
 elif [[ "${1:-}" == "k3s:ping" || "${1:-}" == "ping" ]]; then
   shift
   exec ./src/k3s_ping.sh "$@"
-elif [[ "${1:-}" == "k3s:kill" || "${1:-}" == "kill" ]]; then
-  shift
-  exec ./src/k3s_kill.sh "$@"
-elif [[ "${1:-}" == "k3s:build" ]]; then
-  shift
-  exec ./src/k3s_build.sh "$@"
-elif [[ "${1:-}" == "k3s:rebuild" ]]; then
-  shift
-  exec ./src/k3s_build.sh --rebuild "$@"
 fi
 
 : "${BIG_LIST:=./src/big_list}"
@@ -49,10 +49,10 @@ main() {
     src/k3dUp.sh
   elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
     if kubectl get nodes >/dev/null 2>&1; then
-      echo "kube cluster is installed and running, proceeding"
+      echo "==> K3s cluster is running and reachable via kubectl, proceeding..."
     else
-      echo "kube cluster is not running. Initializing K3s cluster..."
-      ./src/k3s_build.sh --skip-up
+      echo "==> K3s cluster is not running. Initializing and bringing up K3s..."
+      ./src/k3s_up.sh --skip-up
       if ! kubectl get nodes >/dev/null 2>&1; then
         echo "Error: K3s cluster failed to start." >&2
         exit 1

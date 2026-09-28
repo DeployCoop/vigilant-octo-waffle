@@ -1,6 +1,0 @@
-[submodule "vigilant-octo-waffle"]
-	path = vigilant-octo-waffle
-	url = https://github.com/DeployCoop/vigilant-octo-waffle.git
-[submodule "urban-disco"]
-	path = urban-disco
-	url = https://github.com/DeployCoop/urban-disco.git

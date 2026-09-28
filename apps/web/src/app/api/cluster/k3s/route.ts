@@ -9,6 +9,7 @@ import {
   pingK3sNodes,
   killK3sCluster,
   buildK3sCluster,
+  upK3sCluster,
   deployK3sRegistries,
   listClusterNodeDetails,
 } from '@vow/orchestrator';
@@ -197,6 +198,22 @@ export async function POST(req: Request) {
         success: true,
         taskId: task.id,
         message: `K3s cluster ${action === 'rebuild' ? 'rebuild' : 'build'} started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'up') {
+      const task = upK3sCluster(root, {
+        targetsFile: body.targetsFile,
+        parallel: body.parallel ? Number(body.parallel) : 10,
+        skipJoin: body.skipJoin === true,
+        skipTune: body.skipTune === true,
+        runPlatformUp: body.runPlatformUp === true,
+        registriesFile: body.registriesFile,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `K3s cluster bring-up started (Task: ${task.id})`,
       });
     }
 
