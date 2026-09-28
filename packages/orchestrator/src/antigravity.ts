@@ -5,17 +5,32 @@ import { K8sClient, type ClusterTelemetry, type PodInfo, type ArgoAppStatus } fr
 import { loadProjectConfig } from './config.js';
 import { APP_CATALOG } from './registry.js';
 
+export type AIProvider = 'antigravity' | 'ollama' | 'vllm';
+
+export interface AIProviderInfo {
+  id: AIProvider;
+  name: string;
+  available: boolean;
+  baseUrl?: string;
+  models: string[];
+  defaultModel: string;
+}
+
 export interface AntigravityEngineStatus {
   available: boolean;
   binaryPath?: string;
   version?: string;
+  defaultProvider: AIProvider;
   defaultModel: string;
   availableModels: string[];
+  providers: Record<AIProvider, AIProviderInfo>;
   platform: string;
 }
 
 export interface AntigravityResponse {
   response: string;
+  provider: AIProvider;
+  modelUsed: string;
   conversationId?: string;
   durationSeconds?: number;
   usage?: {
@@ -24,7 +39,7 @@ export interface AntigravityResponse {
     thinking_tokens?: number;
     total_tokens?: number;
   };
-  engineUsed: 'antigravity-cli' | 'cluster-copilot-engine';
+  engineUsed: 'antigravity-cli' | 'ollama' | 'vllm' | 'cluster-copilot-engine';
   clusterSnapshot: {
     connected: boolean;
     context: string;
@@ -38,12 +53,42 @@ export interface AntigravityResponse {
 
 export interface AskAntigravityOptions {
   prompt: string;
-  conversationId?: string;
+  provider?: AIProvider;
   model?: string;
+  customEndpoint?: string;
+  conversationId?: string;
   effort?: 'low' | 'medium' | 'high';
   includeClusterContext?: boolean;
   root: string;
 }
+
+const DEFAULT_ANTIGRAVITY_MODELS = [
+  'gemini-3.8-flash-high',
+  'gemini-3.8-flash-medium',
+  'gemini-3.8-flash-low',
+  'gemini-3.7-flash-high',
+  'gemini-3.7-flash-medium',
+  'gemini-3.1-pro-high',
+  'claude-sonnet-4-6',
+  'claude-opus-4-6-thinking',
+  'gpt-oss-120b-medium',
+];
+
+const DEFAULT_OLLAMA_MODELS = [
+  'llama3:latest',
+  'mistral:latest',
+  'deepseek-r1:latest',
+  'qwen2.5-coder:latest',
+  'codellama:latest',
+  'phi4:latest',
+];
+
+const DEFAULT_VLLM_MODELS = [
+  'meta-llama/Meta-Llama-3-8B-Instruct',
+  'mistralai/Mistral-7B-Instruct-v0.2',
+  'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
+  'Qwen/Qwen2.5-Coder-7B-Instruct',
+];
 
 /**
  * Searches common locations for the Antigravity CLI binary (`agy`).
@@ -78,31 +123,134 @@ export function findAgyBinary(): string | null {
 }
 
 /**
- * Returns current status, binary path, and models for Antigravity engine.
+ * Checks if Ollama is running and retrieves installed models.
  */
-export function getAntigravityEngineStatus(): AntigravityEngineStatus {
-  const binary = findAgyBinary();
-  const available = Boolean(binary);
-  const version = process.env.ANTIGRAVITY_LS_VERSION || 'cli-2.17.0';
+export async function checkOllamaStatus(customUrl?: string): Promise<{
+  available: boolean;
+  models: string[];
+  baseUrl: string;
+}> {
+  const baseUrl = (customUrl || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/+$/, '');
 
-  const availableModels = [
-    'gemini-3.8-flash-high',
-    'gemini-3.8-flash-medium',
-    'gemini-3.8-flash-low',
-    'gemini-3.7-flash-high',
-    'gemini-3.7-flash-medium',
-    'gemini-3.1-pro-high',
-    'claude-sonnet-4-6',
-    'claude-opus-4-6-thinking',
-    'gpt-oss-120b-medium',
-  ];
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(`${baseUrl}/api/tags`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const tags = (data.models || []).map((m: any) => m.name || m.model).filter(Boolean);
+      return {
+        available: true,
+        models: tags.length > 0 ? tags : DEFAULT_OLLAMA_MODELS,
+        baseUrl,
+      };
+    }
+  } catch {}
 
   return {
-    available,
+    available: false,
+    models: DEFAULT_OLLAMA_MODELS,
+    baseUrl,
+  };
+}
+
+/**
+ * Checks if vLLM is running and retrieves served models.
+ */
+export async function checkVllmStatus(customUrl?: string): Promise<{
+  available: boolean;
+  models: string[];
+  baseUrl: string;
+}> {
+  const baseUrl = (customUrl || process.env.VLLM_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(`${baseUrl}/v1/models`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const models = (data.data || []).map((m: any) => m.id).filter(Boolean);
+      return {
+        available: true,
+        models: models.length > 0 ? models : DEFAULT_VLLM_MODELS,
+        baseUrl,
+      };
+    }
+  } catch {}
+
+  return {
+    available: false,
+    models: DEFAULT_VLLM_MODELS,
+    baseUrl,
+  };
+}
+
+/**
+ * Returns current status, binary path, and models for all supported providers:
+ * Antigravity (agy), Ollama, and vLLM.
+ */
+export async function getAntigravityEngineStatus(endpoints?: {
+  ollama?: string;
+  vllm?: string;
+}): Promise<AntigravityEngineStatus> {
+  const binary = findAgyBinary();
+  const agyAvailable = Boolean(binary);
+  const version = process.env.ANTIGRAVITY_LS_VERSION || 'cli-2.17.0';
+
+  const [ollamaStatus, vllmStatus] = await Promise.all([
+    checkOllamaStatus(endpoints?.ollama),
+    checkVllmStatus(endpoints?.vllm),
+  ]);
+
+  const providers: Record<AIProvider, AIProviderInfo> = {
+    antigravity: {
+      id: 'antigravity',
+      name: 'Google Antigravity (AGY)',
+      available: agyAvailable,
+      models: DEFAULT_ANTIGRAVITY_MODELS,
+      defaultModel: 'gemini-3.8-flash-high',
+    },
+    ollama: {
+      id: 'ollama',
+      name: 'Ollama (Local / On-Prem)',
+      available: ollamaStatus.available,
+      baseUrl: ollamaStatus.baseUrl,
+      models: ollamaStatus.models,
+      defaultModel: ollamaStatus.models[0] || 'llama3:latest',
+    },
+    vllm: {
+      id: 'vllm',
+      name: 'vLLM (High-Throughput)',
+      available: vllmStatus.available,
+      baseUrl: vllmStatus.baseUrl,
+      models: vllmStatus.models,
+      defaultModel: vllmStatus.models[0] || 'meta-llama/Meta-Llama-3-8B-Instruct',
+    },
+  };
+
+  return {
+    available: agyAvailable || ollamaStatus.available || vllmStatus.available,
     binaryPath: binary || undefined,
     version,
+    defaultProvider: agyAvailable ? 'antigravity' : ollamaStatus.available ? 'ollama' : 'antigravity',
     defaultModel: 'gemini-3.8-flash-high',
-    availableModels,
+    availableModels: DEFAULT_ANTIGRAVITY_MODELS,
+    providers,
     platform: process.platform,
   };
 }
@@ -231,17 +379,132 @@ export async function buildClusterContext(root: string): Promise<{
 }
 
 /**
- * Generates an intelligent cluster response if agy is unavailable.
+ * Queries Ollama via REST API (`/api/chat`).
+ */
+async function queryOllama(options: {
+  prompt: string;
+  systemInstructions: string;
+  model: string;
+  baseUrl?: string;
+}): Promise<{ response: string; usage?: any; durationSeconds: number }> {
+  const baseUrl = (options.baseUrl || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/+$/, '');
+  const startTime = Date.now();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+
+  try {
+    const res = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: options.model,
+        messages: [
+          { role: 'system', content: options.systemInstructions },
+          { role: 'user', content: options.prompt },
+        ],
+        stream: false,
+        options: {
+          temperature: 0.2,
+        },
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const elapsed = (Date.now() - startTime) / 1000;
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Ollama returned status ${res.status}: ${errText}`);
+    }
+
+    const data: any = await res.json();
+    const content = data.message?.content || data.response || '';
+
+    return {
+      response: content.trim(),
+      durationSeconds: elapsed,
+      usage: {
+        input_tokens: data.prompt_eval_count,
+        output_tokens: data.eval_count,
+        total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+      },
+    };
+  } catch (err: any) {
+    clearTimeout(timeout);
+    throw new Error(`Ollama connection error (${baseUrl}): ${err.message}`);
+  }
+}
+
+/**
+ * Queries vLLM via OpenAI-compatible REST API (`/v1/chat/completions`).
+ */
+async function queryVllm(options: {
+  prompt: string;
+  systemInstructions: string;
+  model: string;
+  baseUrl?: string;
+}): Promise<{ response: string; usage?: any; durationSeconds: number }> {
+  const baseUrl = (options.baseUrl || process.env.VLLM_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+  const startTime = Date.now();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+
+  try {
+    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: options.model,
+        messages: [
+          { role: 'system', content: options.systemInstructions },
+          { role: 'user', content: options.prompt },
+        ],
+        temperature: 0.2,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const elapsed = (Date.now() - startTime) / 1000;
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`vLLM returned status ${res.status}: ${errText}`);
+    }
+
+    const data: any = await res.json();
+    const content = data.choices?.[0]?.message?.content || '';
+
+    return {
+      response: content.trim(),
+      durationSeconds: elapsed,
+      usage: {
+        input_tokens: data.usage?.prompt_tokens,
+        output_tokens: data.usage?.completion_tokens,
+        total_tokens: data.usage?.total_tokens,
+      },
+    };
+  } catch (err: any) {
+    clearTimeout(timeout);
+    throw new Error(`vLLM connection error (${baseUrl}): ${err.message}`);
+  }
+}
+
+/**
+ * Generates an intelligent cluster response if an AI backend is unreachable.
  */
 function generateHeuristicResponse(
   userPrompt: string,
   snapshot: AntigravityResponse['clusterSnapshot'],
-  clusterMarkdown: string
+  providerName: string = 'Antigravity Copilot'
 ): string {
   const p = userPrompt.toLowerCase();
 
   if (p.includes('status') || p.includes('health') || p.includes('overview') || p.includes('nodes')) {
-    return `### Antigravity Cluster Overview
+    return `### ${providerName} Cluster Overview
 
 ${snapshot.connected ? `The Kubernetes cluster is currently **Online** and healthy.` : `The Kubernetes cluster is currently **Offline / Disconnected**.`}
 
@@ -318,7 +581,7 @@ KinD multi-node clusters are specified in \`src/kind-config.tpl\`. Re-run \`./up
   }
 
   // General fallback answer
-  return `### Antigravity Cluster Copilot
+  return `### ${providerName}
 
 I have received your request regarding: *"**${userPrompt.trim()}**"*.
 
@@ -337,29 +600,27 @@ Need specific details on certificates, ArgoCD applications, network security, or
 }
 
 /**
- * Main query method for Antigravity AI.
- * Gathers cluster context, formats the prompt, invokes `agy` CLI,
- * and parses the response. Falls back gracefully if `agy` is unavailable.
+ * Main query method supporting:
+ * - Antigravity (`agy` CLI)
+ * - Ollama (`/api/chat` REST)
+ * - vLLM (`/v1/chat/completions` REST)
+ * - Automatic Heuristic Cluster Copilot fallback
  */
 export async function askAntigravity(options: AskAntigravityOptions): Promise<AntigravityResponse> {
-  const { prompt, conversationId, model, effort = 'low', includeClusterContext = true, root } = options;
+  const {
+    prompt,
+    provider = 'antigravity',
+    model,
+    customEndpoint,
+    conversationId,
+    effort = 'low',
+    includeClusterContext = true,
+    root,
+  } = options;
 
   const { promptContext, snapshot } = await buildClusterContext(root);
 
-  const agyBinary = findAgyBinary();
-
-  if (!agyBinary) {
-    const fallbackText = generateHeuristicResponse(prompt, snapshot, promptContext);
-    return {
-      response: fallbackText,
-      conversationId: conversationId || `conv_${Date.now()}`,
-      durationSeconds: 0.1,
-      engineUsed: 'cluster-copilot-engine',
-      clusterSnapshot: snapshot,
-    };
-  }
-
-  const systemInstructions = `You are Antigravity, the AI DevOps and Kubernetes Copilot for the Vigilant Octo Waffle local control plane.
+  const systemInstructions = `You are the AI DevOps and Kubernetes Copilot for the Vigilant Octo Waffle local control plane.
 
 ${includeClusterContext ? promptContext : ''}
 
@@ -369,6 +630,105 @@ Instructions:
 3. Use markdown tables, bold headings, and bullet points to structure your output cleanly.
 4. Reference the live cluster state above whenever the user asks about cluster health, pods, nodes, or applications.
 5. If there are any failing pods or misconfigurations, provide the exact cause and step-by-step remediation.`;
+
+  // 1. Ollama Provider
+  if (provider === 'ollama') {
+    const targetModel = model || 'llama3:latest';
+    try {
+      const ollamaRes = await queryOllama({
+        prompt,
+        systemInstructions,
+        model: targetModel,
+        baseUrl: customEndpoint,
+      });
+
+      return {
+        response: ollamaRes.response,
+        provider: 'ollama',
+        modelUsed: targetModel,
+        conversationId: conversationId || `conv_ollama_${Date.now()}`,
+        durationSeconds: ollamaRes.durationSeconds,
+        usage: ollamaRes.usage,
+        engineUsed: 'ollama',
+        clusterSnapshot: snapshot,
+      };
+    } catch (err: any) {
+      const endpoint = customEndpoint || 'http://localhost:11434';
+      const fallbackText = `> ⚠️ **Ollama Offline**: Could not connect to Ollama at \`${endpoint}\` (${err.message}).
+> Ensure Ollama is running (\`ollama serve\`) and that model \`${targetModel}\` is downloaded (\`ollama pull ${targetModel}\`).
+> Showing local cluster copilot analysis instead:
+
+${generateHeuristicResponse(prompt, snapshot, 'Ollama (Heuristic Fallback)')}`;
+
+      return {
+        response: fallbackText,
+        provider: 'ollama',
+        modelUsed: targetModel,
+        conversationId: conversationId || `conv_${Date.now()}`,
+        durationSeconds: 0.1,
+        engineUsed: 'cluster-copilot-engine',
+        clusterSnapshot: snapshot,
+      };
+    }
+  }
+
+  // 2. vLLM Provider
+  if (provider === 'vllm') {
+    const targetModel = model || 'meta-llama/Meta-Llama-3-8B-Instruct';
+    try {
+      const vllmRes = await queryVllm({
+        prompt,
+        systemInstructions,
+        model: targetModel,
+        baseUrl: customEndpoint,
+      });
+
+      return {
+        response: vllmRes.response,
+        provider: 'vllm',
+        modelUsed: targetModel,
+        conversationId: conversationId || `conv_vllm_${Date.now()}`,
+        durationSeconds: vllmRes.durationSeconds,
+        usage: vllmRes.usage,
+        engineUsed: 'vllm',
+        clusterSnapshot: snapshot,
+      };
+    } catch (err: any) {
+      const endpoint = customEndpoint || 'http://localhost:8000';
+      const fallbackText = `> ⚠️ **vLLM Offline**: Could not connect to vLLM at \`${endpoint}\` (${err.message}).
+> Ensure your vLLM server is running (e.g. \`vllm serve ${targetModel} --port 8000\`).
+> Showing local cluster copilot analysis instead:
+
+${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
+
+      return {
+        response: fallbackText,
+        provider: 'vllm',
+        modelUsed: targetModel,
+        conversationId: conversationId || `conv_${Date.now()}`,
+        durationSeconds: 0.1,
+        engineUsed: 'cluster-copilot-engine',
+        clusterSnapshot: snapshot,
+      };
+    }
+  }
+
+  // 3. Default: Google Antigravity (agy CLI)
+  const agyBinary = findAgyBinary();
+  const targetModel = model || 'gemini-3.8-flash-high';
+
+  if (!agyBinary) {
+    const fallbackText = generateHeuristicResponse(prompt, snapshot, 'Antigravity Copilot');
+    return {
+      response: fallbackText,
+      provider: 'antigravity',
+      modelUsed: targetModel,
+      conversationId: conversationId || `conv_${Date.now()}`,
+      durationSeconds: 0.1,
+      engineUsed: 'cluster-copilot-engine',
+      clusterSnapshot: snapshot,
+    };
+  }
 
   const fullPrompt = `${systemInstructions}\n\nUser Question:\n${prompt}`;
 
@@ -398,13 +758,15 @@ Instructions:
           PATH: `${path.dirname(agyBinary)}:${process.env.PATH || ''}`,
         },
       },
-      (err, stdout, stderr) => {
+      (err, stdout) => {
         const elapsed = (Date.now() - startTime) / 1000;
 
         if (err || !stdout.trim()) {
-          const fallbackText = generateHeuristicResponse(prompt, snapshot, promptContext);
+          const fallbackText = generateHeuristicResponse(prompt, snapshot, 'Antigravity Copilot');
           return resolve({
             response: fallbackText,
+            provider: 'antigravity',
+            modelUsed: targetModel,
             conversationId: conversationId || `conv_${Date.now()}`,
             durationSeconds: elapsed,
             engineUsed: 'cluster-copilot-engine',
@@ -413,14 +775,15 @@ Instructions:
         }
 
         try {
-          // Parse JSON output from agy
           const parsed = JSON.parse(stdout.trim());
           const responseText = parsed.response || parsed.text || '';
 
           if (!responseText.trim()) {
-            const fallbackText = generateHeuristicResponse(prompt, snapshot, promptContext);
+            const fallbackText = generateHeuristicResponse(prompt, snapshot, 'Antigravity Copilot');
             return resolve({
               response: fallbackText,
+              provider: 'antigravity',
+              modelUsed: targetModel,
               conversationId: parsed.conversation_id || conversationId,
               durationSeconds: parsed.duration_seconds || elapsed,
               usage: parsed.usage,
@@ -431,6 +794,8 @@ Instructions:
 
           resolve({
             response: responseText.trim(),
+            provider: 'antigravity',
+            modelUsed: targetModel,
             conversationId: parsed.conversation_id || conversationId,
             durationSeconds: parsed.duration_seconds || elapsed,
             usage: parsed.usage,
@@ -438,9 +803,10 @@ Instructions:
             clusterSnapshot: snapshot,
           });
         } catch {
-          // In case stdout was plain text rather than JSON
           resolve({
             response: stdout.trim(),
+            provider: 'antigravity',
+            modelUsed: targetModel,
             conversationId: conversationId || `conv_${Date.now()}`,
             durationSeconds: elapsed,
             engineUsed: 'antigravity-cli',

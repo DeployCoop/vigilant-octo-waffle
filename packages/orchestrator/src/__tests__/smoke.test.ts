@@ -315,12 +315,17 @@ spec:
   });
 
   describe('Antigravity Cluster Copilot Integration', () => {
-    it('detects Antigravity CLI binary and returns engine status', () => {
-      const status = getAntigravityEngineStatus();
+    it('detects Antigravity CLI binary and returns engine status with Ollama and vLLM providers', async () => {
+      const status = await getAntigravityEngineStatus();
       assert.ok(typeof status.available === 'boolean');
       assert.ok(status.defaultModel.includes('gemini'));
       assert.ok(status.availableModels.length > 0);
       assert.ok(status.availableModels.includes('gemini-3.8-flash-high'));
+      assert.ok(status.providers.antigravity);
+      assert.ok(status.providers.ollama);
+      assert.ok(status.providers.vllm);
+      assert.ok(status.providers.ollama.models.length > 0);
+      assert.ok(status.providers.vllm.models.length > 0);
     });
 
     it('builds live cluster context snapshot with telemetry and apps', async () => {
@@ -348,6 +353,38 @@ spec:
       assert.ok(['antigravity-cli', 'cluster-copilot-engine'].includes(result.engineUsed));
       assert.ok(result.clusterSnapshot);
       assert.ok(typeof result.clusterSnapshot.nodeCount === 'number');
+    });
+
+    it('handles Ollama provider query with fallback or live connection', async () => {
+      const result = await askAntigravity({
+        prompt: 'What pods are in namespace default?',
+        provider: 'ollama',
+        model: 'llama3:latest',
+        includeClusterContext: true,
+        root: projectRoot,
+      });
+
+      assert.ok(result);
+      assert.equal(result.provider, 'ollama');
+      assert.equal(result.modelUsed, 'llama3:latest');
+      assert.ok(result.response && result.response.length > 0);
+      assert.ok(['ollama', 'cluster-copilot-engine'].includes(result.engineUsed));
+    });
+
+    it('handles vLLM provider query with fallback or live connection', async () => {
+      const result = await askAntigravity({
+        prompt: 'How to inspect certificates in cluster?',
+        provider: 'vllm',
+        model: 'meta-llama/Meta-Llama-3-8B-Instruct',
+        includeClusterContext: true,
+        root: projectRoot,
+      });
+
+      assert.ok(result);
+      assert.equal(result.provider, 'vllm');
+      assert.equal(result.modelUsed, 'meta-llama/Meta-Llama-3-8B-Instruct');
+      assert.ok(result.response && result.response.length > 0);
+      assert.ok(['vllm', 'cluster-copilot-engine'].includes(result.engineUsed));
     });
   });
 });

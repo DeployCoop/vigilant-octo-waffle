@@ -4,14 +4,22 @@ import {
   askAntigravity,
   getAntigravityEngineStatus,
   buildClusterContext,
+  type AIProvider,
 } from '@vow/orchestrator';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const ollamaEndpoint = searchParams.get('ollamaEndpoint') || undefined;
+    const vllmEndpoint = searchParams.get('vllmEndpoint') || undefined;
+
     const root = getProjectRoot();
-    const status = getAntigravityEngineStatus();
+    const status = await getAntigravityEngineStatus({
+      ollama: ollamaEndpoint,
+      vllm: vllmEndpoint,
+    });
     const { snapshot } = await buildClusterContext(root);
 
     const samplePrompts = [
@@ -39,8 +47,10 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const {
       prompt,
-      conversationId,
+      provider = 'antigravity',
       model,
+      customEndpoint,
+      conversationId,
       effort = 'low',
       includeClusterContext = true,
     } = body;
@@ -52,17 +62,22 @@ export async function POST(req: Request) {
       );
     }
 
-    if (prompt.length > 5000) {
+    if (prompt.length > 8000) {
       return NextResponse.json(
-        { error: 'Prompt exceeds maximum length of 5000 characters.' },
+        { error: 'Prompt exceeds maximum length of 8000 characters.' },
         { status: 400 }
       );
     }
 
+    const validProviders: AIProvider[] = ['antigravity', 'ollama', 'vllm'];
+    const activeProvider: AIProvider = validProviders.includes(provider) ? provider : 'antigravity';
+
     const result = await askAntigravity({
       prompt: prompt.trim(),
+      provider: activeProvider,
+      model: typeof model === 'string' && model.trim() ? model.trim() : undefined,
+      customEndpoint: typeof customEndpoint === 'string' && customEndpoint.trim() ? customEndpoint.trim() : undefined,
       conversationId: typeof conversationId === 'string' ? conversationId : undefined,
-      model: typeof model === 'string' ? model : undefined,
       effort: ['low', 'medium', 'high'].includes(effort) ? effort : 'low',
       includeClusterContext: Boolean(includeClusterContext),
       root,
@@ -74,7 +89,7 @@ export async function POST(req: Request) {
     });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || 'Antigravity execution failed.' },
+      { error: err.message || 'AI Copilot execution failed.' },
       { status: 500 }
     );
   }

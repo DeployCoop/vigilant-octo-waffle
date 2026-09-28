@@ -23,16 +23,29 @@ import {
   Play,
   Flame,
   Shield,
-  HelpCircle,
+  Settings2,
+  Check,
+  Zap,
 } from 'lucide-react';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
-import { copyToClipboard } from '@/lib/clipboard';
+
+type AIProvider = 'antigravity' | 'ollama' | 'vllm';
+
+interface AIProviderInfo {
+  id: AIProvider;
+  name: string;
+  available: boolean;
+  baseUrl?: string;
+  models: string[];
+  defaultModel: string;
+}
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
+  provider?: AIProvider;
   durationSeconds?: number;
   tokensUsed?: number;
   modelUsed?: string;
@@ -50,8 +63,10 @@ interface ChatMessage {
 interface EngineInfo {
   available: boolean;
   version?: string;
+  defaultProvider: AIProvider;
   defaultModel: string;
   availableModels: string[];
+  providers: Record<AIProvider, AIProviderInfo>;
   platform: string;
 }
 
@@ -104,24 +119,42 @@ export default function AntigravityPage() {
   const [loading, setLoading] = useState(false);
   const [engine, setEngine] = useState<EngineInfo | null>(null);
   const [clusterSnapshot, setClusterSnapshot] = useState<ClusterSnapshot | null>(null);
+
+  // Provider & Model State
+  const [selectedProvider, setSelectedProvider] = useState<AIProvider>('antigravity');
   const [selectedModel, setSelectedModel] = useState('gemini-3.8-flash-high');
+  const [customModel, setCustomModel] = useState('');
   const [selectedEffort, setSelectedEffort] = useState<'low' | 'medium' | 'high'>('low');
   const [includeClusterContext, setIncludeClusterContext] = useState(true);
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
+
+  // Custom Endpoints
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
+  const [vllmUrl, setVllmUrl] = useState('http://localhost:8000');
+  const [showEndpointSettings, setShowEndpointSettings] = useState(false);
+  const [endpointTesting, setEndpointTesting] = useState(false);
+
+  // Command Runner State
   const [commandOutput, setCommandOutput] = useState<{ command: string; output: string; status: 'running' | 'done' | 'failed' } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Fetch engine and cluster telemetry on load
+  // Fetch engine and cluster telemetry
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/api/antigravity');
+      const query = new URLSearchParams({
+        ollamaEndpoint: ollamaUrl,
+        vllmEndpoint: vllmUrl,
+      });
+
+      const res = await fetch(`/api/antigravity?${query.toString()}`);
       const data = await res.json();
+
       if (data.engine) {
         setEngine(data.engine);
-        if (data.engine.defaultModel) {
-          setSelectedModel(data.engine.defaultModel);
+        if (data.engine.providers?.[selectedProvider]?.defaultModel && !customModel) {
+          setSelectedModel(data.engine.providers[selectedProvider].defaultModel);
         }
       }
       if (data.clusterSnapshot) {
@@ -134,7 +167,20 @@ export default function AntigravityPage() {
 
   useEffect(() => {
     fetchStatus();
-  }, []);
+  }, [ollamaUrl, vllmUrl]);
+
+  // Update selected model when provider changes
+  const handleProviderChange = (newProvider: AIProvider) => {
+    setSelectedProvider(newProvider);
+    setCustomModel('');
+    if (engine?.providers?.[newProvider]) {
+      setSelectedModel(engine.providers[newProvider].defaultModel);
+    } else {
+      if (newProvider === 'ollama') setSelectedModel('llama3:latest');
+      else if (newProvider === 'vllm') setSelectedModel('meta-llama/Meta-Llama-3-8B-Instruct');
+      else setSelectedModel('gemini-3.8-flash-high');
+    }
+  };
 
   // Auto-scroll to bottom of conversation
   useEffect(() => {
@@ -144,6 +190,8 @@ export default function AntigravityPage() {
   const handleSendMessage = async (textToSend?: string) => {
     const messageText = (textToSend || input).trim();
     if (!messageText || loading) return;
+
+    const activeModel = customModel.trim() || selectedModel;
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -157,13 +205,18 @@ export default function AntigravityPage() {
     setLoading(true);
 
     try {
+      const customEndpoint =
+        selectedProvider === 'ollama' ? ollamaUrl : selectedProvider === 'vllm' ? vllmUrl : undefined;
+
       const res = await fetch('/api/antigravity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: messageText,
+          provider: selectedProvider,
+          model: activeModel,
+          customEndpoint,
           conversationId,
-          model: selectedModel,
           effort: selectedEffort,
           includeClusterContext,
         }),
@@ -172,7 +225,7 @@ export default function AntigravityPage() {
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        throw new Error(data.error || 'Failed to get response from Antigravity');
+        throw new Error(data.error || 'Failed to get response from AI Copilot');
       }
 
       if (data.conversationId) {
@@ -187,9 +240,10 @@ export default function AntigravityPage() {
         role: 'assistant',
         content: data.response,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        provider: data.provider || selectedProvider,
         durationSeconds: data.durationSeconds,
         tokensUsed: data.usage?.total_tokens,
-        modelUsed: selectedModel,
+        modelUsed: data.modelUsed || activeModel,
         clusterSnapshot: data.clusterSnapshot,
       };
 
@@ -198,7 +252,7 @@ export default function AntigravityPage() {
       const errorMessage: ChatMessage = {
         id: `err-${Date.now()}`,
         role: 'system',
-        content: `⚠️ Error contacting Antigravity: ${err.message}`,
+        content: `⚠️ Error contacting ${selectedProvider.toUpperCase()}: ${err.message}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -209,7 +263,7 @@ export default function AntigravityPage() {
   };
 
   const handleClearChat = () => {
-    if (confirm('Clear the current Antigravity conversation?')) {
+    if (confirm('Clear the current conversation?')) {
       setMessages([]);
       setConversationId(undefined);
     }
@@ -219,7 +273,7 @@ export default function AntigravityPage() {
     const text = messages
       .map(
         (m) =>
-          `### ${m.role === 'user' ? 'User' : 'Antigravity'} (${m.timestamp})\n\n${m.content}\n`
+          `### ${m.role === 'user' ? 'User' : `AI (${m.provider || 'Antigravity'} - ${m.modelUsed || ''})`} [${m.timestamp}]\n\n${m.content}\n`
       )
       .join('\n---\n\n');
 
@@ -227,12 +281,12 @@ export default function AntigravityPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `antigravity-conversation-${new Date().toISOString().slice(0, 10)}.md`;
+    a.download = `cluster-copilot-conversation-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // Execute a recommended CLI command through the orchestrator allowlist
+  // Execute recommended CLI commands via orchestrator allowlist
   const handleExecuteCommand = async (commandStr: string) => {
     const trimmed = commandStr.replace(/^[$#]\s*/, '').trim();
     const parts = trimmed.split(/\s+/);
@@ -241,7 +295,7 @@ export default function AntigravityPage() {
 
     setCommandOutput({
       command: trimmed,
-      output: 'Running command via orchestrator...',
+      output: 'Executing command via orchestrator...',
       status: 'running',
     });
 
@@ -262,7 +316,7 @@ export default function AntigravityPage() {
       } else {
         setCommandOutput({
           command: trimmed,
-          output: `Task spawned successfully with ID: ${data.taskId}\nView real-time output in the Live Terminal console.`,
+          output: `Task spawned successfully with ID: ${data.taskId}\nReal-time logs stream in the Live Terminal console.`,
           status: 'done',
         });
       }
@@ -275,6 +329,8 @@ export default function AntigravityPage() {
     }
   };
 
+  const currentProviderInfo = engine?.providers?.[selectedProvider];
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-slate-950 text-slate-100 overflow-hidden">
       {/* Top Header Bar */}
@@ -286,58 +342,129 @@ export default function AntigravityPage() {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="font-bold text-base text-slate-100 tracking-wide">
-                Antigravity Copilot
+                Cluster AI Copilot
               </h1>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center space-x-1">
                 <Sparkles className="w-2.5 h-2.5" />
-                <span>AI DevOps</span>
+                <span>Multi-Engine</span>
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Interactive Google Antigravity agent grounded in live Kubernetes telemetry
+              Ask Antigravity, Ollama, or vLLM with live Kubernetes telemetry grounding
             </p>
           </div>
         </div>
 
         {/* Controls */}
         <div className="flex items-center flex-wrap gap-2.5 text-xs">
+          {/* Provider Tabs */}
+          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5">
+            <button
+              onClick={() => handleProviderChange('antigravity')}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                selectedProvider === 'antigravity'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Sparkles className="w-3 h-3 text-sky-300" />
+              <span>Antigravity</span>
+            </button>
+
+            <button
+              onClick={() => handleProviderChange('ollama')}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                selectedProvider === 'ollama'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="text-xs">🦙</span>
+              <span>Ollama</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  engine?.providers?.ollama?.available ? 'bg-emerald-400' : 'bg-slate-600'
+                }`}
+                title={engine?.providers?.ollama?.available ? 'Ollama Online' : 'Ollama Standby / Offline'}
+              />
+            </button>
+
+            <button
+              onClick={() => handleProviderChange('vllm')}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                selectedProvider === 'vllm'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Zap className="w-3 h-3 text-amber-400" />
+              <span>vLLM</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  engine?.providers?.vllm?.available ? 'bg-emerald-400' : 'bg-slate-600'
+                }`}
+                title={engine?.providers?.vllm?.available ? 'vLLM Online' : 'vLLM Standby / Offline'}
+              />
+            </button>
+          </div>
+
           {/* Model Selector */}
           <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5">
             <Cpu className="w-3.5 h-3.5 text-sky-400" />
             <select
               value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-1"
+              onChange={(e) => {
+                setSelectedModel(e.target.value);
+                setCustomModel('');
+              }}
+              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-1 max-w-[160px] truncate"
             >
-              {engine?.availableModels ? (
-                engine.availableModels.map((m) => (
+              {currentProviderInfo?.models ? (
+                currentProviderInfo.models.map((m) => (
                   <option key={m} value={m} className="bg-slate-900 text-slate-200">
                     {m}
                   </option>
                 ))
               ) : (
-                <option value="gemini-3.8-flash-high">Gemini 3.8 Flash</option>
+                <option value={selectedModel}>{selectedModel}</option>
               )}
             </select>
           </div>
 
-          {/* Effort Selector */}
-          <div className="flex items-center space-x-1 bg-slate-950 border border-slate-800 rounded-lg p-0.5">
-            {(['low', 'medium', 'high'] as const).map((lvl) => (
-              <button
-                key={lvl}
-                onClick={() => setSelectedEffort(lvl)}
-                className={`px-2 py-1 rounded text-[11px] font-medium capitalize transition-colors ${
-                  selectedEffort === lvl
-                    ? 'bg-sky-600 text-white'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title={`Reasoning effort: ${lvl}`}
-              >
-                {lvl}
-              </button>
-            ))}
-          </div>
+          {/* Effort Selector for Antigravity */}
+          {selectedProvider === 'antigravity' && (
+            <div className="flex items-center space-x-1 bg-slate-950 border border-slate-800 rounded-lg p-0.5">
+              {(['low', 'medium', 'high'] as const).map((lvl) => (
+                <button
+                  key={lvl}
+                  onClick={() => setSelectedEffort(lvl)}
+                  className={`px-2 py-1 rounded text-[11px] font-medium capitalize transition-colors ${
+                    selectedEffort === lvl
+                      ? 'bg-sky-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title={`Reasoning effort: ${lvl}`}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Endpoint Settings Button */}
+          {(selectedProvider === 'ollama' || selectedProvider === 'vllm') && (
+            <button
+              onClick={() => setShowEndpointSettings(!showEndpointSettings)}
+              className={`p-1.5 rounded-lg border transition-colors ${
+                showEndpointSettings
+                  ? 'bg-sky-600 border-sky-500 text-white'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+              title="Configure Endpoint URL & Custom Model"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           {/* Context Injection Toggle */}
           <label className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer text-slate-300 select-none">
@@ -371,6 +498,62 @@ export default function AntigravityPage() {
           )}
         </div>
       </div>
+
+      {/* Endpoint Configuration Dropdown Drawer */}
+      {showEndpointSettings && (selectedProvider === 'ollama' || selectedProvider === 'vllm') && (
+        <div className="bg-slate-900 border-b border-slate-800 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 text-xs animate-in slide-in-from-top-2">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-slate-400 font-semibold uppercase">
+                {selectedProvider} Base URL:
+              </span>
+              <input
+                type="text"
+                value={selectedProvider === 'ollama' ? ollamaUrl : vllmUrl}
+                onChange={(e) =>
+                  selectedProvider === 'ollama'
+                    ? setOllamaUrl(e.target.value)
+                    : setVllmUrl(e.target.value)
+                }
+                className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-sky-400 font-mono text-xs w-64 focus:outline-none focus:border-sky-500"
+                placeholder={selectedProvider === 'ollama' ? 'http://localhost:11434' : 'http://localhost:8000'}
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <span className="text-slate-400">Custom Model Tag:</span>
+              <input
+                type="text"
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-slate-200 font-mono text-xs w-48 focus:outline-none focus:border-sky-500"
+                placeholder="e.g. qwen2.5-coder:7b"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={async () => {
+                setEndpointTesting(true);
+                await fetchStatus();
+                setEndpointTesting(false);
+              }}
+              disabled={endpointTesting}
+              className="px-3 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-semibold flex items-center space-x-1"
+            >
+              <RefreshCw className={`w-3 h-3 ${endpointTesting ? 'animate-spin' : ''}`} />
+              <span>Probe Endpoint</span>
+            </button>
+            <button
+              onClick={() => setShowEndpointSettings(false)}
+              className="p-1 text-slate-400 hover:text-slate-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Cluster Telemetry Pill Banner */}
       <div className="bg-slate-900/50 border-b border-slate-800/80 px-6 py-2 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-3">
@@ -447,12 +630,30 @@ export default function AntigravityPage() {
                 <Bot className="w-10 h-10" />
               </div>
               <h2 className="text-xl font-bold text-slate-100">
-                Ask Antigravity About Your Cluster
+                Ask About Your Kubernetes Cluster
               </h2>
               <p className="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">
-                Autonomous DevOps assistant capable of inspecting cluster health, diagnosing failing
-                pods, analyzing GitOps deployments, and providing instant remediation steps.
+                Autonomous DevOps copilot powered by{' '}
+                <span className="text-sky-400 font-semibold">Google Antigravity</span>,{' '}
+                <span className="text-emerald-400 font-semibold">Ollama</span>, or{' '}
+                <span className="text-amber-400 font-semibold">vLLM</span>. Inspect cluster health,
+                diagnose pod failures, review GitOps manifests, and run recommended fixes.
               </p>
+
+              {/* Provider Quick Indicator */}
+              <div className="flex items-center justify-center space-x-3 pt-2">
+                <span className="px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
+                  Active Engine:{' '}
+                  <strong className="text-sky-400 capitalize">
+                    {selectedProvider === 'antigravity'
+                      ? 'Antigravity (AGY)'
+                      : selectedProvider === 'ollama'
+                      ? 'Ollama Local'
+                      : 'vLLM Engine'}
+                  </strong>{' '}
+                  ({customModel || selectedModel})
+                </span>
+              </div>
             </div>
 
             {/* Prompt Cards Grid */}
@@ -492,8 +693,22 @@ export default function AntigravityPage() {
               >
                 {/* Assistant Avatar */}
                 {m.role !== 'user' && (
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md shadow-sky-500/10">
-                    <Bot className="w-4 h-4 text-white" />
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
+                      m.provider === 'ollama'
+                        ? 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white'
+                        : m.provider === 'vllm'
+                        ? 'bg-gradient-to-br from-amber-600 to-orange-700 text-white'
+                        : 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white'
+                    }`}
+                  >
+                    {m.provider === 'ollama' ? (
+                      <span className="text-sm">🦙</span>
+                    ) : m.provider === 'vllm' ? (
+                      <Zap className="w-4 h-4 text-white" />
+                    ) : (
+                      <Bot className="w-4 h-4 text-white" />
+                    )}
                   </div>
                 )}
 
@@ -511,9 +726,11 @@ export default function AntigravityPage() {
                   {m.role === 'assistant' && (
                     <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-[11px] text-slate-400">
                       <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-slate-200">Antigravity</span>
+                        <span className="font-semibold text-slate-200 capitalize">
+                          {m.provider || 'Antigravity'}
+                        </span>
                         {m.modelUsed && (
-                          <span className="font-mono text-[10px] text-slate-500">
+                          <span className="font-mono text-[10px] text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                             {m.modelUsed}
                           </span>
                         )}
@@ -553,13 +770,25 @@ export default function AntigravityPage() {
             {/* Loading Indicator */}
             {loading && (
               <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shrink-0 animate-pulse">
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 animate-pulse ${
+                    selectedProvider === 'ollama'
+                      ? 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white'
+                      : selectedProvider === 'vllm'
+                      ? 'bg-gradient-to-br from-amber-600 to-orange-700 text-white'
+                      : 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white'
+                  }`}
+                >
                   <Bot className="w-4 h-4 text-white" />
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-none p-4 text-xs text-slate-300 flex items-center space-x-2">
                   <Sparkles className="w-3.5 h-3.5 text-sky-400 animate-spin" />
                   <span className="text-slate-400">
-                    Antigravity is inspecting cluster telemetry and reasoning...
+                    {selectedProvider === 'ollama'
+                      ? 'Ollama is generating response...'
+                      : selectedProvider === 'vllm'
+                      ? 'vLLM is running inference...'
+                      : 'Antigravity is inspecting cluster telemetry and reasoning...'}
                   </span>
                 </div>
               </div>
@@ -570,7 +799,7 @@ export default function AntigravityPage() {
         )}
       </div>
 
-      {/* Quick Command Execution Feedback Modal / Drawer */}
+      {/* Quick Command Execution Feedback Drawer */}
       {commandOutput && (
         <div className="bg-slate-900/95 border-t border-slate-800 px-6 py-3 flex items-center justify-between text-xs font-mono">
           <div className="flex items-center space-x-3 overflow-hidden">
@@ -640,7 +869,9 @@ export default function AntigravityPage() {
                   handleSendMessage();
                 }
               }}
-              placeholder="Ask Antigravity anything about your Kubernetes cluster, pods, ArgoCD, or GitOps..."
+              placeholder={`Ask ${
+                selectedProvider === 'ollama' ? 'Ollama' : selectedProvider === 'vllm' ? 'vLLM' : 'Antigravity'
+              } anything about your Kubernetes cluster, pods, ArgoCD, or GitOps...`}
               rows={1}
               disabled={loading}
               className="flex-1 bg-transparent text-xs text-slate-100 placeholder-slate-500 focus:outline-none resize-none px-2 py-1 max-h-32 min-h-[36px]"
@@ -654,14 +885,18 @@ export default function AntigravityPage() {
                   ? 'bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-600/20'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
               }`}
-              title="Send to Antigravity (Enter)"
+              title="Send to Copilot (Enter)"
             >
               <Send className="w-4 h-4" />
             </button>
           </form>
 
           <div className="flex items-center justify-between text-[10px] text-slate-500 px-1">
-            <span>Press <kbd className="bg-slate-800 px-1 rounded text-slate-400">Enter</kbd> to send, <kbd className="bg-slate-800 px-1 rounded text-slate-400">Shift+Enter</kbd> for new line</span>
+            <span>
+              Engine: <strong className="text-slate-400 capitalize">{selectedProvider}</strong> (
+              {customModel || selectedModel}) • Press{' '}
+              <kbd className="bg-slate-800 px-1 rounded text-slate-400">Enter</kbd> to send
+            </span>
             <span>Grounded in live local cluster state</span>
           </div>
         </div>
