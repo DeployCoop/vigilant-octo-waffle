@@ -14,6 +14,7 @@ import {
   Layers,
   ArrowRight,
 } from 'lucide-react';
+import { copyToClipboard as copyText } from '@/lib/clipboard';
 
 interface CertificateItem {
   name: string;
@@ -56,8 +57,8 @@ export default function CertificatesPage() {
     fetchDns();
   }, [targetIps]);
 
-  const copyToClipboard = (text: string, section: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, section: string) => {
+    await copyText(text);
     setCopiedSection(section);
     setTimeout(() => setCopiedSection(null), 2500);
   };

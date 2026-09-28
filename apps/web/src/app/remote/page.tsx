@@ -16,6 +16,7 @@ import {
   Radio,
   CheckCircle2,
 } from 'lucide-react';
+import { copyToClipboard } from '@/lib/clipboard';
 
 interface PairingSession {
   token: string;
@@ -56,9 +57,9 @@ export default function RemotePairingPage() {
     loadSession();
   }, []);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!session) return;
-    navigator.clipboard.writeText(session.pairingUrl);
+    await copyToClipboard(session.pairingUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
