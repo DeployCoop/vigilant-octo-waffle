@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "dev": "pnpm --filter @vow/web dev",
+    "dev": "pnpm --filter @vow/orchestrator build && pnpm --filter @vow/web dev",
     "build": "pnpm --filter @vow/orchestrator build && pnpm --filter @vow/web build",
     "start": "pnpm --filter @vow/web start",
     "test": "pnpm -r test",

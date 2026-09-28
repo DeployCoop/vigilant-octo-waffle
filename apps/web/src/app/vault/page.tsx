@@ -15,6 +15,7 @@ import {
   Lock,
   Mail,
 } from 'lucide-react';
+import { copyToClipboard as copyText } from '@/lib/clipboard';
 
 interface SecretVaultItem {
   key: string;
@@ -72,8 +73,8 @@ export default function VaultPage() {
     });
   };
 
-  const copyToClipboard = (key: string, val: string) => {
-    navigator.clipboard.writeText(val);
+  const copyToClipboard = async (key: string, val: string) => {
+    await copyText(val);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
   };

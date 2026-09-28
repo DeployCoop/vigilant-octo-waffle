@@ -14,6 +14,7 @@ import {
   Code,
   Layers,
 } from 'lucide-react';
+import { copyToClipboard } from '@/lib/clipboard';
 
 interface NetworkPolicyInfo {
   name: string;
@@ -93,9 +94,9 @@ export default function NetworkPolicyPage() {
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!scaffoldedYaml) return;
-    navigator.clipboard.writeText(scaffoldedYaml);
+    await copyToClipboard(scaffoldedYaml);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
