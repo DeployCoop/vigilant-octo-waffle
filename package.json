@@ -1,0 +1,17 @@
+{
+  "name": "vigilant-octo-waffle-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "dev": "pnpm --filter @vow/web dev",
+    "build": "pnpm --filter @vow/orchestrator build && pnpm --filter @vow/web build",
+    "start": "pnpm --filter @vow/web start",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

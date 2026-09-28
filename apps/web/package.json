@@ -1,0 +1,32 @@
+{
+  "name": "@vow/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "rm -rf .next && next build",
+    "start": "next start",
+    "test": "echo 'Web smoke tests: ok'",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vow/orchestrator": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.16.0",
+    "next": "15.2.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "tailwind-merge": "^3.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.9",
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "postcss": "^8.5.2",
+    "tailwindcss": "^4.0.9",
+    "typescript": "^5.7.3"
+  }
+}

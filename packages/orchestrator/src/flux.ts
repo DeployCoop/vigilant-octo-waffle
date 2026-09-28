@@ -1,0 +1,206 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as yaml from 'yaml';
+import { loadProjectConfig } from './config.js';
+import { processManager, type TaskRun } from './executor.js';
+import { substituteVariables } from './template.js';
+import { deepMergeYaml } from './yaml.js';
+
+export interface PreparedFluxManifest {
+  baseManifest: string;
+  overrideManifest?: string;
+  templatedYaml: string;
+  source: 'native' | 'synthesized';
+}
+
+export class FluxManager {
+  constructor(private projectRoot: string) {}
+
+  /**
+   * Reads, merges overrides, and templates a FluxCD application manifest.
+   * Seamlessly synthesizes Flux resources from argo/<app>/argocd.yaml if native flux.yaml is absent.
+   */
+  public prepareAppManifest(appName: string): PreparedFluxManifest {
+    const config = loadProjectConfig(this.projectRoot);
+    const fluxNs = config.cluster.fluxNamespace || 'flux-system';
+    const baseFluxPath = path.join(this.projectRoot, 'flux', appName, 'flux.yaml');
+    const overrideFluxPath = path.join(this.projectRoot, '.flux_overrides', appName, 'flux.yaml');
+
+    let baseManifest = '';
+    let source: 'native' | 'synthesized' = 'native';
+
+    if (fs.existsSync(baseFluxPath)) {
+      baseManifest = fs.readFileSync(baseFluxPath, 'utf-8');
+    } else {
+      // Fallback: Synthesize Flux HelmRelease / Kustomization from ArgoCD Application manifest
+      const baseArgoPath = path.join(this.projectRoot, 'argo', appName, 'argocd.yaml');
+      if (fs.existsSync(baseArgoPath)) {
+        const argoRaw = fs.readFileSync(baseArgoPath, 'utf-8');
+        baseManifest = this.synthesizeFluxFromArgo(argoRaw, appName, fluxNs);
+        source = 'synthesized';
+      } else {
+        throw new Error(`No manifest found for '${appName}' in flux/ or argo/`);
+      }
+    }
+
+    let finalYaml = baseManifest;
+    let overrideManifest: string | undefined;
+
+    if (fs.existsSync(overrideFluxPath)) {
+      overrideManifest = fs.readFileSync(overrideFluxPath, 'utf-8');
+      finalYaml = deepMergeYaml(baseManifest, overrideManifest);
+    }
+
+    // Substitute environment variables (${THIS_...})
+    const templatedYaml = substituteVariables(finalYaml, config.raw);
+
+    return {
+      baseManifest,
+      overrideManifest,
+      templatedYaml,
+      source,
+    };
+  }
+
+  /**
+   * Synthesizes a FluxCD GitRepository + HelmRelease (or Kustomization) from an Argo Application CRD
+   */
+  public synthesizeFluxFromArgo(argoContent: string, appName: string, fluxNs = 'flux-system'): string {
+    let parsed: any = {};
+    try {
+      parsed = yaml.parse(argoContent) || {};
+    } catch {
+      parsed = {};
+    }
+
+    const spec = parsed.spec || {};
+    const source = spec.source || {};
+    const destination = spec.destination || {};
+    const targetNs = destination.namespace || '${THIS_NAMESPACE}';
+    const repoUrl = source.repoURL || '${THIS_REPO_URL}';
+    const chartPath = source.path || '';
+    const isHelm = Boolean(source.helm);
+
+    const gitRepoDoc = {
+      apiVersion: 'source.toolkit.fluxcd.io/v1',
+      kind: 'GitRepository',
+      metadata: {
+        name: `${appName}-repo`,
+        namespace: fluxNs,
+      },
+      spec: {
+        interval: '${THIS_FLUX_INTERVAL:-5m}',
+        url: repoUrl,
+        ref: {
+          branch: '${THIS_FLUX_BRANCH:-main}',
+        },
+      },
+    };
+
+    if (isHelm) {
+      let helmValues: any = {};
+      const rawValues = source.helm?.valuesObject || source.helm?.values;
+      if (rawValues) {
+        try {
+          helmValues = typeof rawValues === 'string'
+            ? yaml.parse(rawValues) || {}
+            : rawValues;
+        } catch {
+          helmValues = {};
+        }
+      }
+
+      const helmReleaseDoc = {
+        apiVersion: 'helm.toolkit.fluxcd.io/v2',
+        kind: 'HelmRelease',
+        metadata: {
+          name: appName,
+          namespace: targetNs,
+        },
+        spec: {
+          interval: '${THIS_FLUX_INTERVAL:-5m}',
+          targetNamespace: targetNs,
+          chart: {
+            spec: {
+              chart: chartPath,
+              sourceRef: {
+                kind: 'GitRepository',
+                name: `${appName}-repo`,
+                namespace: fluxNs,
+              },
+            },
+          },
+          values: helmValues,
+        },
+      };
+
+      return `${yaml.stringify(gitRepoDoc).trim()}\n---\n${yaml.stringify(helmReleaseDoc).trim()}\n`;
+    }
+
+    // Non-Helm: Generate Kustomization
+    const kustomizationDoc = {
+      apiVersion: 'kustomize.toolkit.fluxcd.io/v1',
+      kind: 'Kustomization',
+      metadata: {
+        name: appName,
+        namespace: fluxNs,
+      },
+      spec: {
+        interval: '${THIS_FLUX_INTERVAL:-5m}',
+        targetNamespace: targetNs,
+        prune: true,
+        sourceRef: {
+          kind: 'GitRepository',
+          name: `${appName}-repo`,
+        },
+        path: `./${chartPath}`,
+      },
+    };
+
+    return `${yaml.stringify(gitRepoDoc).trim()}\n---\n${yaml.stringify(kustomizationDoc).trim()}\n`;
+  }
+
+  /**
+   * Deploys an application using FluxCD custom resources via kubectl apply
+   */
+  public deployApp(appName: string): TaskRun {
+    const config = loadProjectConfig(this.projectRoot);
+    const { templatedYaml } = this.prepareAppManifest(appName);
+
+    const tmpDir = path.join(this.projectRoot, '.vow-cache', 'flux');
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+
+    const tmpFile = path.join(tmpDir, `${appName}.yaml`);
+    fs.writeFileSync(tmpFile, templatedYaml, 'utf-8');
+
+    return processManager.runCommand(
+      'kubectl',
+      ['apply', '--server-side', '--force-conflicts', '-f', tmpFile],
+      {
+        cwd: this.projectRoot,
+        env: config.raw,
+      }
+    );
+  }
+
+  /**
+   * Syncs / Reconciles a FluxCD application via standard reconcile annotation
+   */
+  public syncApp(appName: string, namespace?: string): TaskRun {
+    const config = loadProjectConfig(this.projectRoot);
+    const targetNs = namespace || config.cluster.namespace || 'default';
+    const now = String(Date.now());
+
+    // Annotate HelmRelease to trigger immediate reconciliation
+    return processManager.runCommand(
+      'kubectl',
+      ['annotate', '--overwrite', 'helmrelease', appName, '-n', targetNs, `reconcile.fluxcd.io/requestedAt=${now}`],
+      {
+        cwd: this.projectRoot,
+        env: config.raw,
+      }
+    );
+  }
+}

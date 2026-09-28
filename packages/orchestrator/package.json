@@ -1,0 +1,29 @@
+{
+  "name": "@vow/orchestrator",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/__tests__/*.test.js",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@kubernetes/client-node": "^1.1.0",
+    "dotenv": "^16.4.7",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "typescript": "^5.7.3"
+  }
+}

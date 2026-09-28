@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+if [[ "${1:-}" == "k3s:add-node" || "${1:-}" == "k3s:join" || "${1:-}" == "add-node" ]]; then
+  shift
+  exec ./src/k3s_add_node.sh "$@"
+fi
+
 : "${BIG_LIST:=./src/big_list}"
 source ./src/sourceror.bash
 export this_cwd=$(pwd)
@@ -66,8 +71,13 @@ main() {
   else
     echo 'k3s'
   fi
-  # argoCD
-  src/argocd.sh
+  # CD Runners: ArgoCD and/or FluxCD (https://fluxcd.io)
+  if [[ "${THIS_CD_RUNNER:-argocd}" == "argocd" || "${THIS_CD_RUNNER:-argocd}" == "both" ]]; then
+    src/argocd.sh
+  fi
+  if [[ "${THIS_CD_RUNNER:-argocd}" == "flux" || "${THIS_CD_RUNNER:-argocd}" == "fluxcd" || "${THIS_CD_RUNNER:-argocd}" == "both" ]]; then
+    src/flux.sh
+  fi
   #openEBS
   src/openebs.sh
   src/rook-ceph-operator.sh

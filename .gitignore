@@ -5,3 +5,10 @@
 .aider*
 .argo_overrides
 .init_overrides
+node_modules/
+.next/
+dist/
+.vow-cache/
+.kind-config.rendered.yaml
+.k3d-config.rendered.yaml
+*.tsbuildinfo
