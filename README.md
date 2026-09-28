@@ -45,17 +45,30 @@ pnpm build
 pnpm start
 ```
 
-Visit **`http://localhost:3000`** to access the web control plane.
+### Running with Docker Compose
 
-### 🛡️ Security Model & Architecture
+```bash
+# Build and run the control plane container
+docker compose up -d
+```
 
-> [!WARNING]
-> **Localhost Only Warning**: The control plane mounts `/var/run/docker.sock`, cluster credentials (`~/.kube`), and generated secrets (`.secrets`). `docker-compose.yaml` binds port 3000 strictly to `127.0.0.1`. **Do NOT expose port 3000 across public or untrusted local networks.**
+Visit **`http://127.0.0.1:3000`** to access the web control plane.
 
-- **Localhost & CSRF Protection**: All mutating APIs (`/api/tasks/*`, `/api/cluster`, `/api/apps/*`, `/api/config`) enforce CSRF Origin/Referer verification and are restricted to localhost/local origins.
-- **Optional API Token Guard**: Set `VOW_API_TOKEN` in `.env` to enforce Bearer token verification on mutating API routes (`Authorization: Bearer <token>` or `x-vow-token: <token>`).
-- **Strict Command Allowlist**: Arbitrary shell execution and `shell: true` spawn execution are disabled. Only approved binaries (`kubectl`, `helm`, `kind`, `k3d`, `argocd`, `velero`, `docker`, `mkcert`, `echo`) and approved project scripts (`up`, `src/*.sh`) can be executed through the orchestrator.
-- **Safe Overrides**: App override mutations (`.argo_overrides/`) are strictly validated against `APP_CATALOG` with directory traversal protection.
+### 🛡️ Security Model & Host/Cluster Takeover Prevention
+
+> [!CAUTION]
+> **CRITICAL SECURITY REQUIREMENT — LOCALHOST ONLY BINDING (`127.0.0.1`)**:
+> The web control plane mounts the host's Docker socket (`/var/run/docker.sock`), cluster credentials (`~/.kube:ro`), and generated secrets (`.secrets`).
+> Because access to the Docker socket allows root-equivalent execution on the host, **`docker-compose.yaml` binds port 3000 strictly to `127.0.0.1:3000:3000`**.
+>
+> - **DO NOT** bind port 3000 to `0.0.0.0` or expose it across external, LAN, or untrusted networks.
+> - **DO NOT** remove the `127.0.0.1:` host IP restriction without an authenticated reverse proxy (e.g. Traefik/Nginx with mTLS or OIDC).
+> - Anyone able to reach port 3000 without network isolation could potentially control container lifecycles on the host.
+
+- **Localhost & CSRF Origin Protection**: Mutating API endpoints (`POST`, `PUT`, `DELETE`, `PATCH` on `/api/*`) are protected by [`apps/web/src/middleware.ts`](file:///home/thoth/vigilant-octo-waffle/apps/web/src/middleware.ts). Non-local origins or mismatched `Host`/`Origin` headers are blocked with HTTP 403.
+- **Optional API Token Guard**: Setting `VOW_API_TOKEN` in `.env` activates mandatory Bearer authentication (`Authorization: Bearer <token>` or `x-vow-token: <token>`) on all mutating routes (HTTP 401 on missing/invalid token).
+- **Strict Command Allowlist & `shell: false`**: Arbitrary shell commands and subshell spawns (`shell: true`) are completely disabled in [`packages/orchestrator/src/executor.ts`](file:///home/thoth/vigilant-octo-waffle/packages/orchestrator/src/executor.ts). Only pre-approved binaries (`kubectl`, `helm`, `kind`, `k3d`, `k3s`, `argocd`, `flux`, `velero`, `docker`, `mkcert`, `echo`, `ssh`) and approved repository scripts (`./up`, `src/*.sh`) can execute. Shell evaluation flags (`-c`, `-s`) and directory traversal are blocked.
+- **Safe Overrides**: App override mutations (`.argo_overrides/`, `.flux_overrides/`) are strictly validated against `APP_CATALOG` with path traversal guards.
 - **In-Memory Process Management**: Tasks and log streams are tracked in-memory by `processManager`. Multi-instance or serverless runtimes require an external persistence adapter (e.g. Redis/PostgreSQL).
 
 ### 🔄 Coexistence with Bash Orchestration (`./up`)

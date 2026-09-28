@@ -5,7 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: vow-control-plane
     ports:
-      # Bound to 127.0.0.1 to avoid exposing the control plane, Docker socket, and cluster secrets to the external network
+      # Bound strictly to 127.0.0.1 (localhost only) to prevent host/cluster takeover
+      # via the mounted Docker socket (/var/run/docker.sock), kubeconfig, and .secrets.
+      # DO NOT bind to 0.0.0.0 or expose to external/untrusted networks!
       - "127.0.0.1:3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
