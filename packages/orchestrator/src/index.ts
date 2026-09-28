@@ -23,3 +23,11 @@ export * from './security.js';
 export * from './scaler.js';
 export * from './webhook.js';
 export * from './export.js';
+export * from './chaos.js';
+export * from './rollouts.js';
+export * from './netpol.js';
+export * from './finops.js';
+export * from './traces.js';
+export * from './builder.js';
+export * from './remote.js';
+

@@ -23,6 +23,11 @@ import {
   Database,
   ShieldCheck,
   Cloud,
+  Flame,
+  Sliders,
+  Lock,
+  DollarSign,
+  Smartphone,
 } from 'lucide-react';
 
 const navItems = [
@@ -31,6 +36,13 @@ const navItems = [
   { name: 'App Store', href: '/apps', icon: Layers },
   { name: 'Architecture Graph', href: '/topology', icon: Network },
   { name: 'Pod Explorer & Shell', href: '/pods', icon: Boxes },
+  { name: 'Chaos Playground', href: '/chaos', icon: Flame },
+  { name: 'Argo Rollouts', href: '/rollouts', icon: Sliders },
+  { name: 'Zero-Trust Network', href: '/network', icon: Lock },
+  { name: 'FinOps & Wattage', href: '/finops', icon: DollarSign },
+  { name: 'Trace Waterfalls', href: '/traces', icon: Activity },
+  { name: 'OCI Image Builder', href: '/builder', icon: Boxes },
+  { name: 'Mobile QR Bridge', href: '/remote', icon: Smartphone },
   { name: 'Data & DB Studio', href: '/data', icon: Database },
   { name: 'Security Audit', href: '/security', icon: ShieldCheck },
   { name: 'Cloud Exporter', href: '/export', icon: Cloud },
@@ -48,9 +60,9 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0">
-      <div>
-        <div className="p-5 border-b border-slate-800 flex items-center space-x-3">
+    <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0 h-screen sticky top-0 overflow-hidden">
+      <div className="overflow-y-auto flex-1">
+        <div className="p-5 border-b border-slate-800 flex items-center space-x-3 sticky top-0 bg-slate-950 z-10">
           <span className="text-2xl">🐙</span>
           <div>
             <h1 className="font-bold text-slate-100 text-sm tracking-wide">Vigilant Octo Waffle</h1>
@@ -67,7 +79,7 @@ export function Sidebar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                   isActive
                     ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
@@ -80,6 +92,7 @@ export function Sidebar() {
           })}
         </nav>
       </div>
+
 
       <div className="p-4 border-t border-slate-800 text-xs text-slate-500 space-y-2">
         <div className="flex items-center justify-between">
