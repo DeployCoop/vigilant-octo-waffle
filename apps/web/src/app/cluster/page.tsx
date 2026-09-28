@@ -21,6 +21,11 @@ import {
   X,
   Shield,
   ArrowRight,
+  Settings,
+  Zap,
+  RotateCcw,
+  Trash2,
+  Wifi,
 } from 'lucide-react';
 import { copyToClipboard as copyText } from '@/lib/clipboard';
 
@@ -50,7 +55,7 @@ export default function ClusterPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [nodeMetrics, setNodeMetrics] = useState<Record<string, { cpu: string; memory: string }>>({});
 
-  // K3s multi-node join state
+  // K3s multi-node join & operations state
   const [showK3sModal, setShowK3sModal] = useState(false);
   const [k3sRole, setK3sRole] = useState<'agent' | 'server'>('agent');
   const [k3sServerUrl, setK3sServerUrl] = useState('');
@@ -61,7 +66,14 @@ export default function ClusterPage() {
   const [k3sSshHost, setK3sSshHost] = useState('');
   const [k3sSshPort, setK3sSshPort] = useState('22');
   const [k3sSshKey, setK3sSshKey] = useState('');
-  const [k3sActiveTab, setK3sActiveTab] = useState<'command' | 'script' | 'ssh'>('command');
+  const [k3sBatchTargets, setK3sBatchTargets] = useState('');
+  const [k3sTargetsFile, setK3sTargetsFile] = useState('targets');
+  const [k3sParallel, setK3sParallel] = useState('10');
+  const [k3sTune, setK3sTune] = useState(true);
+  const [k3sCopyRegistries, setK3sCopyRegistries] = useState(true);
+  const [k3sCopyKubeconfig, setK3sCopyKubeconfig] = useState(false);
+  const [k3sRegistriesFile, setK3sRegistriesFile] = useState('');
+  const [k3sActiveTab, setK3sActiveTab] = useState<'command' | 'script' | 'ssh' | 'batch' | 'ops'>('command');
   const [k3sJoinInfo, setK3sJoinInfo] = useState<any>(null);
   const [k3sLoading, setK3sLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -184,6 +196,10 @@ export default function ClusterPage() {
           token: k3sToken || undefined,
           nodeName: k3sNodeName || undefined,
           nodeIp: k3sNodeIp || undefined,
+          tune: k3sTune,
+          copyRegistries: k3sCopyRegistries,
+          copyKubeconfig: k3sCopyKubeconfig,
+          registriesFile: k3sRegistriesFile.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -192,6 +208,87 @@ export default function ClusterPage() {
         setShowK3sModal(false);
       } else {
         setMessage(`SSH provision error: ${data.error}`);
+      }
+    } catch (err: any) {
+      setMessage(`Failed: ${err.message}`);
+    } finally {
+      setK3sLoading(false);
+    }
+  };
+
+  const handleBatchJoin = async () => {
+    setK3sLoading(true);
+    try {
+      const targetsList = k3sBatchTargets
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch-join',
+          targetsFile: k3sTargetsFile.trim() || undefined,
+          targets: targetsList.length > 0 ? targetsList : undefined,
+          parallel: Number(k3sParallel) || 10,
+          tune: k3sTune,
+          copyRegistries: k3sCopyRegistries,
+          copyKubeconfig: k3sCopyKubeconfig,
+          registriesFile: k3sRegistriesFile.trim() || undefined,
+          role: k3sRole,
+          serverUrl: k3sServerUrl || undefined,
+          token: k3sToken || undefined,
+          sshKey: k3sSshKey.trim() || undefined,
+          port: Number(k3sSshPort) || 22,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage(`Batch join dispatched (Task ID: ${data.taskId})`);
+        setShowK3sModal(false);
+      } else {
+        setMessage(`Batch join error: ${data.error}`);
+      }
+    } catch (err: any) {
+      setMessage(`Failed: ${err.message}`);
+    } finally {
+      setK3sLoading(false);
+    }
+  };
+
+  const handleK3sOp = async (op: 'ping' | 'tune' | 'kmod' | 'registries' | 'kill' | 'build' | 'rebuild') => {
+    if (op === 'kill' && !confirm('WARNING: Are you sure you want to tear down K3s on these nodes?')) return;
+    if (op === 'rebuild' && !confirm('WARNING: Full rebuild will teardown existing cluster and recreate all nodes. Proceed?')) return;
+    setK3sLoading(true);
+    try {
+      const targetsList = k3sBatchTargets
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: op,
+          targetsFile: k3sTargetsFile.trim() || undefined,
+          targets: targetsList.length > 0 ? targetsList : undefined,
+          remoteHost: k3sSshHost.trim() || undefined,
+          port: Number(k3sSshPort) || 22,
+          sshKey: k3sSshKey.trim() || undefined,
+          parallel: Number(k3sParallel) || 10,
+          all: true,
+          copyKubeconfig: true,
+          registriesFile: k3sRegistriesFile.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage(`K3s ${op} operation dispatched (Task ID: ${data.taskId})`);
+        setShowK3sModal(false);
+      } else {
+        setMessage(`Operation error: ${data.error}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -539,11 +636,11 @@ export default function ClusterPage() {
 
             {/* Join Method Tabs */}
             <div className="space-y-3">
-              <div className="flex border-b border-slate-800">
+              <div className="flex border-b border-slate-800 overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => setK3sActiveTab('command')}
-                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition ${
+                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
                     k3sActiveTab === 'command'
                       ? 'border-purple-500 text-purple-300'
                       : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -554,7 +651,7 @@ export default function ClusterPage() {
                 <button
                   type="button"
                   onClick={() => setK3sActiveTab('script')}
-                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition ${
+                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
                     k3sActiveTab === 'script'
                       ? 'border-purple-500 text-purple-300'
                       : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -565,13 +662,35 @@ export default function ClusterPage() {
                 <button
                   type="button"
                   onClick={() => setK3sActiveTab('ssh')}
-                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition ${
+                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
                     k3sActiveTab === 'ssh'
                       ? 'border-purple-500 text-purple-300'
                       : 'border-transparent text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   Remote SSH Join
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setK3sActiveTab('batch')}
+                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
+                    k3sActiveTab === 'batch'
+                      ? 'border-purple-500 text-purple-300'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Batch Provision
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setK3sActiveTab('ops')}
+                  className={`px-3 py-2 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
+                    k3sActiveTab === 'ops'
+                      ? 'border-purple-500 text-purple-300'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Cluster Operations
                 </button>
               </div>
 
@@ -679,6 +798,35 @@ echo "==> Node successfully joined!"`}
                       className="w-full text-xs font-mono bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-300 focus:outline-none focus:border-purple-500"
                     />
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-800">
+                    <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={k3sTune}
+                        onChange={(e) => setK3sTune(e.target.checked)}
+                        className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0"
+                      />
+                      <span>Tune NVMe & Limits</span>
+                    </label>
+                    <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={k3sCopyRegistries}
+                        onChange={(e) => setK3sCopyRegistries(e.target.checked)}
+                        className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0"
+                      />
+                      <span>Deploy Registries</span>
+                    </label>
+                    <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={k3sCopyKubeconfig}
+                        onChange={(e) => setK3sCopyKubeconfig(e.target.checked)}
+                        className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0"
+                      />
+                      <span>Copy Kubeconfig</span>
+                    </label>
+                  </div>
                   <div className="pt-2 flex justify-end">
                     <button
                       type="button"
@@ -688,6 +836,186 @@ echo "==> Node successfully joined!"`}
                     >
                       <Server className="w-3.5 h-3.5" />
                       <span>{k3sLoading ? 'Provisioning...' : 'Provision Remote Node'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {k3sActiveTab === 'batch' && (
+                <div className="space-y-4 p-4 bg-slate-950 border border-slate-800 rounded-xl">
+                  <div className="text-xs text-slate-400">
+                    Batch provision and join multiple nodes in parallel using a targets file or direct host list:
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-300">Targets File Path</label>
+                      <input
+                        type="text"
+                        value={k3sTargetsFile}
+                        onChange={(e) => setK3sTargetsFile(e.target.value)}
+                        placeholder="targets or targets.txt"
+                        className="w-full text-xs font-mono bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-300">Parallel Jobs (-j)</label>
+                      <input
+                        type="number"
+                        value={k3sParallel}
+                        onChange={(e) => setK3sParallel(e.target.value)}
+                        min="1"
+                        max="100"
+                        placeholder="10"
+                        className="w-full text-xs font-mono bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-300">Or Direct Targets List (one host/IP per line)</label>
+                    <textarea
+                      value={k3sBatchTargets}
+                      onChange={(e) => setK3sBatchTargets(e.target.value)}
+                      rows={3}
+                      placeholder="root@192.168.1.50&#10;root@192.168.1.51&#10;192.168.1.52"
+                      className="w-full text-xs font-mono bg-slate-900 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-800">
+                    <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={k3sTune}
+                        onChange={(e) => setK3sTune(e.target.checked)}
+                        className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0"
+                      />
+                      <span>Auto-tune NVMe & Limits</span>
+                    </label>
+                    <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={k3sCopyRegistries}
+                        onChange={(e) => setK3sCopyRegistries(e.target.checked)}
+                        className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0"
+                      />
+                      <span>Deploy Registries</span>
+                    </label>
+                    <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={k3sCopyKubeconfig}
+                        onChange={(e) => setK3sCopyKubeconfig(e.target.checked)}
+                        className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0"
+                      />
+                      <span>Sync Kubeconfig</span>
+                    </label>
+                  </div>
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleBatchJoin}
+                      disabled={k3sLoading}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-40 cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>{k3sLoading ? 'Provisioning...' : 'Provision All Targets'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {k3sActiveTab === 'ops' && (
+                <div className="space-y-4 p-4 bg-slate-950 border border-slate-800 rounded-xl">
+                  <div className="text-xs text-slate-400">
+                    Execute direct cluster maintenance, health diagnostics, and rebuilding operations:
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Wifi className="w-4 h-4 text-emerald-400" />
+                        <h4 className="text-xs font-bold text-white">Ping & Health Diagnostic</h4>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Check node SSH reachability, hostname, uptime, and advertised IP addresses.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleK3sOp('ping')}
+                        disabled={k3sLoading}
+                        className="w-full mt-2 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 rounded-lg text-xs font-medium flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                      >
+                        <Wifi className="w-3.5 h-3.5" />
+                        <span>Run Ping Diagnostic</span>
+                      </button>
+                    </div>
+
+                    <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Zap className="w-4 h-4 text-amber-400" />
+                        <h4 className="text-xs font-bold text-white">Tune Kernel & Limits</h4>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Persist NVMe-oF modules (nvme_tcp) and file descriptor/inotify sysctl limits.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleK3sOp('tune')}
+                        disabled={k3sLoading}
+                        className="w-full mt-2 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg text-xs font-medium flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Apply Kernel & Limits</span>
+                      </button>
+                    </div>
+
+                    <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Layers className="w-4 h-4 text-sky-400" />
+                        <h4 className="text-xs font-bold text-white">Registry Mirrors</h4>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Distribute registries.yaml and copy kubeconfig across cluster nodes.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleK3sOp('registries')}
+                        disabled={k3sLoading}
+                        className="w-full mt-2 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 rounded-lg text-xs font-medium flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Deploy Registries Config</span>
+                      </button>
+                    </div>
+
+                    <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <RotateCcw className="w-4 h-4 text-purple-400" />
+                        <h4 className="text-xs font-bold text-white">Vanilla Cluster Rebuild</h4>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Complete teardown, tune, registry deploy, server init, and parallel worker join.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleK3sOp('rebuild')}
+                        disabled={k3sLoading}
+                        className="w-full mt-2 py-1.5 px-3 bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 border border-purple-700 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Trigger Full Rebuild</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                    <span className="text-[11px] text-rose-400">Destructive Actions:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleK3sOp('kill')}
+                      disabled={k3sLoading}
+                      className="py-1.5 px-3 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/80 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Teardown Cluster (k3s-uninstall)</span>
                     </button>
                   </div>
                 </div>

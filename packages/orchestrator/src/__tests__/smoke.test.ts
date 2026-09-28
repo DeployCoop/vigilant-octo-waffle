@@ -15,6 +15,13 @@ import {
   saveK3sJoinScript,
   getK3sJoinInfo,
   resolveK3sServer,
+  provisionK3sBatchNodes,
+  tuneK3sNode,
+  kmodK3sNode,
+  pingK3sNodes,
+  killK3sCluster,
+  buildK3sCluster,
+  deployK3sRegistries,
   APP_CATALOG,
   findAgyBinary,
   getAntigravityEngineStatus,
@@ -190,21 +197,41 @@ spec:
   });
 
   describe('K3s Multi-Node Orchestration', () => {
-    it('allows k3s and ssh binaries in command allowlist', () => {
+    it('allows k3s, ssh, scp, and parallel binaries in command allowlist', () => {
       assert.ok(ALLOWED_EXECUTABLES.has('k3s'), 'k3s must be in ALLOWED_EXECUTABLES');
       assert.ok(ALLOWED_EXECUTABLES.has('ssh'), 'ssh must be in ALLOWED_EXECUTABLES');
+      assert.ok(ALLOWED_EXECUTABLES.has('scp'), 'scp must be in ALLOWED_EXECUTABLES');
+      assert.ok(ALLOWED_EXECUTABLES.has('parallel'), 'parallel must be in ALLOWED_EXECUTABLES');
 
       const k3sRes = validateCommand('k3s', ['--version'], projectRoot);
       assert.equal(k3sRes.allowed, true);
 
       const sshRes = validateCommand('ssh', ['-p', '22', 'ubuntu@192.168.1.50'], projectRoot);
       assert.equal(sshRes.allowed, true);
+
+      const scpRes = validateCommand('scp', ['file.txt', 'root@192.168.1.50:/tmp/'], projectRoot);
+      assert.equal(scpRes.allowed, true);
+
+      const parRes = validateCommand('parallel', ['--version'], projectRoot);
+      assert.equal(parRes.allowed, true);
     });
 
-    it('allows src/k3s_add_node.sh execution via validateCommand', () => {
-      const res = validateCommand('bash', ['src/k3s_add_node.sh', '--role', 'agent'], projectRoot);
-      assert.equal(res.allowed, true);
-      assert.equal(res.normalizedCommand, 'bash');
+    it('allows all K3s suite scripts via validateCommand', () => {
+      const scripts = [
+        'src/k3s_add_node.sh',
+        'src/k3s_tune.sh',
+        'src/k3s_kmod.sh',
+        'src/k3s_registries.sh',
+        'src/k3s_ping.sh',
+        'src/k3s_kill.sh',
+        'src/k3s_build.sh',
+      ];
+
+      for (const scr of scripts) {
+        const res = validateCommand('bash', [scr, '--help'], projectRoot);
+        assert.equal(res.allowed, true, `Expected ${scr} to be allowed`);
+        assert.equal(res.normalizedCommand, 'bash');
+      }
     });
 
     it('generates valid one-liner curl join commands for agent and server roles', () => {
@@ -280,6 +307,66 @@ spec:
       assert.ok(info.serverOneLiner.includes('server'));
       assert.ok(info.agentScript.includes('#!/usr/bin/env bash'));
       assert.ok(info.serverScript.includes('#!/usr/bin/env bash'));
+    });
+
+    it('dispatches batch join, tuning, ping, registries, and lifecycle commands correctly', () => {
+      const pingTask = pingK3sNodes(projectRoot, {
+        remoteHost: 'ubuntu@192.168.1.50',
+        parallel: 5,
+      });
+      assert.ok(pingTask.id);
+      assert.equal(pingTask.command, 'bash');
+      assert.ok(pingTask.args.some((a) => a.includes('k3s_ping.sh')));
+      assert.ok(pingTask.args.includes('--ssh'));
+      assert.ok(pingTask.args.includes('-j'));
+
+      const tuneTask = tuneK3sNode(projectRoot, {
+        remoteHost: 'root@192.168.1.51',
+      });
+      assert.ok(tuneTask.id);
+      assert.ok(tuneTask.args.some((a) => a.includes('k3s_tune.sh')));
+
+      const kmodTask = kmodK3sNode(projectRoot, {
+        modules: ['nvme_tcp', 'nvme_fabrics'],
+      });
+      assert.ok(kmodTask.id);
+      assert.ok(kmodTask.args.some((a) => a.includes('k3s_kmod.sh')));
+      assert.ok(kmodTask.args.includes('nvme_tcp'));
+
+      const regTask = deployK3sRegistries(projectRoot, {
+        copyKubeconfig: true,
+      });
+      assert.ok(regTask.id);
+      assert.ok(regTask.args.some((a) => a.includes('k3s_registries.sh')));
+      assert.ok(regTask.args.includes('--copy-kubeconfig'));
+
+      const batchTask = provisionK3sBatchNodes(projectRoot, {
+        targetsFile: 'targets.txt',
+        parallel: 10,
+        tune: true,
+        copyRegistries: true,
+      });
+      assert.ok(batchTask.id);
+      assert.ok(batchTask.args.some((a) => a.includes('k3s_add_node.sh')));
+      assert.ok(batchTask.args.includes('--targets'));
+      assert.ok(batchTask.args.includes('--tune'));
+      assert.ok(batchTask.args.includes('--copy-registries'));
+
+      const killTask = killK3sCluster(projectRoot, {
+        all: true,
+      });
+      assert.ok(killTask.id);
+      assert.ok(killTask.args.some((a) => a.includes('k3s_kill.sh')));
+      assert.ok(killTask.args.includes('--all'));
+
+      const buildTask = buildK3sCluster(projectRoot, {
+        rebuild: true,
+        skipUp: true,
+      });
+      assert.ok(buildTask.id);
+      assert.ok(buildTask.args.some((a) => a.includes('k3s_build.sh')));
+      assert.ok(buildTask.args.includes('--rebuild'));
+      assert.ok(buildTask.args.includes('--skip-up'));
     });
   });
 

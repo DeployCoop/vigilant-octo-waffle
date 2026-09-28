@@ -2,6 +2,27 @@
 if [[ "${1:-}" == "k3s:add-node" || "${1:-}" == "k3s:join" || "${1:-}" == "add-node" ]]; then
   shift
   exec ./src/k3s_add_node.sh "$@"
+elif [[ "${1:-}" == "k3s:tune" || "${1:-}" == "tune" ]]; then
+  shift
+  exec ./src/k3s_tune.sh "$@"
+elif [[ "${1:-}" == "k3s:kmod" || "${1:-}" == "kmod" ]]; then
+  shift
+  exec ./src/k3s_kmod.sh "$@"
+elif [[ "${1:-}" == "k3s:registries" || "${1:-}" == "registries" ]]; then
+  shift
+  exec ./src/k3s_registries.sh "$@"
+elif [[ "${1:-}" == "k3s:ping" || "${1:-}" == "ping" ]]; then
+  shift
+  exec ./src/k3s_ping.sh "$@"
+elif [[ "${1:-}" == "k3s:kill" || "${1:-}" == "kill" ]]; then
+  shift
+  exec ./src/k3s_kill.sh "$@"
+elif [[ "${1:-}" == "k3s:build" ]]; then
+  shift
+  exec ./src/k3s_build.sh "$@"
+elif [[ "${1:-}" == "k3s:rebuild" ]]; then
+  shift
+  exec ./src/k3s_build.sh --rebuild "$@"
 fi
 
 : "${BIG_LIST:=./src/big_list}"
@@ -27,12 +48,15 @@ main() {
     sleep 1
     src/k3dUp.sh
   elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
-    kubectl get nodes
-    if [[ $? == 0 ]]; then
-      echo "kube cluster is installed, proceeding"
+    if kubectl get nodes >/dev/null 2>&1; then
+      echo "kube cluster is installed and running, proceeding"
     else
-      echo "kube cluster is not installed, exiting"
-      exit 1
+      echo "kube cluster is not running. Initializing K3s cluster..."
+      ./src/k3s_build.sh --skip-up
+      if ! kubectl get nodes >/dev/null 2>&1; then
+        echo "Error: K3s cluster failed to start." >&2
+        exit 1
+      fi
     fi
   else
     echo "THIS_K8S_TYPE is not set, aborting!"

@@ -3,6 +3,13 @@ import {
   getK3sJoinInfo,
   saveK3sJoinScript,
   provisionK3sNodeViaSsh,
+  provisionK3sBatchNodes,
+  tuneK3sNode,
+  kmodK3sNode,
+  pingK3sNodes,
+  killK3sCluster,
+  buildK3sCluster,
+  deployK3sRegistries,
   listClusterNodeDetails,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
@@ -81,11 +88,131 @@ export async function POST(req: Request) {
         nodeIp: body.nodeIp,
         labels: body.labels,
         taints: body.taints,
+        tune: body.tune === true,
+        copyRegistries: body.copyRegistries === true,
+        registriesFile: body.registriesFile,
+        copyKubeconfig: body.copyKubeconfig === true,
       });
       return NextResponse.json({
         success: true,
         taskId: task.id,
         message: `SSH node provisioning started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'batch-join') {
+      const task = provisionK3sBatchNodes(root, {
+        targetsFile: body.targetsFile,
+        targets: body.targets,
+        role: body.role || 'agent',
+        parallel: body.parallel ? Number(body.parallel) : 10,
+        tune: body.tune !== false,
+        copyRegistries: body.copyRegistries !== false,
+        registriesFile: body.registriesFile,
+        copyKubeconfig: body.copyKubeconfig === true,
+        port: body.port ? Number(body.port) : 22,
+        sshKey: body.sshKey,
+        serverUrl: body.serverUrl,
+        token: body.token,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Batch node provisioning started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'tune') {
+      const task = tuneK3sNode(root, {
+        remoteHost: body.remoteHost,
+        targetsFile: body.targetsFile,
+        sshPort: body.port ? Number(body.port) : 22,
+        sshKey: body.sshKey,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Node OS limits tuning started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'kmod') {
+      const task = kmodK3sNode(root, {
+        remoteHost: body.remoteHost,
+        targetsFile: body.targetsFile,
+        sshPort: body.port ? Number(body.port) : 22,
+        sshKey: body.sshKey,
+        modules: body.modules,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Kernel module provisioning started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'ping') {
+      const task = pingK3sNodes(root, {
+        targetsFile: body.targetsFile,
+        remoteHost: body.remoteHost,
+        sshPort: body.port ? Number(body.port) : 22,
+        sshKey: body.sshKey,
+        parallel: body.parallel ? Number(body.parallel) : 10,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Cluster nodes ping check started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'kill') {
+      const task = killK3sCluster(root, {
+        local: body.local === true,
+        all: body.all === true,
+        remoteHost: body.remoteHost,
+        targetsFile: body.targetsFile,
+        parallel: body.parallel ? Number(body.parallel) : 10,
+        sshPort: body.port ? Number(body.port) : 22,
+        sshKey: body.sshKey,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `K3s cluster teardown started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'build' || action === 'rebuild') {
+      const task = buildK3sCluster(root, {
+        rebuild: action === 'rebuild' || body.rebuild === true,
+        targetsFile: body.targetsFile,
+        parallel: body.parallel ? Number(body.parallel) : 10,
+        skipJoin: body.skipJoin === true,
+        skipTune: body.skipTune === true,
+        skipUp: body.skipUp === true,
+        registriesFile: body.registriesFile,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `K3s cluster ${action === 'rebuild' ? 'rebuild' : 'build'} started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'registries') {
+      const task = deployK3sRegistries(root, {
+        remoteHost: body.remoteHost,
+        targetsFile: body.targetsFile,
+        registriesFile: body.registriesFile,
+        copyKubeconfig: body.copyKubeconfig === true,
+        sshPort: body.port ? Number(body.port) : 22,
+        sshKey: body.sshKey,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Container registries deployment started (Task: ${task.id})`,
       });
     }
 

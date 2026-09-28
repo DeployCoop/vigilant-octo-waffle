@@ -40,6 +40,10 @@ export interface K3sSshProvisionOptions {
   nodeIp?: string;
   labels?: Record<string, string>;
   taints?: string[];
+  tune?: boolean;
+  copyRegistries?: boolean;
+  registriesFile?: string;
+  copyKubeconfig?: boolean;
 }
 
 /**
@@ -357,7 +361,304 @@ export function provisionK3sNodeViaSsh(projectRoot: string, options: K3sSshProvi
     if (taintList) args.push('--taints', taintList);
   }
 
+  if (options.tune) {
+    args.push('--tune');
+  }
+
+  if (options.copyRegistries) {
+    args.push('--copy-registries');
+  }
+
+  if (options.registriesFile && options.registriesFile.trim()) {
+    args.push('--registries-file', options.registriesFile.trim());
+  }
+
+  if (options.copyKubeconfig) {
+    args.push('--copy-kubeconfig');
+  }
+
   return processManager.runCommand('bash', args, {
     cwd: projectRoot,
   });
+}
+
+export interface K3sBatchProvisionOptions {
+  targetsFile?: string;
+  targets?: string[];
+  role?: K3sNodeRole;
+  parallel?: number;
+  tune?: boolean;
+  copyRegistries?: boolean;
+  registriesFile?: string;
+  copyKubeconfig?: boolean;
+  port?: number;
+  sshKey?: string;
+  serverUrl?: string;
+  token?: string;
+}
+
+/**
+ * Batch provisions multiple worker or control-plane nodes across targets
+ */
+export function provisionK3sBatchNodes(projectRoot: string, options: K3sBatchProvisionOptions): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_add_node.sh');
+  const role = options.role || 'agent';
+  const args: string[] = [scriptPath, '--role', role];
+
+  if (options.targetsFile && options.targetsFile.trim()) {
+    args.push('--targets', options.targetsFile.trim());
+  }
+  if (options.parallel && options.parallel > 1) {
+    args.push('-j', String(options.parallel));
+  }
+  if (options.tune) {
+    args.push('--tune');
+  }
+  if (options.copyRegistries) {
+    args.push('--copy-registries');
+  }
+  if (options.registriesFile && options.registriesFile.trim()) {
+    args.push('--registries-file', options.registriesFile.trim());
+  }
+  if (options.copyKubeconfig) {
+    args.push('--copy-kubeconfig');
+  }
+  if (options.port && options.port > 0) {
+    args.push('--ssh-port', String(options.port));
+  }
+  if (options.sshKey && options.sshKey.trim()) {
+    args.push('--ssh-key', options.sshKey.trim());
+  }
+  if (options.serverUrl && options.serverUrl.trim()) {
+    args.push('--server', options.serverUrl.trim());
+  }
+  if (options.token && options.token.trim()) {
+    args.push('--token', options.token.trim());
+  }
+  if (options.targets && options.targets.length > 0) {
+    for (const t of options.targets) {
+      if (t && t.trim()) args.push(t.trim());
+    }
+  }
+
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
+}
+
+export interface K3sTuneOptions {
+  remoteHost?: string;
+  targetsFile?: string;
+  sshPort?: number;
+  sshKey?: string;
+}
+
+/**
+ * Tunes node OS limits (nofile, inotify, sysctl)
+ */
+export function tuneK3sNode(projectRoot: string, options?: K3sTuneOptions): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_tune.sh');
+  const args: string[] = [scriptPath];
+
+  if (options?.remoteHost) {
+    args.push('--remote', options.remoteHost.trim());
+  }
+  if (options?.targetsFile) {
+    args.push('--targets', options.targetsFile.trim());
+  }
+  if (options?.sshPort) {
+    args.push('--ssh-port', String(options.sshPort));
+  }
+  if (options?.sshKey) {
+    args.push('--ssh-key', options.sshKey.trim());
+  }
+
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
+}
+
+export interface K3sKmodOptions {
+  remoteHost?: string;
+  targetsFile?: string;
+  sshPort?: number;
+  sshKey?: string;
+  modules?: string[];
+}
+
+/**
+ * Provisions required kernel modules (nvme_tcp, nvme_fabrics, etc.)
+ */
+export function kmodK3sNode(projectRoot: string, options?: K3sKmodOptions): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_kmod.sh');
+  const args: string[] = [scriptPath];
+
+  if (options?.remoteHost) {
+    args.push('--remote', options.remoteHost.trim());
+  }
+  if (options?.targetsFile) {
+    args.push('--targets', options.targetsFile.trim());
+  }
+  if (options?.sshPort) {
+    args.push('--ssh-port', String(options.sshPort));
+  }
+  if (options?.sshKey) {
+    args.push('--ssh-key', options.sshKey.trim());
+  }
+  if (options?.modules && options.modules.length > 0) {
+    args.push(...options.modules);
+  }
+
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
+}
+
+export interface K3sPingOptions {
+  targetsFile?: string;
+  remoteHost?: string;
+  sshPort?: number;
+  sshKey?: string;
+  parallel?: number;
+}
+
+/**
+ * Pings cluster nodes over SSH to check hostname, uptime, and network health
+ */
+export function pingK3sNodes(projectRoot: string, options?: K3sPingOptions): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_ping.sh');
+  const args: string[] = [scriptPath];
+
+  if (options?.remoteHost) {
+    args.push('--ssh', options.remoteHost.trim());
+  }
+  if (options?.targetsFile) {
+    args.push('--targets', options.targetsFile.trim());
+  }
+  if (options?.sshPort) {
+    args.push('--ssh-port', String(options.sshPort));
+  }
+  if (options?.sshKey) {
+    args.push('--ssh-key', options.sshKey.trim());
+  }
+  if (options?.parallel && options.parallel > 1) {
+    args.push('-j', String(options.parallel));
+  }
+
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
+}
+
+export interface K3sKillOptions {
+  local?: boolean;
+  all?: boolean;
+  remoteHost?: string;
+  targetsFile?: string;
+  parallel?: number;
+  sshPort?: number;
+  sshKey?: string;
+}
+
+/**
+ * Tears down and uninstalls K3s cluster nodes
+ */
+export function killK3sCluster(projectRoot: string, options?: K3sKillOptions): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_kill.sh');
+  const args: string[] = [scriptPath, '-y'];
+
+  if (options?.all) {
+    args.push('--all');
+  } else if (options?.local) {
+    args.push('--local');
+  }
+  if (options?.remoteHost) {
+    args.push('--remote', options.remoteHost.trim());
+  }
+  if (options?.targetsFile) {
+    args.push('--targets', options.targetsFile.trim());
+  }
+  if (options?.sshPort) {
+    args.push('--ssh-port', String(options.sshPort));
+  }
+  if (options?.sshKey) {
+    args.push('--ssh-key', options.sshKey.trim());
+  }
+  if (options?.parallel && options.parallel > 1) {
+    args.push('-j', String(options.parallel));
+  }
+
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
+}
+
+export interface K3sBuildOptions {
+  rebuild?: boolean;
+  targetsFile?: string;
+  parallel?: number;
+  skipJoin?: boolean;
+  skipTune?: boolean;
+  skipUp?: boolean;
+  registriesFile?: string;
+}
+
+/**
+ * Builds or rebuilds an entire K3s cluster end-to-end
+ */
+export function buildK3sCluster(projectRoot: string, options?: K3sBuildOptions): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_build.sh');
+  const args: string[] = [scriptPath, '-y'];
+
+  if (options?.rebuild) {
+    args.push('--rebuild');
+  }
+  if (options?.targetsFile) {
+    args.push('--targets', options.targetsFile.trim());
+  }
+  if (options?.parallel && options.parallel > 1) {
+    args.push('-j', String(options.parallel));
+  }
+  if (options?.skipJoin) {
+    args.push('--skip-join');
+  }
+  if (options?.skipTune) {
+    args.push('--skip-tune');
+  }
+  if (options?.skipUp) {
+    args.push('--skip-up');
+  }
+  if (options?.registriesFile) {
+    args.push('--registries-file', options.registriesFile.trim());
+  }
+
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
+}
+
+export interface K3sRegistriesOptions {
+  remoteHost?: string;
+  targetsFile?: string;
+  registriesFile?: string;
+  copyKubeconfig?: boolean;
+  sshPort?: number;
+  sshKey?: string;
+}
+
+/**
+ * Deploys container registry mirrors and auth configuration
+ */
+export function deployK3sRegistries(projectRoot: string, options?: K3sRegistriesOptions): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_registries.sh');
+  const args: string[] = [scriptPath];
+
+  if (options?.remoteHost) {
+    args.push('--remote', options.remoteHost.trim());
+  }
+  if (options?.targetsFile) {
+    args.push('--targets', options.targetsFile.trim());
+  }
+  if (options?.registriesFile) {
+    args.push('--file', options.registriesFile.trim());
+  }
+  if (options?.copyKubeconfig) {
+    args.push('--copy-kubeconfig');
+  }
+  if (options?.sshPort) {
+    args.push('--ssh-port', String(options.sshPort));
+  }
+  if (options?.sshKey) {
+    args.push('--ssh-key', options.sshKey.trim());
+  }
+
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
 }
