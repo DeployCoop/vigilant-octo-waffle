@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @vow/orchestrator build",
     "dev": "next dev --turbopack",
+    "prebuild": "pnpm --filter @vow/orchestrator build",
     "build": "rm -rf .next && next build",
     "start": "next start",
     "test": "echo 'Web smoke tests: ok'",

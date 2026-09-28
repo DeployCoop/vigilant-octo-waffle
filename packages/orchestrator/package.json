@@ -11,6 +11,7 @@
     }
   },
   "scripts": {
+    "prepare": "tsc",
     "build": "tsc",
     "test": "node --test dist/__tests__/*.test.js",
     "typecheck": "tsc --noEmit",

@@ -13,6 +13,7 @@ import {
   ArrowRight,
   ExternalLink,
 } from 'lucide-react';
+import { copyToClipboard } from '@/lib/clipboard';
 
 interface BlueprintFile {
   filename: string;
@@ -73,10 +74,10 @@ export default function CloudExportPage() {
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!blueprint) return;
     const currentCode = blueprint.files[selectedFileIdx]?.content || '';
-    navigator.clipboard.writeText(currentCode);
+    await copyToClipboard(currentCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

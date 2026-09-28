@@ -22,6 +22,7 @@ import {
   Shield,
   ArrowRight,
 } from 'lucide-react';
+import { copyToClipboard as copyText } from '@/lib/clipboard';
 
 interface ClusterData {
   platform: string;
@@ -135,8 +136,8 @@ export default function ClusterPage() {
     }
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, label: string) => {
+    await copyText(text);
     setCopied(label);
     setTimeout(() => setCopied(null), 2500);
   };
