@@ -31,5 +31,6 @@ export * from './traces.js';
 export * from './builder.js';
 export * from './remote.js';
 export * from './flux.js';
+export * from './k3s.js';
 
 

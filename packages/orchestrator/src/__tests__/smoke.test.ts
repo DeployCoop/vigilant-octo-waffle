@@ -10,6 +10,11 @@ import {
   saveEnvFile,
   saveEnablerFile,
   FluxManager,
+  generateK3sOneLiner,
+  generateK3sJoinScript,
+  saveK3sJoinScript,
+  getK3sJoinInfo,
+  resolveK3sServer,
 } from '../index.js';
 
 describe('Orchestrator Security & Smoke Tests', () => {
@@ -175,5 +180,100 @@ spec:
       assert.ok(config.cluster.fluxNamespace);
     });
   });
+
+  describe('K3s Multi-Node Orchestration', () => {
+    it('allows k3s and ssh binaries in command allowlist', () => {
+      assert.ok(ALLOWED_EXECUTABLES.has('k3s'), 'k3s must be in ALLOWED_EXECUTABLES');
+      assert.ok(ALLOWED_EXECUTABLES.has('ssh'), 'ssh must be in ALLOWED_EXECUTABLES');
+
+      const k3sRes = validateCommand('k3s', ['--version'], projectRoot);
+      assert.equal(k3sRes.allowed, true);
+
+      const sshRes = validateCommand('ssh', ['-p', '22', 'ubuntu@192.168.1.50'], projectRoot);
+      assert.equal(sshRes.allowed, true);
+    });
+
+    it('allows src/k3s_add_node.sh execution via validateCommand', () => {
+      const res = validateCommand('bash', ['src/k3s_add_node.sh', '--role', 'agent'], projectRoot);
+      assert.equal(res.allowed, true);
+      assert.equal(res.normalizedCommand, 'bash');
+    });
+
+    it('generates valid one-liner curl join commands for agent and server roles', () => {
+      const agentCmd = generateK3sOneLiner({
+        role: 'agent',
+        serverUrl: 'https://192.168.1.10:6443',
+        token: 'secret-token-123',
+        nodeName: 'worker-edge-1',
+        labels: { tier: 'backend', env: 'production' },
+      });
+      assert.ok(agentCmd.startsWith('curl -sfL https://get.k3s.io | '));
+      assert.ok(agentCmd.includes('K3S_URL="https://192.168.1.10:6443"'));
+      assert.ok(agentCmd.includes('K3S_TOKEN="secret-token-123"'));
+      assert.ok(agentCmd.includes('sh -s - agent'));
+      assert.ok(agentCmd.includes('--node-name worker-edge-1'));
+      assert.ok(agentCmd.includes('--node-label tier=backend'));
+      assert.ok(agentCmd.includes('--node-label env=production'));
+
+      const serverCmd = generateK3sOneLiner({
+        role: 'server',
+        serverUrl: 'https://192.168.1.10:6443',
+        token: 'secret-token-123',
+        nodeName: 'master-2',
+      });
+      assert.ok(serverCmd.includes('sh -s - server'));
+      assert.ok(serverCmd.includes('--node-name master-2'));
+    });
+
+    it('generates complete standalone bash join scripts with safety checks', () => {
+      const script = generateK3sJoinScript({
+        role: 'agent',
+        serverUrl: 'https://192.168.1.10:6443',
+        token: 'secret-token-123',
+        nodeName: 'worker-gpu-1',
+        taints: ['nvidia.com/gpu=present:NoSchedule'],
+      });
+      assert.ok(script.startsWith('#!/usr/bin/env bash'));
+      assert.ok(script.includes('set -euo pipefail'));
+      assert.ok(script.includes('export K3S_URL="https://192.168.1.10:6443"'));
+      assert.ok(script.includes('export K3S_TOKEN="secret-token-123"'));
+      assert.ok(script.includes('curl -sfL https://get.k3s.io | sh -s - agent'));
+      assert.ok(script.includes('--node-name worker-gpu-1'));
+      assert.ok(script.includes('--node-taint nvidia.com/gpu=present:NoSchedule'));
+    });
+
+    it('saves join scripts securely to .secrets/ directory and prevents traversal', () => {
+      const saved = saveK3sJoinScript(projectRoot, {
+        role: 'agent',
+        serverUrl: 'https://192.168.1.10:6443',
+        token: 'secret-token-123',
+      }, 'test_k3s_join_agent.sh');
+
+      assert.ok(saved.filePath.includes('.secrets'));
+      assert.ok(saved.relativePath.startsWith('.secrets'));
+
+      // Clean up test file
+      import('node:fs').then((fs) => {
+        if (fs.existsSync(saved.filePath)) {
+          fs.unlinkSync(saved.filePath);
+        }
+      });
+    });
+
+    it('retrieves comprehensive K3s cluster join info with masked tokens', () => {
+      const info = getK3sJoinInfo(projectRoot, {
+        serverUrl: 'https://192.168.1.10:6443',
+        token: 'K10abcd1234efgh5678',
+      });
+      assert.equal(info.serverUrl, 'https://192.168.1.10:6443');
+      assert.equal(info.token, 'K10abcd1234efgh5678');
+      assert.equal(info.tokenMasked, 'K10a...5678');
+      assert.ok(info.agentOneLiner.includes('agent'));
+      assert.ok(info.serverOneLiner.includes('server'));
+      assert.ok(info.agentScript.includes('#!/usr/bin/env bash'));
+      assert.ok(info.serverScript.includes('#!/usr/bin/env bash'));
+    });
+  });
 });
+
 

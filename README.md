@@ -78,6 +78,29 @@ Vigilant Octo Waffle supports both **ArgoCD** and **FluxCD** ([fluxcd.io](https:
 - **App Overrides**: ArgoCD overrides are stored in `.argo_overrides/<app>/argocd.yaml`, and FluxCD overrides in `.flux_overrides/<app>/flux.yaml`.
 - **CLI & Web Controls**: Use `src/cdRunner.bash <app>`, `src/fluxRunner.bash <app>`, or the web UI's app detail runner switch to deploy, inspect, and reconcile apps with either runner.
 
+### 🌐 K3s Multi-Node Expansion & Node Joining
+
+When running K3s (`THIS_K8S_TYPE="k3s"`), you can seamlessly expand your cluster across multiple machines, VMs, or edge devices:
+
+- **Join Worker (Agent) Node**:
+  ```bash
+  # Print the single-line curl join command
+  ./up k3s:add-node --role agent
+
+  # Or save to a standalone script
+  ./up k3s:add-node --role agent -o ./.secrets/k3s_join_agent.sh
+
+  # Or remotely provision a target machine over SSH
+  ./up k3s:add-node --role agent --ssh ubuntu@192.168.1.50 --node-name worker-1
+  ```
+- **Join HA Control-Plane (Server) Node**:
+  ```bash
+  ./up k3s:add-node --role server --ssh root@192.168.1.51 --node-name master-2
+  ```
+- **Web Control Plane GUI**:
+  Navigate to `/cluster` on the web dashboard, click **"Join K3s Node"**, choose Worker vs Control-Plane, configure labels/taints, copy the generated curl one-liner, or run automated SSH provisioning with real-time log streaming.
+
+
 
 
 

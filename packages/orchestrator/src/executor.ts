@@ -8,12 +8,14 @@ export const ALLOWED_EXECUTABLES = new Set([
   'helm',
   'kind',
   'k3d',
+  'k3s',
   'argocd',
   'flux',
   'velero',
   'docker',
   'mkcert',
   'echo',
+  'ssh',
 ]);
 
 export interface CommandValidationResult {

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+if [[ "${1:-}" == "k3s:add-node" || "${1:-}" == "k3s:join" || "${1:-}" == "add-node" ]]; then
+  shift
+  exec ./src/k3s_add_node.sh "$@"
+fi
+
 : "${BIG_LIST:=./src/big_list}"
 source ./src/sourceror.bash
 export this_cwd=$(pwd)

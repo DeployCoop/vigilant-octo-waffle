@@ -77,3 +77,23 @@ The Next.js web application provides parity with the bash orchestration:
 - **`FluxManager`**: TypeScript engine mirror of `fluxRunner.bash`. Supports `prepareAppManifest`, `synthesizeFluxFromArgo`, `deployApp`, and `syncApp`.
 - **API Endpoints**: `/api/flux` exposes controller health, reconciliation, and status checks; `/api/apps/[id]` supports `runner=argocd|flux` queries and deployments.
 - **Visual Runner Switching**: Interactive toggle on application detail pages to switch between ArgoCD and FluxCD views, manifests, overrides, and live sync commands.
+
+### 6. K3s Multi-Node Architecture & Node Join Mechanism
+
+When running K3s (`THIS_K8S_TYPE="k3s"`), Vigilant Octo Waffle provides a comprehensive multi-node expansion system:
+
+*   #### [src/k3s_add_node.sh](src/k3s_add_node.sh) & `./up k3s:add-node`
+    CLI utility supporting:
+    - **Worker (Agent) Node Joining**: Outputs single-line curl commands or writes `.secrets/k3s_join_agent.sh` for worker nodes executing workloads.
+    - **Control-Plane (Server) Node Joining**: Generates HA server join scripts (`.secrets/k3s_join_server.sh`) with etcd quorum integration.
+    - **Automated Remote SSH Provisioning**: With `--ssh user@target-host`, securely deploys and joins the target node over SSH non-interactively.
+*   #### [src/install_k3s.sh](src/install_k3s.sh)
+    Primary server installation script. Automatically writes:
+    - `.secrets/k3s_token` (plain join token)
+    - `.secrets/k3s_env` (environment variables)
+    - `.secrets/k3s_join_agent.sh` (ready-to-run worker join script)
+    - `.secrets/k3s_join_server.sh` (ready-to-run HA server join script)
+*   #### Web Control Plane K3s Integration (`/cluster` & `/api/cluster/k3s`)
+    - **Interactive Join Modal**: Select between Worker (Agent) and Control-Plane (Server) roles, configure node labels/taints, and copy curl one-liners.
+    - **Remote SSH Node Provisioner**: Directly provision and join remote machines from the web dashboard with streaming logs.
+
