@@ -494,6 +494,32 @@ export const APP_CATALOG: AppDefinition[] = [
     icon: 'Microchip',
     estimatedMemoryMb: 128,
   },
+  {
+    id: 'ollama',
+    name: 'Ollama (In-Cluster LLM)',
+    category: 'AI, ML & GPU',
+    description: 'Get up and running with large language models locally inside your Kubernetes cluster',
+    enablerVar: 'OLLAMA_ENABLED',
+    argoPath: 'argo/ollama',
+    subdomain: 'ollama',
+    port: 11434,
+    docsUrl: 'https://ollama.com/',
+    icon: 'Bot',
+    estimatedMemoryMb: 2048,
+  },
+  {
+    id: 'vllm',
+    name: 'vLLM Inference Server',
+    category: 'AI, ML & GPU',
+    description: 'High-throughput and memory-efficient LLM serving engine for Kubernetes clusters',
+    enablerVar: 'VLLM_ENABLED',
+    argoPath: 'argo/vllm',
+    subdomain: 'vllm',
+    port: 8000,
+    docsUrl: 'https://docs.vllm.ai/',
+    icon: 'Cpu',
+    estimatedMemoryMb: 4096,
+  },
 
   // Messaging & IoT
   {
@@ -561,9 +587,9 @@ export const DEPLOYMENT_PRESETS: DeploymentPreset[] = [
   {
     id: 'ai',
     name: 'AI & Machine Learning',
-    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery',
-    estimatedMemoryMb: 9216,
-    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery'],
+    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery, Ollama, vLLM',
+    estimatedMemoryMb: 12288,
+    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery', 'ollama', 'vllm'],
   },
   {
     id: 'collaboration',

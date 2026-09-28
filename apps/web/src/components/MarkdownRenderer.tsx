@@ -1,15 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Copy, Check, Play, Terminal } from 'lucide-react';
+import { Copy, Check, Play, Terminal, GitCompare } from 'lucide-react';
 import { copyToClipboard } from '@/lib/clipboard';
 
 interface MarkdownRendererProps {
   content: string;
   onExecuteCommand?: (cmd: string) => void;
+  onReviewManifest?: (rawYaml: string) => void;
 }
 
-export function MarkdownRenderer({ content, onExecuteCommand }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, onExecuteCommand, onReviewManifest }: MarkdownRendererProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const handleCopy = async (code: string, idx: number) => {
@@ -59,6 +60,12 @@ export function MarkdownRenderer({ content, onExecuteCommand }: MarkdownRenderer
             firstLine.startsWith('k3s ') ||
             firstLine.startsWith('docker '));
 
+        const isManifest =
+          (language === 'yaml' || language === 'yml' || language === '') &&
+          (trimmedCode.includes('kind:') ||
+            trimmedCode.includes('apiVersion:') ||
+            (trimmedCode.includes('spec:') && trimmedCode.includes('metadata:')));
+
         elements.push(
           <div
             key={`code-${currentIndex}`}
@@ -69,6 +76,16 @@ export function MarkdownRenderer({ content, onExecuteCommand }: MarkdownRenderer
                 {language || 'code'}
               </span>
               <div className="flex items-center space-x-2">
+                {isManifest && onReviewManifest && (
+                  <button
+                    onClick={() => onReviewManifest(fullCode)}
+                    className="flex items-center space-x-1 px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-sans text-[10px] transition-colors shadow-sm"
+                    title="Review and apply this manifest patch to cluster overrides"
+                  >
+                    <GitCompare className="w-2.5 h-2.5" />
+                    <span>Review & Apply Patch</span>
+                  </button>
+                )}
                 {isRunnable && onExecuteCommand && (
                   <button
                     onClick={() => onExecuteCommand(firstLine)}

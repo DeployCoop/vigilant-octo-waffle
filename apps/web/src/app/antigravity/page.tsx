@@ -26,8 +26,10 @@ import {
   Settings2,
   Check,
   Zap,
+  GitCompare,
 } from 'lucide-react';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
+import { YamlDiffModal, type DetectedManifestPayload } from '@/components/YamlDiffModal';
 
 type AIProvider = 'antigravity' | 'ollama' | 'vllm';
 
@@ -49,6 +51,7 @@ interface ChatMessage {
   durationSeconds?: number;
   tokensUsed?: number;
   modelUsed?: string;
+  detectedManifests?: DetectedManifestPayload[];
   clusterSnapshot?: {
     connected: boolean;
     context: string;
@@ -134,6 +137,11 @@ export default function AntigravityPage() {
   const [showEndpointSettings, setShowEndpointSettings] = useState(false);
   const [endpointTesting, setEndpointTesting] = useState(false);
 
+  // Streaming and Manifest Review State
+  const [streamStatus, setStreamStatus] = useState<string>('');
+  const [reviewManifest, setReviewManifest] = useState<DetectedManifestPayload | null>(null);
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState<boolean>(false);
+
   // Command Runner State
   const [commandOutput, setCommandOutput] = useState<{ command: string; output: string; status: 'running' | 'done' | 'failed' } | null>(null);
 
@@ -187,6 +195,21 @@ export default function AntigravityPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  const handleOpenManifestReview = (manifestOrRaw: DetectedManifestPayload | string) => {
+    if (typeof manifestOrRaw === 'string') {
+      const kindMatch = /(?:^|\n)\s*kind:\s*([A-Za-z0-9_-]+)/.exec(manifestOrRaw);
+      const nameMatch = /(?:^|\n)\s*name:\s*([A-Za-z0-9_.-]+)/.exec(manifestOrRaw);
+      setReviewManifest({
+        raw: manifestOrRaw,
+        kind: kindMatch ? kindMatch[1] : undefined,
+        name: nameMatch ? nameMatch[1] : undefined,
+      });
+    } else {
+      setReviewManifest(manifestOrRaw);
+    }
+    setIsDiffModalOpen(true);
+  };
+
   const handleSendMessage = async (textToSend?: string) => {
     const messageText = (textToSend || input).trim();
     if (!messageText || loading) return;
@@ -200,15 +223,27 @@ export default function AntigravityPage() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const botMessageId = `bot-${Date.now()}`;
+    const initialBotMessage: ChatMessage = {
+      id: botMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      provider: selectedProvider,
+      modelUsed: activeModel,
+      detectedManifests: [],
+    };
+
+    setMessages((prev) => [...prev, userMessage, initialBotMessage]);
     setInput('');
     setLoading(true);
+    setStreamStatus(`Connecting to ${selectedProvider}...`);
 
     try {
       const customEndpoint =
         selectedProvider === 'ollama' ? ollamaUrl : selectedProvider === 'vllm' ? vllmUrl : undefined;
 
-      const res = await fetch('/api/antigravity', {
+      const res = await fetch('/api/antigravity/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -222,42 +257,142 @@ export default function AntigravityPage() {
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Failed to get response from AI Copilot');
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP status ${res.status}`);
       }
 
-      if (data.conversationId) {
-        setConversationId(data.conversationId);
-      }
-      if (data.clusterSnapshot) {
-        setClusterSnapshot(data.clusterSnapshot);
-      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accumulatedText = '';
+      const detectedManifestsList: DetectedManifestPayload[] = [];
 
-      const botMessage: ChatMessage = {
-        id: `bot-${Date.now()}`,
-        role: 'assistant',
-        content: data.response,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        provider: data.provider || selectedProvider,
-        durationSeconds: data.durationSeconds,
-        tokensUsed: data.usage?.total_tokens,
-        modelUsed: data.modelUsed || activeModel,
-        clusterSnapshot: data.clusterSnapshot,
-      };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      setMessages((prev) => [...prev, botMessage]);
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+
+        for (const block of parts) {
+          const lines = block.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const event = JSON.parse(trimmed.slice(6));
+              if (event.type === 'status') {
+                if (event.statusMessage) {
+                  setStreamStatus(event.statusMessage);
+                }
+              } else if (event.type === 'chunk') {
+                accumulatedText += event.text || '';
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === botMessageId
+                      ? { ...m, content: accumulatedText }
+                      : m
+                  )
+                );
+              } else if (event.type === 'manifest') {
+                if (event.manifest) {
+                  detectedManifestsList.push(event.manifest);
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === botMessageId
+                        ? { ...m, detectedManifests: [...detectedManifestsList] }
+                        : m
+                    )
+                  );
+                }
+              } else if (event.type === 'done') {
+                const resp = event.response;
+                if (resp) {
+                  if (resp.conversationId) setConversationId(resp.conversationId);
+                  if (resp.clusterSnapshot) setClusterSnapshot(resp.clusterSnapshot);
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === botMessageId
+                        ? {
+                            ...m,
+                            content: resp.response || accumulatedText,
+                            durationSeconds: resp.durationSeconds,
+                            tokensUsed: resp.usage?.total_tokens,
+                            modelUsed: resp.modelUsed || activeModel,
+                            clusterSnapshot: resp.clusterSnapshot,
+                            detectedManifests: [...detectedManifestsList],
+                          }
+                        : m
+                    )
+                  );
+                }
+              } else if (event.type === 'error') {
+                throw new Error(event.error || 'Streaming error');
+              }
+            } catch {
+              // Ignore partial parse
+            }
+          }
+        }
+      }
     } catch (err: any) {
-      const errorMessage: ChatMessage = {
-        id: `err-${Date.now()}`,
-        role: 'system',
-        content: `⚠️ Error contacting ${selectedProvider.toUpperCase()}: ${err.message}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      // If streaming fails, fall back to standard non-streaming POST
+      try {
+        const customEndpoint =
+          selectedProvider === 'ollama' ? ollamaUrl : selectedProvider === 'vllm' ? vllmUrl : undefined;
+
+        const fallbackRes = await fetch('/api/antigravity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: messageText,
+            provider: selectedProvider,
+            model: activeModel,
+            customEndpoint,
+            conversationId,
+            effort: selectedEffort,
+            includeClusterContext,
+          }),
+        });
+
+        const fallbackData = await fallbackRes.json();
+        if (fallbackRes.ok && fallbackData.response) {
+          if (fallbackData.conversationId) setConversationId(fallbackData.conversationId);
+          if (fallbackData.clusterSnapshot) setClusterSnapshot(fallbackData.clusterSnapshot);
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === botMessageId
+                ? {
+                    ...m,
+                    content: fallbackData.response,
+                    durationSeconds: fallbackData.durationSeconds,
+                    tokensUsed: fallbackData.usage?.total_tokens,
+                    modelUsed: fallbackData.modelUsed || activeModel,
+                    clusterSnapshot: fallbackData.clusterSnapshot,
+                  }
+                : m
+            )
+          );
+          return;
+        }
+      } catch {}
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === botMessageId
+            ? {
+                ...m,
+                role: 'system',
+                content: `⚠️ Error contacting ${selectedProvider.toUpperCase()}: ${err.message}`,
+              }
+            : m
+        )
+      );
     } finally {
       setLoading(false);
+      setStreamStatus('');
       textareaRef.current?.focus();
     }
   };
@@ -476,6 +611,21 @@ export default function AntigravityPage() {
             />
             <span className="text-[11px]">Live Cluster Telemetry</span>
           </label>
+
+          {/* Watchdog Scan Button */}
+          <button
+            onClick={() =>
+              handleSendMessage(
+                'Perform a comprehensive cluster health and reliability inspection. Analyze active node resource saturation, check pod crash loops, inspect recent warning events, verify ingress routes, and highlight top 3 risk factors with concrete kubectl fix commands.'
+              )
+            }
+            disabled={loading}
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-medium transition-colors disabled:opacity-50 shadow-sm"
+            title="Trigger deep automated Cluster Watchdog inspection"
+          >
+            <Flame className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Watchdog Scan</span>
+          </button>
 
           {/* Clear & Export Buttons */}
           {messages.length > 0 && (
@@ -751,10 +901,29 @@ export default function AntigravityPage() {
                   {m.role === 'user' ? (
                     <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
                   ) : (
-                    <MarkdownRenderer
-                      content={m.content}
-                      onExecuteCommand={handleExecuteCommand}
-                    />
+                    <>
+                      <MarkdownRenderer
+                        content={m.content}
+                        onExecuteCommand={handleExecuteCommand}
+                        onReviewManifest={handleOpenManifestReview}
+                      />
+                      {m.detectedManifests && m.detectedManifests.length > 0 && (
+                        <div className="mt-3 pt-2.5 border-t border-slate-800 flex flex-wrap items-center gap-2">
+                          {m.detectedManifests.map((man, manIdx) => (
+                            <button
+                              key={manIdx}
+                              onClick={() => handleOpenManifestReview(man)}
+                              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 text-[11px] font-medium transition-colors shadow-sm"
+                            >
+                              <GitCompare className="w-3 h-3" />
+                              <span>
+                                Review & Apply Patch: {man.kind || 'Manifest'} {man.name ? `(${man.name})` : ''}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -768,7 +937,7 @@ export default function AntigravityPage() {
             ))}
 
             {/* Loading Indicator */}
-            {loading && (
+            {loading && (!messages[messages.length - 1] || messages[messages.length - 1].role === 'user' || !messages[messages.length - 1].content) && (
               <div className="flex items-start space-x-3">
                 <div
                   className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 animate-pulse ${
@@ -784,11 +953,12 @@ export default function AntigravityPage() {
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-none p-4 text-xs text-slate-300 flex items-center space-x-2">
                   <Sparkles className="w-3.5 h-3.5 text-sky-400 animate-spin" />
                   <span className="text-slate-400">
-                    {selectedProvider === 'ollama'
-                      ? 'Ollama is generating response...'
-                      : selectedProvider === 'vllm'
-                      ? 'vLLM is running inference...'
-                      : 'Antigravity is inspecting cluster telemetry and reasoning...'}
+                    {streamStatus ||
+                      (selectedProvider === 'ollama'
+                        ? 'Ollama is generating response...'
+                        : selectedProvider === 'vllm'
+                        ? 'vLLM is running inference...'
+                        : 'Antigravity is inspecting cluster telemetry and reasoning...')}
                   </span>
                 </div>
               </div>
@@ -901,6 +1071,15 @@ export default function AntigravityPage() {
           </div>
         </div>
       </div>
+
+      {/* Manifest Diff & 1-Click Apply Modal */}
+      <YamlDiffModal
+        isOpen={isDiffModalOpen}
+        onClose={() => setIsDiffModalOpen(false)}
+        manifest={reviewManifest}
+        onExecuteCommand={handleExecuteCommand}
+        onApplied={fetchStatus}
+      />
     </div>
   );
 }

@@ -20,6 +20,9 @@ import {
   getAntigravityEngineStatus,
   buildClusterContext,
   askAntigravity,
+  streamAntigravity,
+  detectManifestPatch,
+  runClusterWatchdogScan,
 } from '../index.js';
 
 describe('Orchestrator Security & Smoke Tests', () => {
@@ -385,6 +388,84 @@ spec:
       assert.equal(result.modelUsed, 'meta-llama/Meta-Llama-3-8B-Instruct');
       assert.ok(result.response && result.response.length > 0);
       assert.ok(['vllm', 'cluster-copilot-engine'].includes(result.engineUsed));
+    });
+
+    it('detects Kubernetes YAML manifests and correlates with APP_CATALOG', () => {
+      const sampleMarkdown = `
+Here is how to deploy a custom ingress for Spegel:
+\`\`\`yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spegel-ingress
+  namespace: kube-system
+spec:
+  rules:
+  - host: spegel.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: spegel
+            port:
+              number: 80
+\`\`\`
+
+And here is a regular bash command:
+\`\`\`bash
+kubectl get ingress -A
+\`\`\`
+`;
+      const detected = detectManifestPatch(sampleMarkdown);
+      assert.equal(detected.length, 1);
+      assert.equal(detected[0].kind, 'Ingress');
+      assert.equal(detected[0].name, 'spegel-ingress');
+      assert.equal(detected[0].namespace, 'kube-system');
+      assert.equal(detected[0].targetAppId, 'spegel');
+    });
+
+    it('streams real-time events and incremental chunks with streamAntigravity', async () => {
+      const events: any[] = [];
+      const result = await streamAntigravity(
+        {
+          prompt: 'What is the cluster status?',
+          includeClusterContext: true,
+          root: projectRoot,
+        },
+        (event) => {
+          events.push(event);
+        }
+      );
+
+      assert.ok(result);
+      assert.ok(events.length > 0);
+      assert.ok(events.some((e) => e.type === 'status'));
+      assert.ok(events.some((e) => e.type === 'chunk'));
+      assert.ok(events.some((e) => e.type === 'done'));
+      const doneEvt = events.find((e) => e.type === 'done');
+      assert.ok(doneEvt.response);
+      assert.equal(doneEvt.response.response, result.response);
+    });
+
+    it('executes runClusterWatchdogScan to produce deep health analysis', async () => {
+      const watchdog = await runClusterWatchdogScan(projectRoot, { effort: 'low' });
+      assert.ok(watchdog);
+      assert.ok(watchdog.response.length > 0);
+      assert.ok(watchdog.clusterSnapshot);
+    });
+
+    it('registers in-cluster Ollama and vLLM in APP_CATALOG with valid ArgoCD manifests', () => {
+      const ollamaApp = APP_CATALOG.find((a) => a.id === 'ollama');
+      assert.ok(ollamaApp, 'Ollama must be in APP_CATALOG');
+      assert.equal(ollamaApp.category, 'AI, ML & GPU');
+      assert.equal(ollamaApp.port, 11434);
+
+      const vllmApp = APP_CATALOG.find((a) => a.id === 'vllm');
+      assert.ok(vllmApp, 'vLLM must be in APP_CATALOG');
+      assert.equal(vllmApp.category, 'AI, ML & GPU');
+      assert.equal(vllmApp.port, 8000);
     });
   });
 });

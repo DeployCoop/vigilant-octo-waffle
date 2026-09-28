@@ -1,4 +1,4 @@
-import { execFile, execSync } from 'node:child_process';
+import { execFile, execSync, spawn } from 'node:child_process';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { K8sClient, type ClusterTelemetry, type PodInfo, type ArgoAppStatus } from './k8s.js';
@@ -6,6 +6,26 @@ import { loadProjectConfig } from './config.js';
 import { APP_CATALOG } from './registry.js';
 
 export type AIProvider = 'antigravity' | 'ollama' | 'vllm';
+
+export interface DetectedManifest {
+  raw: string;
+  kind?: string;
+  name?: string;
+  namespace?: string;
+  targetAppId?: string;
+  isArgoApp?: boolean;
+}
+
+export type StreamEventType = 'status' | 'chunk' | 'manifest' | 'done' | 'error';
+
+export interface StreamEvent {
+  type: StreamEventType;
+  text?: string;
+  statusMessage?: string;
+  manifest?: DetectedManifest;
+  response?: AntigravityResponse;
+  error?: string;
+}
 
 export interface AIProviderInfo {
   id: AIProvider;
@@ -61,6 +81,8 @@ export interface AskAntigravityOptions {
   includeClusterContext?: boolean;
   root: string;
 }
+
+export type StreamAntigravityOptions = AskAntigravityOptions;
 
 const DEFAULT_ANTIGRAVITY_MODELS = [
   'gemini-3.8-flash-high',
@@ -494,6 +516,109 @@ async function queryVllm(options: {
 }
 
 /**
+ * Scans markdown text for valid Kubernetes / ArgoCD YAML manifests.
+ * Extracts kind, metadata name/namespace, and correlates with known apps from APP_CATALOG.
+ */
+export function detectManifestPatch(markdown: string): DetectedManifest[] {
+  const manifests: DetectedManifest[] = [];
+  if (!markdown) return manifests;
+
+  // Match ```yaml or ```yml or ``` containing YAML blocks
+  const codeBlockRegex = /```(?:ya?ml)?\s*\n([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = codeBlockRegex.exec(markdown)) !== null) {
+    const rawBlock = match[1].trim();
+    if (!rawBlock) continue;
+
+    // A block might contain multiple YAML docs separated by ---
+    const docs = rawBlock.split(/^---$/m).map((d) => d.trim()).filter(Boolean);
+
+    for (const raw of docs) {
+      const hasKind = /(?:^|\n)\s*kind:\s*([A-Za-z0-9_-]+)/.test(raw);
+      const hasApiVersion = /(?:^|\n)\s*apiVersion:\s*([A-Za-z0-9_\/.-]+)/.test(raw);
+      const hasMetadata = /(?:^|\n)\s*metadata:\s*/.test(raw);
+      const hasSpec = /(?:^|\n)\s*spec:\s*/.test(raw);
+
+      if ((hasKind && hasMetadata) || (hasApiVersion && (hasKind || hasMetadata)) || (hasSpec && hasMetadata)) {
+        const kindMatch = /(?:^|\n)\s*kind:\s*([A-Za-z0-9_-]+)/.exec(raw);
+        const nameMatch = /(?:^|\n)\s*name:\s*([A-Za-z0-9_.-]+)/.exec(raw);
+        const nsMatch = /(?:^|\n)\s*namespace:\s*([A-Za-z0-9_.-]+)/.exec(raw);
+
+        const kind = kindMatch ? kindMatch[1] : undefined;
+        const name = nameMatch ? nameMatch[1] : undefined;
+        const namespace = nsMatch ? nsMatch[1] : undefined;
+        const isArgoApp = kind?.toLowerCase() === 'application' || raw.includes('argoproj.io');
+
+        // Check against APP_CATALOG
+        let targetAppId: string | undefined;
+        const lowerRaw = raw.toLowerCase();
+        const lowerName = name?.toLowerCase() || '';
+
+        for (const app of APP_CATALOG) {
+          if (
+            lowerName.includes(app.id) ||
+            app.id.includes(lowerName) ||
+            lowerRaw.includes(`argo/${app.id}`) ||
+            lowerRaw.includes(`charts/${app.id}`) ||
+            lowerRaw.includes(`.argo_overrides/${app.id}`) ||
+            lowerRaw.includes(`.flux_overrides/${app.id}`)
+          ) {
+            targetAppId = app.id;
+            break;
+          }
+        }
+
+        manifests.push({
+          raw,
+          kind,
+          name,
+          namespace,
+          targetAppId,
+          isArgoApp,
+        });
+      }
+    }
+  }
+
+  return manifests;
+}
+
+/**
+ * Emits progressive typewriter-style streaming chunks for fallback and offline responses.
+ */
+async function streamFallbackText(
+  text: string,
+  snapshot: AntigravityResponse['clusterSnapshot'],
+  provider: AIProvider,
+  model: string,
+  onEvent: (event: StreamEvent) => void
+): Promise<AntigravityResponse> {
+  const chunks = text.match(/[\s\S]{1,25}/g) || [text];
+  for (const chunk of chunks) {
+    onEvent({ type: 'chunk', text: chunk });
+    await new Promise((r) => setTimeout(r, 8));
+  }
+
+  const manifests = detectManifestPatch(text);
+  for (const manifest of manifests) {
+    onEvent({ type: 'manifest', manifest });
+  }
+
+  const res: AntigravityResponse = {
+    response: text,
+    provider,
+    modelUsed: model,
+    durationSeconds: 0.1,
+    engineUsed: 'cluster-copilot-engine',
+    clusterSnapshot: snapshot,
+  };
+
+  onEvent({ type: 'done', response: res });
+  return res;
+}
+
+/**
  * Generates an intelligent cluster response if an AI backend is unreachable.
  */
 function generateHeuristicResponse(
@@ -815,5 +940,353 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
         }
       }
     );
+  });
+}
+
+/**
+ * Real-time streaming interface for Antigravity, Ollama, and vLLM.
+ * Emits progressive status updates, incremental token chunks, detected YAML manifests,
+ * and the final aggregated response.
+ */
+export async function streamAntigravity(
+  options: StreamAntigravityOptions,
+  onEvent: (event: StreamEvent) => void
+): Promise<AntigravityResponse> {
+  const {
+    prompt,
+    provider = 'antigravity',
+    model,
+    customEndpoint,
+    conversationId,
+    effort = 'low',
+    includeClusterContext = true,
+    root,
+  } = options;
+
+  onEvent({
+    type: 'status',
+    statusMessage: `Connecting to ${provider === 'antigravity' ? 'Google Antigravity' : provider.toUpperCase()}...`,
+  });
+
+  const { promptContext, snapshot } = await buildClusterContext(root);
+
+  onEvent({
+    type: 'status',
+    statusMessage: `Gathered cluster context (${snapshot.platform.toUpperCase()}, ${snapshot.nodeCount} nodes, ${snapshot.podCount} pods)`,
+  });
+
+  const systemInstructions = `You are the AI DevOps and Kubernetes Copilot for the Vigilant Octo Waffle local control plane.
+
+${includeClusterContext ? promptContext : ''}
+
+Instructions:
+1. Provide accurate, clear, and actionable DevOps / Kubernetes answers.
+2. When suggesting commands, use standard markdown code blocks (e.g. \`\`\`bash\nkubectl ...\n\`\`\`).
+3. When suggesting manifests, patch configurations, or overrides, use \`\`\`yaml\n...code...\n\`\`\` blocks with valid Kubernetes / ArgoCD syntax.
+4. Use markdown tables, bold headings, and bullet points to structure your output cleanly.
+5. Reference the live cluster state above whenever the user asks about cluster health, pods, nodes, or applications.
+6. If there are any failing pods or misconfigurations, provide the exact cause and step-by-step remediation.`;
+
+  // 1. Ollama Provider Streaming
+  if (provider === 'ollama') {
+    const targetModel = model || 'llama3:latest';
+    const baseUrl = (customEndpoint || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/+$/, '');
+    const startTime = Date.now();
+
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [
+            { role: 'system', content: systemInstructions },
+            { role: 'user', content: prompt },
+          ],
+          stream: true,
+          options: { temperature: 0.2 },
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`Ollama HTTP status ${res.status}`);
+      }
+
+      let aggregatedText = '';
+      let usage: any = undefined;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const data = JSON.parse(trimmed);
+            const delta = data.message?.content || data.response || '';
+            if (delta) {
+              aggregatedText += delta;
+              onEvent({ type: 'chunk', text: delta });
+            }
+            if (data.done) {
+              usage = {
+                input_tokens: data.prompt_eval_count,
+                output_tokens: data.eval_count,
+                total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+              };
+            }
+          } catch {}
+        }
+      }
+
+      const elapsed = (Date.now() - startTime) / 1000;
+      const manifests = detectManifestPatch(aggregatedText);
+      for (const m of manifests) {
+        onEvent({ type: 'manifest', manifest: m });
+      }
+
+      const responseObj: AntigravityResponse = {
+        response: aggregatedText.trim(),
+        provider: 'ollama',
+        modelUsed: targetModel,
+        conversationId: conversationId || `conv_ollama_${Date.now()}`,
+        durationSeconds: elapsed,
+        usage,
+        engineUsed: 'ollama',
+        clusterSnapshot: snapshot,
+      };
+
+      onEvent({ type: 'done', response: responseObj });
+      return responseObj;
+    } catch (err: any) {
+      const fallback = `> ⚠️ **Ollama Offline**: Could not connect to Ollama at \`${baseUrl}\` (${err.message}).
+> Ensure Ollama is running (\`ollama serve\`) and that model \`${targetModel}\` is downloaded.
+> Showing local cluster copilot analysis instead:
+
+${generateHeuristicResponse(prompt, snapshot, 'Ollama (Heuristic Fallback)')}`;
+
+      return streamFallbackText(fallback, snapshot, 'ollama', targetModel, onEvent);
+    }
+  }
+
+  // 2. vLLM Provider Streaming
+  if (provider === 'vllm') {
+    const targetModel = model || 'meta-llama/Meta-Llama-3-8B-Instruct';
+    const baseUrl = (customEndpoint || process.env.VLLM_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+    const startTime = Date.now();
+
+    try {
+      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [
+            { role: 'system', content: systemInstructions },
+            { role: 'user', content: prompt },
+          ],
+          stream: true,
+          temperature: 0.2,
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`vLLM HTTP status ${res.status}`);
+      }
+
+      let aggregatedText = '';
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              const delta = data.choices?.[0]?.delta?.content || '';
+              if (delta) {
+                aggregatedText += delta;
+                onEvent({ type: 'chunk', text: delta });
+              }
+            } catch {}
+          }
+        }
+      }
+
+      const elapsed = (Date.now() - startTime) / 1000;
+      const manifests = detectManifestPatch(aggregatedText);
+      for (const m of manifests) {
+        onEvent({ type: 'manifest', manifest: m });
+      }
+
+      const responseObj: AntigravityResponse = {
+        response: aggregatedText.trim(),
+        provider: 'vllm',
+        modelUsed: targetModel,
+        conversationId: conversationId || `conv_vllm_${Date.now()}`,
+        durationSeconds: elapsed,
+        engineUsed: 'vllm',
+        clusterSnapshot: snapshot,
+      };
+
+      onEvent({ type: 'done', response: responseObj });
+      return responseObj;
+    } catch (err: any) {
+      const fallback = `> ⚠️ **vLLM Offline**: Could not connect to vLLM at \`${baseUrl}\` (${err.message}).
+> Ensure your vLLM server is running (e.g. \`vllm serve ${targetModel} --port 8000\`).
+> Showing local cluster copilot analysis instead:
+
+${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
+
+      return streamFallbackText(fallback, snapshot, 'vllm', targetModel, onEvent);
+    }
+  }
+
+  // 3. Default: Google Antigravity (agy CLI stream-json)
+  const agyBinary = findAgyBinary();
+  const targetModel = model || 'gemini-3.8-flash-high';
+
+  if (!agyBinary) {
+    const fallbackText = generateHeuristicResponse(prompt, snapshot, 'Antigravity Copilot');
+    return streamFallbackText(fallbackText, snapshot, 'antigravity', targetModel, onEvent);
+  }
+
+  const fullPrompt = `${systemInstructions}\n\nUser Question:\n${prompt}`;
+  const args: string[] = ['--dangerously-skip-permissions', '--effort', effort, '--output-format', 'stream-json'];
+
+  if (conversationId) {
+    args.push('--conversation', conversationId);
+  }
+  if (model) {
+    args.push('--model', model);
+  }
+  args.push('-p', fullPrompt);
+
+  return new Promise<AntigravityResponse>((resolve) => {
+    const startTime = Date.now();
+    let aggregatedText = '';
+    let resultData: any = null;
+    let buffer = '';
+
+    const proc = spawn(agyBinary, args, {
+      cwd: root,
+      env: {
+        ...process.env,
+        PATH: `${path.dirname(agyBinary)}:${process.env.PATH || ''}`,
+      },
+    });
+
+    const timeout = setTimeout(() => {
+      proc.kill('SIGTERM');
+    }, 60000);
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed.event === 'step_update') {
+            const delta = parsed.step_update?.text_delta;
+            if (delta) {
+              aggregatedText += delta;
+              onEvent({ type: 'chunk', text: delta });
+            }
+          } else if (parsed.event === 'result') {
+            resultData = parsed.result;
+            if (resultData?.response && !aggregatedText) {
+              aggregatedText = resultData.response;
+              onEvent({ type: 'chunk', text: aggregatedText });
+            }
+          }
+        } catch {
+          // If non-JSON text output
+          aggregatedText += trimmed + '\n';
+          onEvent({ type: 'chunk', text: trimmed + '\n' });
+        }
+      }
+    });
+
+    proc.stderr.on('data', () => {
+      // Ignore or log stderr
+    });
+
+    proc.on('close', () => {
+      clearTimeout(timeout);
+      const elapsed = (Date.now() - startTime) / 1000;
+
+      if (!aggregatedText.trim()) {
+        const fallbackText = generateHeuristicResponse(prompt, snapshot, 'Antigravity Copilot');
+        streamFallbackText(fallbackText, snapshot, 'antigravity', targetModel, onEvent).then(resolve);
+        return;
+      }
+
+      const manifests = detectManifestPatch(aggregatedText);
+      for (const m of manifests) {
+        onEvent({ type: 'manifest', manifest: m });
+      }
+
+      const finalRes: AntigravityResponse = {
+        response: aggregatedText.trim(),
+        provider: 'antigravity',
+        modelUsed: targetModel,
+        conversationId: resultData?.conversation_id || conversationId || `conv_${Date.now()}`,
+        durationSeconds: resultData?.duration_seconds || elapsed,
+        usage: resultData?.usage,
+        engineUsed: 'antigravity-cli',
+        clusterSnapshot: snapshot,
+      };
+
+      onEvent({ type: 'done', response: finalRes });
+      resolve(finalRes);
+    });
+
+    proc.on('error', () => {
+      clearTimeout(timeout);
+      const fallbackText = generateHeuristicResponse(prompt, snapshot, 'Antigravity Copilot');
+      streamFallbackText(fallbackText, snapshot, 'antigravity', targetModel, onEvent).then(resolve);
+    });
+  });
+}
+
+/**
+ * Executes a prioritized Cluster Watchdog inspection across workloads,
+ * ingress paths, node allocations, and ArgoCD application states.
+ */
+export async function runClusterWatchdogScan(
+  root: string,
+  options?: Partial<AskAntigravityOptions>
+): Promise<AntigravityResponse> {
+  const watchdogPrompt =
+    'Perform a comprehensive cluster health and reliability inspection. Analyze active node resource saturation, check pod crash loops, inspect recent warning events, verify ingress routes, and highlight top 3 risk factors with concrete kubectl fix commands.';
+
+  return askAntigravity({
+    root,
+    prompt: watchdogPrompt,
+    provider: options?.provider || 'antigravity',
+    model: options?.model,
+    effort: options?.effort || 'medium',
+    includeClusterContext: true,
+    ...options,
   });
 }
