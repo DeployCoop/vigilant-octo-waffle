@@ -44,6 +44,21 @@ import {
   getK3sModelCacheStatus,
   setupK3sModelCache,
   preloadK3sModel,
+  getK3sHealerStatus,
+  runK3sHealer,
+  getK3sDrDrillStatus,
+  runK3sDrDrill,
+  getK3sGatewayStatus,
+  installK3sGatewayCrds,
+  deployK3sGateway,
+  createK3sCanaryRoute,
+  getK3sPoolStatus,
+  provisionK3sPooledNode,
+  drainIdleK3sNodes,
+  getK3sFinOpsStatus,
+  applyK3sRightSizing,
+  getCopilotTools,
+  executeCopilotTool,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 
@@ -108,6 +123,30 @@ export async function GET(req: Request) {
     if (action === 'model-cache') {
       const cache = await getK3sModelCacheStatus(root);
       return NextResponse.json(cache);
+    }
+    if (action === 'healer') {
+      const healer = await getK3sHealerStatus(root);
+      return NextResponse.json(healer);
+    }
+    if (action === 'dr-drill') {
+      const drill = await getK3sDrDrillStatus(root);
+      return NextResponse.json(drill);
+    }
+    if (action === 'gateway') {
+      const gw = await getK3sGatewayStatus(root);
+      return NextResponse.json(gw);
+    }
+    if (action === 'pool') {
+      const pool = await getK3sPoolStatus(root);
+      return NextResponse.json(pool);
+    }
+    if (action === 'finops') {
+      const finops = await getK3sFinOpsStatus(root);
+      return NextResponse.json(finops);
+    }
+    if (action === 'copilot-tools') {
+      const tools = getCopilotTools();
+      return NextResponse.json(tools);
     }
 
     const joinInfo = getK3sJoinInfo(root, { role, serverUrl, token });
@@ -511,6 +550,117 @@ export async function POST(req: Request) {
         taskId: task.id,
         message: `Model preload started for ${body.modelName} (Task: ${task.id})`,
       });
+    }
+
+    if (action === 'healer-run') {
+      const task = runK3sHealer(root, {
+        autoRemediate: body.autoRemediate,
+        dryRun: body.dryRun,
+        runbook: body.runbook,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Autonomous Healer run initiated (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'dr-drill-run') {
+      const task = runK3sDrDrill(root, {
+        dryRun: body.dryRun,
+        snapshot: body.snapshot,
+        namespace: body.namespace,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Disaster Recovery Game Day drill initiated (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'gateway-install-crds') {
+      const task = installK3sGatewayCrds(root);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Gateway API CRDs installation initiated (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'gateway-deploy') {
+      const task = deployK3sGateway(root, {
+        namespace: body.namespace,
+        gatewayName: body.gatewayName,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Gateway deployment initiated (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'gateway-canary') {
+      const task = createK3sCanaryRoute(root, {
+        name: body.name || 'canary-route',
+        namespace: body.namespace,
+        hostname: body.hostname,
+        stableService: body.stableService,
+        stableWeight: Number(body.stableWeight || 80),
+        canaryService: body.canaryService,
+        canaryWeight: Number(body.canaryWeight || 20),
+        pathPrefix: body.pathPrefix,
+        dryRun: body.dryRun,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Gateway API HTTPRoute canary created (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'pool-provision') {
+      const task = provisionK3sPooledNode(root, {
+        hypervisor: body.hypervisor,
+        role: body.role,
+        cpu: body.cpu ? Number(body.cpu) : undefined,
+        memGb: body.memGb ? Number(body.memGb) : undefined,
+        diskGb: body.diskGb ? Number(body.diskGb) : undefined,
+        dryRun: body.dryRun,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Hybrid pooled node provisioning initiated (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'pool-drain') {
+      const task = drainIdleK3sNodes(root, {
+        maxIdleMinutes: body.maxIdleMinutes ? Number(body.maxIdleMinutes) : undefined,
+        dryRun: body.dryRun,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Idle node drain initiated (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'finops-apply') {
+      const task = applyK3sRightSizing(root, body.workload, {
+        namespace: body.namespace,
+        dryRun: body.dryRun,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `P95 Right-sizing patch applied to ${body.workload} (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'copilot-tool-exec') {
+      const res = await executeCopilotTool(root, body.toolId, body.params);
+      return NextResponse.json(res);
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });

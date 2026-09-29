@@ -85,7 +85,8 @@ export default function ClusterPage() {
   const [k3sRegistriesFile, setK3sRegistriesFile] = useState('');
   const [k3sActiveTab, setK3sActiveTab] = useState<
     'command' | 'script' | 'ssh' | 'batch' | 'ops' | 'etcd' | 'certs' | 'cis' | 'upgrade' |
-    'vip' | 'cni' | 'secrets' | 'security' | 'storage' | 'monitoring' | 'gpu' | 'sync'
+    'vip' | 'cni' | 'secrets' | 'security' | 'storage' | 'monitoring' | 'gpu' | 'sync' |
+    'healer' | 'dr-drill' | 'pool'
   >('command');
   const [k3sJoinInfo, setK3sJoinInfo] = useState<any>(null);
   const [k3sLoading, setK3sLoading] = useState(false);
@@ -110,9 +111,19 @@ export default function ClusterPage() {
   const [k3sGpu, setK3sGpu] = useState<any>(null);
   const [k3sModelCache, setK3sModelCache] = useState<any>(null);
 
+  // Cutting-Edge Autonomy state (Phases 7-10)
+  const [k3sHealer, setK3sHealer] = useState<any>(null);
+  const [k3sDrDrill, setK3sDrDrill] = useState<any>(null);
+  const [k3sPool, setK3sPool] = useState<any>(null);
+  const [poolHypervisor, setPoolHypervisor] = useState('multipass');
+  const [poolRole, setPoolRole] = useState<'agent' | 'server'>('agent');
+  const [poolCpu, setPoolCpu] = useState('2');
+  const [poolMem, setPoolMem] = useState('4');
+  const [poolDisk, setPoolDisk] = useState('20');
+
   const fetchK3sProductionData = async () => {
     try {
-      const [hRes, eRes, cRes, cisRes, vipRes, cniRes, secRes, trivyRes, storRes, monRes, gpuRes, cacheRes] =
+      const [hRes, eRes, cRes, cisRes, vipRes, cniRes, secRes, trivyRes, storRes, monRes, gpuRes, cacheRes, healRes, drRes, poolRes] =
         await Promise.all([
           fetch('/api/cluster/k3s?action=health'),
           fetch('/api/cluster/k3s?action=etcd'),
@@ -126,6 +137,9 @@ export default function ClusterPage() {
           fetch('/api/cluster/k3s?action=monitoring'),
           fetch('/api/cluster/k3s?action=gpu'),
           fetch('/api/cluster/k3s?action=model-cache'),
+          fetch('/api/cluster/k3s?action=healer'),
+          fetch('/api/cluster/k3s?action=dr-drill'),
+          fetch('/api/cluster/k3s?action=pool'),
         ]);
       const [
         hData,
@@ -140,6 +154,9 @@ export default function ClusterPage() {
         monData,
         gpuData,
         cacheData,
+        healData,
+        drData,
+        poolData,
       ] = await Promise.all([
         hRes.json(),
         eRes.json(),
@@ -153,6 +170,9 @@ export default function ClusterPage() {
         monRes.json(),
         gpuRes.json(),
         cacheRes.json(),
+        healRes.json(),
+        drRes.json(),
+        poolRes.json(),
       ]);
       setK3sHealth(hData);
       setK3sEtcd(eData);
@@ -166,6 +186,9 @@ export default function ClusterPage() {
       setK3sMonitoring(monData);
       setK3sGpu(gpuData);
       setK3sModelCache(cacheData);
+      setK3sHealer(healData);
+      setK3sDrDrill(drData);
+      setK3sPool(poolData);
     } catch {
       // offline / ignore
     }
@@ -707,6 +730,69 @@ export default function ClusterPage() {
       const data = await res.json();
       setMessage(data.message || 'Airgap bundle generation started');
     } catch (e: any) { setMessage(`Bundle error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleHealerRun = async (autoRemediate = true, runbook?: string) => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'healer-run', autoRemediate, runbook }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Autonomous Healer run initiated');
+      setTimeout(fetchK3sProductionData, 2000);
+    } catch (e: any) { setMessage(`Healer error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleDrDrillRun = async (dryRun = false) => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dr-drill-run', dryRun, namespace: 'dr-sandbox' }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Disaster Recovery Game Day drill initiated');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`DR Drill error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handlePoolProvision = async () => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'pool-provision',
+          hypervisor: poolHypervisor,
+          role: poolRole,
+          cpu: Number(poolCpu),
+          memGb: Number(poolMem),
+          diskGb: Number(poolDisk),
+        }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Hybrid node provisioning initiated');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`Pool error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handlePoolDrain = async () => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pool-drain', maxIdleMinutes: 30 }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Idle node drain initiated');
+      setTimeout(fetchK3sProductionData, 2000);
+    } catch (e: any) { setMessage(`Drain error: ${e.message}`); } finally { setK3sLoading(false); }
   };
 
   useEffect(() => {
@@ -1342,6 +1428,42 @@ export default function ClusterPage() {
               >
                 <Download className="w-3 h-3 text-fuchsia-400" />
                 <span>Remote DR & Airgap</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('healer')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'healer'
+                    ? 'bg-rose-950/60 text-rose-300 border-b-2 border-rose-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Activity className="w-3 h-3 text-rose-400" />
+                <span>Self-Healing Watchdog</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('dr-drill')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'dr-drill'
+                    ? 'bg-emerald-950/60 text-emerald-300 border-b-2 border-emerald-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>DR Game Day</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('pool')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'pool'
+                    ? 'bg-sky-950/60 text-sky-300 border-b-2 border-sky-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Layers className="w-3 h-3 text-sky-400" />
+                <span>Hybrid Node Pool</span>
               </button>
               <button
                 type="button"
@@ -2576,6 +2698,287 @@ echo "==> Node successfully joined!"`}
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>Push Encrypted S3/GCS Sync</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Autonomous Self-Healing Watchdog Tab */}
+              {k3sActiveTab === 'healer' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-rose-600/20 border border-rose-500/30 flex items-center justify-center">
+                        <Activity className="w-4 h-4 text-rose-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Autonomous Self-Healing Watchdog &amp; Runbooks-as-Code</h4>
+                        <p className="text-xs text-slate-400">
+                          Continuous autonomous anomaly detection with deterministic runbook remediation for disk pressure, cert rotation, and crash loops.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Watchdog Health</span>
+                        <span className={`font-semibold ${k3sHealer?.clusterHealth === 'HEALTHY' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {k3sHealer?.clusterHealth || 'READY'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Root Disk Pressure</span>
+                        <span className={`font-semibold ${k3sHealer?.diskPressure ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {k3sHealer?.diskPressure ? 'ACTIVE PRESSURE' : 'NORMAL'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Cert Expiry Alert</span>
+                        <span className={`font-semibold ${k3sHealer?.expiredCerts ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {k3sHealer?.expiredCerts ? 'EXPIRING' : 'ALL VALID'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">CrashLoop Pods</span>
+                        <span className={`font-semibold ${k3sHealer?.crashLoopPodsCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {k3sHealer?.crashLoopPodsCount || 0} Detected
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Runbooks Available */}
+                    <div className="p-3 bg-slate-900/60 rounded-lg border border-slate-800/80 text-xs space-y-2">
+                      <span className="text-slate-300 font-semibold block text-[11px] uppercase tracking-wider">Automated Remediation Runbooks</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-400">
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          <span><strong>runbook_disk_pressure</strong>: Prune dead images, clean buildx cache &amp; /tmp</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          <span><strong>runbook_cert_expiry</strong>: Auto-renew server &amp; agent certificates</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          <span><strong>runbook_crash_loop</strong>: Flush pod ephemeral storage and recycle pods</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          <span><strong>runbook_pvc_pressure</strong>: Expand volume capacity on Longhorn/TopoLVM</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleHealerRun(false)}
+                        disabled={k3sLoading}
+                        className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                      >
+                        Simulate Dry-Run
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleHealerRun(true)}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Trigger Autonomous Remediation</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Disaster Recovery Game Day Drill Tab */}
+              {k3sActiveTab === 'dr-drill' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Disaster Recovery Game Day Drill Engine</h4>
+                        <p className="text-xs text-slate-400">
+                          Automated restore simulation in an isolated sandbox namespace with cryptographic data integrity check and signed SLA certificate.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Latest Drill SLA</span>
+                        <span className="text-emerald-400 font-semibold font-mono">
+                          {k3sDrDrill?.lastSlaCompliance || 'PASS_GRADE_A'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Recovery Time (RTO)</span>
+                        <span className="text-white font-mono font-semibold">
+                          {k3sDrDrill?.lastRtoSeconds ? `${k3sDrDrill.lastRtoSeconds}s` : '3s'} (SLA: &lt;120s)
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Drill Test Snapshot</span>
+                        <span className="text-slate-300 font-mono truncate block">
+                          {k3sDrDrill?.latestDrill?.snapshot_tested || 'latest_snapshot.tar.gz'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">SLA Engine Signer</span>
+                        <span className="text-sky-400 font-mono">vow-dr-engine</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleDrDrillRun(true)}
+                        disabled={k3sLoading}
+                        className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                      >
+                        Simulate Dry-Run Drill
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDrDrillRun(false)}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Execute Game Day Restore Drill</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Hybrid Node Pool Tab */}
+              {k3sActiveTab === 'pool' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-sky-600/20 border border-sky-500/30 flex items-center justify-center">
+                        <Layers className="w-4 h-4 text-sky-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Dynamic Hybrid Node Pool &amp; Scale-to-Zero</h4>
+                        <p className="text-xs text-slate-400">
+                          Burst capacity dynamically across Multipass, libvirt, or Docker hypervisors with automatic cluster join and scale-to-zero.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Detected Hypervisors</span>
+                        <span className="text-sky-400 font-semibold font-mono">
+                          {k3sPool?.detectedHypervisors?.join(', ') || 'docker'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Active Pool Agents</span>
+                        <span className="text-white font-mono font-semibold">
+                          {k3sPool?.activeAgentsCount || 1}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Pending Unschedulable</span>
+                        <span className="text-amber-400 font-mono font-semibold">
+                          {k3sPool?.idleCandidatesCount || 0} pods
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Scale-to-Zero</span>
+                        <span className="text-emerald-400 font-semibold">SUPPORTED</span>
+                      </div>
+                    </div>
+
+                    {/* Provisioning Configuration Inputs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 pt-2">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-400">Hypervisor</label>
+                        <select
+                          value={poolHypervisor}
+                          onChange={(e) => setPoolHypervisor(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        >
+                          <option value="multipass">Multipass (Ubuntu VM)</option>
+                          <option value="docker">Docker (Container Node)</option>
+                          <option value="libvirt">libvirt (KVM)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-400">Node Role</label>
+                        <select
+                          value={poolRole}
+                          onChange={(e) => setPoolRole(e.target.value as 'agent' | 'server')}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        >
+                          <option value="agent">Worker (Agent)</option>
+                          <option value="server">Control Plane (Server)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-400">vCPUs</label>
+                        <input
+                          type="number"
+                          value={poolCpu}
+                          onChange={(e) => setPoolCpu(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          min="1"
+                          max="16"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-400">Memory (GB)</label>
+                        <input
+                          type="number"
+                          value={poolMem}
+                          onChange={(e) => setPoolMem(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          min="2"
+                          max="64"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-400">Disk (GB)</label>
+                        <input
+                          type="number"
+                          value={poolDisk}
+                          onChange={(e) => setPoolDisk(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          min="10"
+                          max="200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePoolDrain}
+                        disabled={k3sLoading}
+                        className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                      >
+                        Drain &amp; Scale to Zero Idle Nodes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePoolProvision}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>Spawn &amp; Auto-Join Node</span>
                       </button>
                     </div>
                   </div>

@@ -19,6 +19,7 @@ import {
   ArrowRight,
   ExternalLink,
   ChevronDown,
+  ChevronUp,
   X,
   Play,
   Flame,
@@ -27,6 +28,7 @@ import {
   Check,
   Zap,
   GitCompare,
+  Wrench,
 } from 'lucide-react';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { YamlDiffModal, type DetectedManifestPayload } from '@/components/YamlDiffModal';
@@ -81,6 +83,14 @@ interface ClusterSnapshot {
   podCount: number;
   unhealthyPods: string[];
   applicationsCount: number;
+}
+
+interface CopilotToolItem {
+  id: string;
+  name: string;
+  description: string;
+  category: 'remediation' | 'inspection' | 'scaling' | 'diagnostics';
+  parameters?: Record<string, any>;
 }
 
 const SAMPLE_PROMPTS = [
@@ -145,8 +155,64 @@ export default function AntigravityPage() {
   // Command Runner State
   const [commandOutput, setCommandOutput] = useState<{ command: string; output: string; status: 'running' | 'done' | 'failed' } | null>(null);
 
+  // Copilot Autonomous Tools State
+  const [copilotTools, setCopilotTools] = useState<CopilotToolItem[]>([]);
+  const [toolExecuting, setToolExecuting] = useState<string | null>(null);
+  const [showCopilotTools, setShowCopilotTools] = useState(false);
+  const [toolNotice, setToolNotice] = useState<{ toolId: string; message: string; taskId?: string; error?: boolean } | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const loadCopilotTools = async () => {
+    try {
+      const res = await fetch('/api/cluster/k3s?action=copilot-tools');
+      if (res.ok) {
+        const data = await res.json();
+        setCopilotTools(data.tools || []);
+      }
+    } catch {
+      // offline fallback
+    }
+  };
+
+  const handleExecuteCopilotTool = async (toolId: string, params: Record<string, any> = {}) => {
+    setToolExecuting(toolId);
+    setToolNotice(null);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'copilot-tool-exec',
+          toolName: toolId,
+          arguments: params,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setToolNotice({ toolId, message: data.error || 'Execution failed', error: true });
+      } else {
+        setToolNotice({
+          toolId,
+          message: data.message || `Tool '${toolId}' dispatched successfully`,
+          taskId: data.taskId,
+        });
+
+        const toolEventMsg: ChatMessage = {
+          id: `tool-${Date.now()}`,
+          role: 'system',
+          content: `⚡ **Autonomous Tool Dispatched**: \`${toolId}\`\n\n${data.message || 'Task initiated in background.'}\n${data.taskId ? `**Task ID**: \`${data.taskId}\` (Check Live Terminal console for real-time streaming output)` : ''}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, toolEventMsg]);
+      }
+    } catch (err: any) {
+      setToolNotice({ toolId, message: err.message, error: true });
+    } finally {
+      setToolExecuting(null);
+    }
+  };
 
   // Fetch engine and cluster telemetry
   const fetchStatus = async () => {
@@ -175,6 +241,7 @@ export default function AntigravityPage() {
 
   useEffect(() => {
     fetchStatus();
+    loadCopilotTools();
   }, [ollamaUrl, vllmUrl]);
 
   // Update selected model when provider changes
@@ -1020,6 +1087,128 @@ export default function AntigravityPage() {
               </button>
             ))}
           </div>
+
+          {/* Autonomous Copilot Tools Bar */}
+          <div className="flex items-center justify-between pb-1 text-[11px] border-t border-slate-800/80 pt-1.5">
+            <div className="flex items-center space-x-1.5 overflow-x-auto scrollbar-none py-0.5">
+              <span className="text-sky-400 font-semibold flex items-center space-x-1 shrink-0">
+                <Wrench className="w-3 h-3 text-sky-400" />
+                <span>Autonomous Tools:</span>
+              </span>
+              <button
+                onClick={() => handleExecuteCopilotTool('run_cluster_healer', { autoRemediate: true })}
+                disabled={Boolean(toolExecuting)}
+                className="px-2 py-0.5 rounded-full bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/60 shrink-0 transition-colors flex items-center space-x-1 cursor-pointer"
+              >
+                <span>⚡ Run Healer</span>
+              </button>
+              <button
+                onClick={() => handleExecuteCopilotTool('run_dr_drill', { dryRun: false, namespace: 'dr-sandbox' })}
+                disabled={Boolean(toolExecuting)}
+                className="px-2 py-0.5 rounded-full bg-indigo-950/70 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/60 shrink-0 transition-colors flex items-center space-x-1 cursor-pointer"
+              >
+                <span>🛡️ DR Game Day</span>
+              </button>
+              <button
+                onClick={() => handleExecuteCopilotTool('inspect_finops')}
+                disabled={Boolean(toolExecuting)}
+                className="px-2 py-0.5 rounded-full bg-amber-950/70 hover:bg-amber-900 text-amber-300 border border-amber-800/60 shrink-0 transition-colors flex items-center space-x-1 cursor-pointer"
+              >
+                <span>💰 Inspect FinOps & GPU</span>
+              </button>
+              <button
+                onClick={() => handleExecuteCopilotTool('drain_idle_nodes', { dryRun: true })}
+                disabled={Boolean(toolExecuting)}
+                className="px-2 py-0.5 rounded-full bg-purple-950/70 hover:bg-purple-900 text-purple-300 border border-purple-800/60 shrink-0 transition-colors flex items-center space-x-1 cursor-pointer"
+              >
+                <span>📉 Drain Idle Nodes</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowCopilotTools((prev) => !prev)}
+              className="text-slate-400 hover:text-slate-200 flex items-center space-x-1 shrink-0 ml-2 px-2 py-0.5 rounded bg-slate-800/60 transition cursor-pointer"
+            >
+              <span>All Tools ({copilotTools.length || 9})</span>
+              {showCopilotTools ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          </div>
+
+          {/* Expandable Tools Drawer */}
+          {showCopilotTools && (
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-3 shadow-2xl max-h-64 overflow-y-auto">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <span className="text-xs font-semibold text-slate-200 flex items-center space-x-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Copilot Autonomous Tool Calling Catalog</span>
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">Dispatched directly to cluster orchestrator</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {(copilotTools.length > 0
+                  ? copilotTools
+                  : [
+                      { id: 'run_cluster_healer', name: 'Autonomous Cluster Healer', description: 'Remediate disk pressure, certs, crashloops', category: 'remediation' as const },
+                      { id: 'run_dr_drill', name: 'DR Game Day Drill', description: 'Snapshot integrity & sandbox restore test', category: 'inspection' as const },
+                      { id: 'inspect_finops', name: 'FinOps & GPU Economics', description: 'P95 right-sizing & RTX 3060 wattage telemetry', category: 'inspection' as const },
+                      { id: 'provision_hybrid_node', name: 'Provision Hybrid Node', description: 'Multipass/libvirt/Docker worker burst', category: 'scaling' as const },
+                      { id: 'drain_idle_nodes', name: 'Drain Idle Pooled Nodes', description: 'Scale-to-zero idle hybrid machines', category: 'scaling' as const },
+                      { id: 'split_canary_traffic', name: 'Gateway Canary Split', description: 'HTTPRoute dynamic weighted traffic split', category: 'scaling' as const },
+                      { id: 'kubectl_restart_rollout', name: 'Restart Rollout', description: 'Graceful rolling bounce of workload', category: 'remediation' as const },
+                      { id: 'kubectl_describe_pod', name: 'Describe Unhealthy Pod', description: 'Fetch container events & status', category: 'diagnostics' as const },
+                      { id: 'kubectl_tail_logs', name: 'Tail Pod Logs', description: 'Fetch last 100 log lines from workload', category: 'diagnostics' as const },
+                    ]
+                ).map((tool) => (
+                  <div key={tool.id} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-200">{tool.name}</span>
+                        <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                          {tool.category}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{tool.description}</p>
+                    </div>
+
+                    <button
+                      onClick={() => handleExecuteCopilotTool(tool.id)}
+                      disabled={toolExecuting === tool.id}
+                      className="w-full mt-1 px-2 py-1 rounded bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 text-white text-[11px] font-medium transition cursor-pointer flex items-center justify-center space-x-1"
+                    >
+                      {toolExecuting === tool.id ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Dispatching...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3 h-3" />
+                          <span>Trigger Tool</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {toolNotice && (
+            <div className={`p-2.5 rounded-lg border text-xs font-mono flex items-center justify-between ${
+              toolNotice.error ? 'bg-rose-950/40 border-rose-800/60 text-rose-300' : 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
+            }`}>
+              <div className="flex items-center space-x-2 truncate">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{toolNotice.message}</span>
+              </div>
+              {toolNotice.taskId && (
+                <Link href="/terminal" className="text-sky-400 hover:underline shrink-0 ml-2 font-sans text-[11px]">
+                  View Task &rarr;
+                </Link>
+              )}
+            </div>
+          )}
 
           {/* Form */}
           <form

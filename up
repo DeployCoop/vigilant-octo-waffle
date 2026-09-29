@@ -83,6 +83,21 @@ elif [[ "${1:-}" == "k3s:gpu" || "${1:-}" == "gpu" ]]; then
 elif [[ "${1:-}" == "k3s:cache" || "${1:-}" == "k3s:model-cache" ]]; then
   shift
   exec ./src/k3s_model_cache.sh "$@"
+elif [[ "${1:-}" == "k3s:healer" || "${1:-}" == "k3s:heal" || "${1:-}" == "heal" ]]; then
+  shift
+  exec ./src/k3s_healer.sh "$@"
+elif [[ "${1:-}" == "k3s:dr-drill" || "${1:-}" == "k3s:drill" || "${1:-}" == "drill" ]]; then
+  shift
+  exec ./src/k3s_dr_drill.sh "$@"
+elif [[ "${1:-}" == "k3s:gateway" || "${1:-}" == "gateway" ]]; then
+  shift
+  exec ./src/k3s_gateway.sh "$@"
+elif [[ "${1:-}" == "k3s:pool" || "${1:-}" == "pool" ]]; then
+  shift
+  exec ./src/k3s_pool.sh "$@"
+elif [[ "${1:-}" == "k3s:finops" || "${1:-}" == "finops" ]]; then
+  shift
+  exec ./src/k3s_finops.sh "$@"
 fi
 
 : "${BIG_LIST:=./src/big_list}"
