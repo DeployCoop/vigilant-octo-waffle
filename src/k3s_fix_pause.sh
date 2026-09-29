@@ -54,26 +54,19 @@ else
   echo "  [INFO] Neither k3s nor k3s-agent systemd service currently active."
 fi
 
-# 4. Attempt pulling pause image via k3s crictl
-echo "==> Testing pause image pull via containerd (k3s crictl)..."
+# 4. Pre-cache pause image directly from registry.k8s.io into containerd
+echo "==> Pre-caching pause image from registry.k8s.io (bypasses Docker Hub entirely)..."
 if command -v k3s >/dev/null 2>&1; then
-  if sudo k3s crictl pull rancher/mirrored-pause:3.10.2; then
-    echo "  [SUCCESS] Successfully pulled rancher/mirrored-pause:3.10.2!"
-  else
-    echo "  [WARN] Docker Hub pull still failing. Applying fallback to registry.k8s.io/pause:3.10..."
-    sudo mkdir -p /etc/rancher/k3s/config.yaml.d
-    sudo tee /etc/rancher/k3s/config.yaml.d/99-pause-image.yaml << 'EOF'
+  sudo k3s ctr -n k8s.io images pull registry.k8s.io/pause:3.10
+  sudo k3s ctr -n k8s.io images tag registry.k8s.io/pause:3.10 docker.io/rancher/mirrored-pause:3.10.2
+  echo "  [SUCCESS] Pre-cached docker.io/rancher/mirrored-pause:3.10.2 into containerd local storage."
+
+  # Also configure permanent fallback in config.yaml.d
+  sudo mkdir -p /etc/rancher/k3s/config.yaml.d
+  sudo tee /etc/rancher/k3s/config.yaml.d/99-pause-image.yaml << 'EOF'
 pause-image: "registry.k8s.io/pause:3.10"
 EOF
-    echo "  [OK] Configured pause-image to registry.k8s.io/pause:3.10"
-    if systemctl is-active --quiet k3s 2>/dev/null; then
-      sudo systemctl restart k3s
-    elif systemctl is-active --quiet k3s-agent 2>/dev/null; then
-      sudo systemctl restart k3s-agent
-    fi
-    sudo k3s crictl pull registry.k8s.io/pause:3.10
-    echo "  [SUCCESS] Successfully pulled fallback pause image from registry.k8s.io!"
-  fi
+  echo "  [OK] Permanent pause-image config set to registry.k8s.io/pause:3.10."
 fi
 
 echo "============================================================"
