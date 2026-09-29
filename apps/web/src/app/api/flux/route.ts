@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
-import { loadProjectConfig, K8sClient, processManager } from '@vow/orchestrator';
+import { loadProjectConfig, saveEnvFile, K8sClient, FluxManager, processManager } from '@vow/orchestrator';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +50,30 @@ export async function POST(req: Request) {
     const config = loadProjectConfig(root);
     const fluxNs = config.cluster.fluxNamespace || 'flux-system';
     const body = await req.json().catch(() => ({}));
-    const { action, name, namespace } = body;
+    const { action, name, namespace, cdRunner } = body;
+
+    if (action === 'set-runner' && cdRunner) {
+      if (!['argocd', 'flux', 'both'].includes(cdRunner)) {
+        return NextResponse.json({ error: 'Invalid cdRunner value. Allowed: argocd, flux, both' }, { status: 400 });
+      }
+      saveEnvFile(root, { ...config.raw, THIS_CD_RUNNER: cdRunner });
+      return NextResponse.json({
+        success: true,
+        cdRunner,
+        message: `GitOps CD Runner updated to: ${cdRunner}`,
+      });
+    }
+
+    if (action === 'bootstrap') {
+      const fluxManager = new FluxManager(root);
+      const task = fluxManager.bootstrapFlux();
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        action: 'bootstrap',
+        message: 'FluxCD bootstrap initiated via src/flux.sh',
+      });
+    }
 
     const targetNs = namespace || config.cluster.namespace || 'default';
     const now = String(Date.now());
@@ -61,7 +84,12 @@ export async function POST(req: Request) {
         ['annotate', '--all', 'helmrelease', '-n', targetNs, `reconcile.fluxcd.io/requestedAt=${now}`, '--overwrite'],
         { cwd: root, env: config.raw }
       );
-      return NextResponse.json({ success: true, taskId: task.id, action: 'reconcile-all' });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        action: 'reconcile-all',
+        message: 'Reconciliation initiated across all Flux resources',
+      });
     }
 
     if (action === 'reconcile' && name) {
@@ -73,7 +101,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, taskId: task.id, app: name });
     }
 
-    return NextResponse.json({ error: 'Invalid action. Allowed: reconcile, reconcile-all' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid action. Allowed: bootstrap, set-runner, reconcile, reconcile-all' }, { status: 400 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

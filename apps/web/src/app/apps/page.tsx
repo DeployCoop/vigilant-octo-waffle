@@ -90,6 +90,13 @@ export default function AppsPage() {
 
   // System, ArgoCD, Flux, and Health telemetry
   const [cdRunner, setCdRunner] = useState<'argocd' | 'flux' | 'both'>('argocd');
+  const [switchingRunner, setSwitchingRunner] = useState(false);
+  const [bootstrappingFlux, setBootstrappingFlux] = useState(false);
+  const [fluxStatus, setFluxStatus] = useState<{
+    isHealthy: boolean;
+    activeControllers: number;
+    totalControllers: number;
+  } | null>(null);
   const [fluxReconciling, setFluxReconciling] = useState(false);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [argoApps, setArgoApps] = useState<Record<string, ArgoAppStatus>>({});
@@ -119,6 +126,50 @@ export default function AppsPage() {
       // offline
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSwitchRunner = async (runner: 'argocd' | 'flux' | 'both') => {
+    if (runner === cdRunner) return;
+    setSwitchingRunner(true);
+    try {
+      const res = await fetch('/api/flux', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-runner', cdRunner: runner }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error);
+      setCdRunner(runner);
+      setActionMessage(`GitOps Runner switched to: ${runner.toUpperCase()}`);
+      setTimeout(() => setActionMessage(null), 4000);
+      await fetchApps();
+    } catch (err: any) {
+      setActionMessage(`Failed to switch runner: ${err.message}`);
+      setTimeout(() => setActionMessage(null), 5000);
+    } finally {
+      setSwitchingRunner(false);
+    }
+  };
+
+  const handleBootstrapFlux = async () => {
+    setBootstrappingFlux(true);
+    try {
+      const res = await fetch('/api/flux', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'bootstrap' }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error);
+      setActionMessage('FluxCD bootstrap initiated via src/flux.sh. Provisioning controllers...');
+      setTimeout(() => setActionMessage(null), 6000);
+      setTimeout(() => fetchTelemetry(), 3000);
+    } catch (err: any) {
+      setActionMessage(`Flux bootstrap error: ${err.message}`);
+      setTimeout(() => setActionMessage(null), 5000);
+    } finally {
+      setBootstrappingFlux(false);
     }
   };
 
@@ -175,6 +226,23 @@ export default function AppsPage() {
             map[p.appId] = p;
           }
           setHealthMap(map);
+        }
+      })
+      .catch(() => {});
+
+    // 4. FluxCD status
+    fetch('/api/flux')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.controllers) {
+          setFluxStatus({
+            isHealthy: Boolean(data.isHealthy),
+            activeControllers: data.activeControllers || 0,
+            totalControllers: data.totalControllers || 0,
+          });
+        }
+        if (data.cdRunner) {
+          setCdRunner(data.cdRunner);
         }
       })
       .catch(() => {});
@@ -341,17 +409,67 @@ export default function AppsPage() {
               <Layers className="w-5 h-5 text-sky-400" />
               <h2 className="text-xl font-bold text-white tracking-tight">Service Catalog & App Store</h2>
             </div>
-            <span
-              className={`text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                cdRunner === 'flux'
-                  ? 'bg-purple-950/60 border-purple-500/50 text-purple-300'
-                  : cdRunner === 'both'
-                  ? 'bg-gradient-to-r from-sky-950/60 to-purple-950/60 border-indigo-500/50 text-indigo-300'
-                  : 'bg-sky-950/60 border-sky-500/50 text-sky-300'
-              }`}
-            >
-              {cdRunner === 'flux' ? 'FluxCD Active' : cdRunner === 'both' ? 'Dual Runner (Argo + Flux)' : 'ArgoCD Active'}
-            </span>
+            {/* GitOps Engine Selector */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-950/80 rounded-lg border border-slate-800 text-xs">
+              <span className="text-[10px] text-slate-400 font-semibold px-1.5 uppercase tracking-wider">GitOps Engine:</span>
+              <button
+                type="button"
+                onClick={() => handleSwitchRunner('argocd')}
+                disabled={switchingRunner}
+                className={`px-2.5 py-1 rounded font-semibold text-xs transition-all cursor-pointer flex items-center space-x-1 ${
+                  cdRunner === 'argocd'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Use ArgoCD GitOps Continuous Delivery"
+              >
+                <GitBranch className="w-3.5 h-3.5" />
+                <span>ArgoCD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchRunner('flux')}
+                disabled={switchingRunner}
+                className={`px-2.5 py-1 rounded font-semibold text-xs transition-all cursor-pointer flex items-center space-x-1 ${
+                  cdRunner === 'flux'
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Use FluxCD GitOps Toolkit v2"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>FluxCD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchRunner('both')}
+                disabled={switchingRunner}
+                className={`px-2.5 py-1 rounded font-semibold text-xs transition-all cursor-pointer flex items-center space-x-1 ${
+                  cdRunner === 'both'
+                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Dual GitOps Runner: Deploy to both ArgoCD and FluxCD"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Dual Runner</span>
+              </button>
+            </div>
+
+            {/* Controller status indicator for Flux */}
+            {(cdRunner === 'flux' || cdRunner === 'both') && fluxStatus && (
+              <span
+                className={`text-[11px] font-mono px-2 py-0.5 rounded border flex items-center space-x-1 ${
+                  fluxStatus.isHealthy
+                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                    : 'bg-amber-950/60 border-amber-500/50 text-amber-300'
+                }`}
+                title={`${fluxStatus.activeControllers}/${fluxStatus.totalControllers} Flux controllers running`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${fluxStatus.isHealthy ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span>Flux: {fluxStatus.activeControllers}/{fluxStatus.totalControllers} {fluxStatus.isHealthy ? 'Healthy' : 'Degraded'}</span>
+              </span>
+            )}
           </div>
           <p className="text-sm text-slate-400">
             {cdRunner === 'flux'
@@ -362,7 +480,18 @@ export default function AppsPage() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {(cdRunner === 'flux' || cdRunner === 'both') && (!fluxStatus?.isHealthy || fluxStatus?.activeControllers === 0) && (
+            <button
+              onClick={() => handleBootstrapFlux()}
+              disabled={bootstrappingFlux}
+              className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+              title="Run src/flux.sh to install FluxCD controllers into flux-system"
+            >
+              <Play className={`w-3.5 h-3.5 ${bootstrappingFlux ? 'animate-spin' : ''}`} />
+              <span>{bootstrappingFlux ? 'Bootstrapping Flux...' : 'Bootstrap Flux Controllers'}</span>
+            </button>
+          )}
           {(cdRunner === 'flux' || cdRunner === 'both') && (
             <button
               onClick={() => handleReconcileFlux()}
