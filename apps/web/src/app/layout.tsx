@@ -5,6 +5,10 @@ import { Sidebar, Header } from '@/components/Navigation';
 export const metadata: Metadata = {
   title: 'Vigilant Octo Waffle | Local DevOps Control Plane',
   description: 'Local Kubernetes cluster & GitOps management application',
+  other: {
+    'darkreader-lock': 'true',
+    'color-scheme': 'dark',
+  },
 };
 
 export default function RootLayout({
@@ -15,6 +19,64 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
+        <meta name="darkreader-lock" content="true" />
+        <meta name="color-scheme" content="dark" />
+        <meta name="darkreader" content="NO-DARK-READER" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                // Prevent browser extensions like Dark Reader from mutating DOM before hydration
+                if (typeof window !== 'undefined') {
+                  var cleanDarkReaderAttrs = function(node) {
+                    if (node && node.nodeType === 1) {
+                      if (node.hasAttribute('data-darkreader-inline-stroke')) node.removeAttribute('data-darkreader-inline-stroke');
+                      if (node.hasAttribute('data-darkreader-inline-fill')) node.removeAttribute('data-darkreader-inline-fill');
+                      if (node.hasAttribute('data-darkreader-proxy-injected')) node.removeAttribute('data-darkreader-proxy-injected');
+                      if (node.style && node.style.getPropertyValue('--darkreader-inline-stroke')) {
+                        node.style.removeProperty('--darkreader-inline-stroke');
+                      }
+                      if (node.style && node.style.getPropertyValue('--darkreader-inline-fill')) {
+                        node.style.removeProperty('--darkreader-inline-fill');
+                      }
+                    }
+                  };
+
+                  // Initial scrub
+                  if (document.documentElement) {
+                    cleanDarkReaderAttrs(document.documentElement);
+                  }
+
+                  if (window.MutationObserver) {
+                    var drObserver = new MutationObserver(function(mutations) {
+                      for (var i = 0; i < mutations.length; i++) {
+                        var m = mutations[i];
+                        if (m.type === 'attributes') {
+                          cleanDarkReaderAttrs(m.target);
+                        } else if (m.type === 'childList') {
+                          for (var j = 0; j < m.addedNodes.length; j++) {
+                            cleanDarkReaderAttrs(m.addedNodes[j]);
+                          }
+                        }
+                      }
+                    });
+                    drObserver.observe(document.documentElement, {
+                      attributes: true,
+                      subtree: true,
+                      childList: true,
+                      attributeFilter: [
+                        'data-darkreader-inline-stroke',
+                        'data-darkreader-inline-fill',
+                        'data-darkreader-proxy-injected',
+                        'style'
+                      ]
+                    });
+                  }
+                }
+              } catch (_) {}
+            `,
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `

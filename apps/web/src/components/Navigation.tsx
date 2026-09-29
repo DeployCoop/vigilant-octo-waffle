@@ -73,7 +73,7 @@ export function Sidebar() {
           </div>
         </div>
 
-        <nav className="p-3 space-y-1">
+        <nav className="p-3 space-y-1" suppressHydrationWarning>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
@@ -82,13 +82,14 @@ export function Sidebar() {
               <Link
                 key={item.name}
                 href={item.href}
+                suppressHydrationWarning
                 className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                   isActive
                     ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-sky-400' : 'text-slate-400'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-sky-400' : 'text-slate-400'}`} suppressHydrationWarning />
                 <span>{item.name}</span>
               </Link>
             );
@@ -176,27 +177,30 @@ export function Header() {
         </div>
       </div>
 
-      <div className="flex items-center space-x-3">
+      <div className="flex items-center space-x-3" suppressHydrationWarning>
         <Link
           href="/antigravity"
+          suppressHydrationWarning
           className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-sky-400 hover:text-sky-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"
         >
-          <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+          <Sparkles className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
           <span>Antigravity</span>
         </Link>
         <Link
           href="/terminal"
+          suppressHydrationWarning
           className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"
         >
-          <Terminal className="w-3.5 h-3.5 text-sky-400" />
+          <Terminal className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
           <span>Console</span>
         </Link>
         <Link
           href="/apps"
+          suppressHydrationWarning
           className="text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white px-3.5 py-1.5 rounded-md transition-colors shadow-sm flex items-center space-x-1.5"
         >
           <span>Catalog & Enablers</span>
-          <ExternalLink className="w-3 h-3" />
+          <ExternalLink className="w-3 h-3" suppressHydrationWarning />
         </Link>
       </div>
     </header>
