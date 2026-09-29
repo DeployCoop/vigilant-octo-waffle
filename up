@@ -50,6 +50,39 @@ elif [[ "${1:-}" == "k3s:cis" || "${1:-}" == "cis" ]]; then
 elif [[ "${1:-}" == "k3s:upgrade" || "${1:-}" == "upgrade" ]]; then
   shift
   exec ./src/k3s_upgrade.sh "$@"
+elif [[ "${1:-}" == "k3s:vip" || "${1:-}" == "vip" ]]; then
+  shift
+  exec ./src/k3s_vip.sh "$@"
+elif [[ "${1:-}" == "k3s:sync" || "${1:-}" == "k3s:backup-sync" || "${1:-}" == "sync" ]]; then
+  shift
+  exec ./src/k3s_backup_sync.sh "$@"
+elif [[ "${1:-}" == "k3s:airgap" || "${1:-}" == "airgap" ]]; then
+  shift
+  exec ./src/k3s_airgap.sh "$@"
+elif [[ "${1:-}" == "k3s:cni" || "${1:-}" == "cni" ]]; then
+  shift
+  exec ./src/k3s_cni.sh "$@"
+elif [[ "${1:-}" == "k3s:rotate-secrets" || "${1:-}" == "rotate-secrets" ]]; then
+  shift
+  exec ./src/k3s_secrets_rotate.sh "$@"
+elif [[ "${1:-}" == "k3s:scan" || "${1:-}" == "k3s:security-scan" || "${1:-}" == "scan" ]]; then
+  shift
+  exec ./src/k3s_security_scan.sh "$@"
+elif [[ "${1:-}" == "k3s:storage" || "${1:-}" == "storage" ]]; then
+  shift
+  exec ./src/k3s_storage.sh "$@"
+elif [[ "${1:-}" == "k3s:monitoring" || "${1:-}" == "monitoring" ]]; then
+  shift
+  exec ./src/k3s_monitoring.sh "$@"
+elif [[ "${1:-}" == "k3s:alert" || "${1:-}" == "alert" ]]; then
+  shift
+  exec ./src/alert_dispatcher.sh "$@"
+elif [[ "${1:-}" == "k3s:gpu" || "${1:-}" == "gpu" ]]; then
+  shift
+  exec ./src/k3s_gpu.sh "$@"
+elif [[ "${1:-}" == "k3s:cache" || "${1:-}" == "k3s:model-cache" ]]; then
+  shift
+  exec ./src/k3s_model_cache.sh "$@"
 fi
 
 : "${BIG_LIST:=./src/big_list}"

@@ -22,6 +22,28 @@ import {
   rotateK3sCertificates,
   auditK3sCis,
   upgradeK3sCluster,
+  getK3sVipStatus,
+  setupK3sVip,
+  teardownK3sVip,
+  syncK3sBackups,
+  bundleK3sAirgap,
+  getK3sCniStatus,
+  installK3sCni,
+  getK3sSecretsStatus,
+  rotateK3sSecrets,
+  getK3sSecurityStatus,
+  scanK3sSecurity,
+  getK3sStorageStatus,
+  installK3sStorage,
+  snapshotK3sVolume,
+  getK3sMonitoringStatus,
+  installK3sMonitoring,
+  dispatchAlert,
+  getK3sGpuStatus,
+  setupK3sGpu,
+  getK3sModelCacheStatus,
+  setupK3sModelCache,
+  preloadK3sModel,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 
@@ -51,6 +73,41 @@ export async function GET(req: Request) {
     if (action === 'cis') {
       const cis = await auditK3sCis(root);
       return NextResponse.json(cis);
+    }
+    if (action === 'vip') {
+      const vip = await getK3sVipStatus(root, {
+        vip: searchParams.get('vip') || undefined,
+        interface: searchParams.get('interface') || undefined,
+      });
+      return NextResponse.json(vip);
+    }
+    if (action === 'cni') {
+      const cni = await getK3sCniStatus(root);
+      return NextResponse.json(cni);
+    }
+    if (action === 'secrets') {
+      const secrets = await getK3sSecretsStatus(root);
+      return NextResponse.json(secrets);
+    }
+    if (action === 'security-status') {
+      const sec = await getK3sSecurityStatus(root);
+      return NextResponse.json(sec);
+    }
+    if (action === 'storage') {
+      const storage = await getK3sStorageStatus(root);
+      return NextResponse.json(storage);
+    }
+    if (action === 'monitoring') {
+      const mon = await getK3sMonitoringStatus(root);
+      return NextResponse.json(mon);
+    }
+    if (action === 'gpu') {
+      const gpu = await getK3sGpuStatus(root);
+      return NextResponse.json(gpu);
+    }
+    if (action === 'model-cache') {
+      const cache = await getK3sModelCacheStatus(root);
+      return NextResponse.json(cache);
     }
 
     const joinInfo = getK3sJoinInfo(root, { role, serverUrl, token });
@@ -322,6 +379,137 @@ export async function POST(req: Request) {
         success: true,
         taskId: task.id,
         message: `K3s zero-downtime rolling upgrade started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'vip-setup') {
+      const task = setupK3sVip(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `kube-vip deployment task started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'vip-teardown') {
+      const task = teardownK3sVip(root);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `kube-vip teardown task started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'backup-sync') {
+      const task = syncK3sBackups(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Disaster recovery backup sync task started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'airgap-bundle') {
+      const task = bundleK3sAirgap(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Air-gapped bundle generator task started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'cni-install') {
+      const task = installK3sCni(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Cilium eBPF CNI installation started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'secrets-rotate') {
+      const task = rotateK3sSecrets(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Secrets encryption key rotation started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'security-scan') {
+      const task = scanK3sSecurity(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Trivy container security audit started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'storage-install') {
+      const task = installK3sStorage(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Distributed storage deployment started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'storage-snapshot') {
+      const task = snapshotK3sVolume(root, body.pvcName, body.snapshotName);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `VolumeSnapshot initiated for ${body.pvcName} (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'monitoring-install') {
+      const task = installK3sMonitoring(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `VictoriaMetrics observability deployment started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'alert-dispatch') {
+      const task = dispatchAlert(root, {
+        title: body.title || 'Cluster Alert',
+        message: body.message || 'Notification triggered from dashboard',
+        severity: body.severity,
+        source: body.source,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Alert dispatched to notification channels (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'gpu-setup') {
+      const task = setupK3sGpu(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `K3s GPU accelerator setup started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'model-cache-setup') {
+      const task = setupK3sModelCache(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Shared model cache deployment started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'model-cache-preload') {
+      const task = preloadK3sModel(root, body.modelName, body.namespace);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Model preload started for ${body.modelName} (Task: ${task.id})`,
       });
     }
 

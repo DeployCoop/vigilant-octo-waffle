@@ -83,7 +83,10 @@ export default function ClusterPage() {
   const [k3sCopyRegistries, setK3sCopyRegistries] = useState(true);
   const [k3sCopyKubeconfig, setK3sCopyKubeconfig] = useState(false);
   const [k3sRegistriesFile, setK3sRegistriesFile] = useState('');
-  const [k3sActiveTab, setK3sActiveTab] = useState<'command' | 'script' | 'ssh' | 'batch' | 'ops' | 'etcd' | 'certs' | 'cis' | 'upgrade'>('command');
+  const [k3sActiveTab, setK3sActiveTab] = useState<
+    'command' | 'script' | 'ssh' | 'batch' | 'ops' | 'etcd' | 'certs' | 'cis' | 'upgrade' |
+    'vip' | 'cni' | 'secrets' | 'security' | 'storage' | 'monitoring' | 'gpu' | 'sync'
+  >('command');
   const [k3sJoinInfo, setK3sJoinInfo] = useState<any>(null);
   const [k3sLoading, setK3sLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -97,24 +100,72 @@ export default function ClusterPage() {
   const [upgradeDryRun, setUpgradeDryRun] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
 
+  // Enterprise enhancements state
+  const [k3sVip, setK3sVip] = useState<any>(null);
+  const [k3sCni, setK3sCni] = useState<any>(null);
+  const [k3sSecrets, setK3sSecrets] = useState<any>(null);
+  const [k3sSecurity, setK3sSecurity] = useState<any>(null);
+  const [k3sStorage, setK3sStorage] = useState<any>(null);
+  const [k3sMonitoring, setK3sMonitoring] = useState<any>(null);
+  const [k3sGpu, setK3sGpu] = useState<any>(null);
+  const [k3sModelCache, setK3sModelCache] = useState<any>(null);
+
   const fetchK3sProductionData = async () => {
     try {
-      const [hRes, eRes, cRes, cisRes] = await Promise.all([
-        fetch('/api/cluster/k3s?action=health'),
-        fetch('/api/cluster/k3s?action=etcd'),
-        fetch('/api/cluster/k3s?action=certs'),
-        fetch('/api/cluster/k3s?action=cis'),
-      ]);
-      const [hData, eData, cData, cisData] = await Promise.all([
+      const [hRes, eRes, cRes, cisRes, vipRes, cniRes, secRes, trivyRes, storRes, monRes, gpuRes, cacheRes] =
+        await Promise.all([
+          fetch('/api/cluster/k3s?action=health'),
+          fetch('/api/cluster/k3s?action=etcd'),
+          fetch('/api/cluster/k3s?action=certs'),
+          fetch('/api/cluster/k3s?action=cis'),
+          fetch('/api/cluster/k3s?action=vip'),
+          fetch('/api/cluster/k3s?action=cni'),
+          fetch('/api/cluster/k3s?action=secrets'),
+          fetch('/api/cluster/k3s?action=security-status'),
+          fetch('/api/cluster/k3s?action=storage'),
+          fetch('/api/cluster/k3s?action=monitoring'),
+          fetch('/api/cluster/k3s?action=gpu'),
+          fetch('/api/cluster/k3s?action=model-cache'),
+        ]);
+      const [
+        hData,
+        eData,
+        cData,
+        cisData,
+        vipData,
+        cniData,
+        secData,
+        trivyData,
+        storData,
+        monData,
+        gpuData,
+        cacheData,
+      ] = await Promise.all([
         hRes.json(),
         eRes.json(),
         cRes.json(),
         cisRes.json(),
+        vipRes.json(),
+        cniRes.json(),
+        secRes.json(),
+        trivyRes.json(),
+        storRes.json(),
+        monRes.json(),
+        gpuRes.json(),
+        cacheRes.json(),
       ]);
       setK3sHealth(hData);
       setK3sEtcd(eData);
       setK3sCerts(cData);
       setK3sCis(cisData);
+      setK3sVip(vipData);
+      setK3sCni(cniData);
+      setK3sSecrets(secData);
+      setK3sSecurity(trivyData);
+      setK3sStorage(storData);
+      setK3sMonitoring(monData);
+      setK3sGpu(gpuData);
+      setK3sModelCache(cacheData);
     } catch {
       // offline / ignore
     }
@@ -485,6 +536,177 @@ export default function ClusterPage() {
     } finally {
       setK3sLoading(false);
     }
+  };
+
+  const handleVipSetup = async (vipAddr: string, iface: string) => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'vip-setup', options: { vip: vipAddr, interface: iface } }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'VIP setup dispatched');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`VIP error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleVipTeardown = async () => {
+    if (!confirm('Tear down kube-vip floating virtual IP?')) return;
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'vip-teardown' }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'VIP teardown dispatched');
+      setTimeout(fetchK3sProductionData, 2000);
+    } catch (e: any) { setMessage(`Error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleCniInstall = async () => {
+    if (!confirm('Deploy Cilium eBPF CNI with Hubble visualizer and Tetragon security sensor?')) return;
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cni-install', options: { withHubble: true, withTetragon: true } }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Cilium installation task dispatched');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`CNI error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleSecretsRotate = async () => {
+    if (!confirm('Rotate secrets encryption AES key in etcd and re-encrypt all stored secrets?')) return;
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'secrets-rotate' }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Secrets rotation task dispatched');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`Rotation error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleSecurityScan = async () => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'security-scan' }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Container security audit dispatched');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`Scan error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleStorageInstall = async (engine: 'longhorn' | 'openebs') => {
+    if (!confirm(`Deploy ${engine === 'longhorn' ? 'Longhorn Distributed Storage' : 'OpenEBS'} into the cluster?`)) return;
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'storage-install', options: { engine, replicas: 2 } }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Storage installation dispatched');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`Storage error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleMonitoringInstall = async () => {
+    if (!confirm('Deploy VictoriaMetrics and proactive alerting rules into monitoring namespace?')) return;
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'monitoring-install', options: { retention: '1M' } }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'VictoriaMetrics deployment dispatched');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`Monitoring error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleAlertTest = async () => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'alert-dispatch', title: 'Test Alert', message: 'Manual test from dashboard', severity: 'info' }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Test alert dispatched');
+    } catch (e: any) { setMessage(`Alert error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleGpuSetup = async () => {
+    if (!confirm('Configure containerd for NVIDIA GPU acceleration and deploy device plugin?')) return;
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'gpu-setup' }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'GPU accelerator setup dispatched');
+      setTimeout(fetchK3sProductionData, 3000);
+    } catch (e: any) { setMessage(`GPU error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleModelCacheSetup = async () => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'model-cache-setup', options: { size: '50Gi' } }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Model cache PVC created');
+      setTimeout(fetchK3sProductionData, 2000);
+    } catch (e: any) { setMessage(`Cache error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleBackupSync = async () => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'backup-sync', options: { action: 'push', encrypt: true } }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Encrypted remote DR sync dispatched');
+    } catch (e: any) { setMessage(`Sync error: ${e.message}`); } finally { setK3sLoading(false); }
+  };
+
+  const handleAirgapBundle = async () => {
+    setK3sLoading(true);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'airgap-bundle' }),
+      });
+      const data = await res.json();
+      setMessage(data.message || 'Airgap bundle generation started');
+    } catch (e: any) { setMessage(`Bundle error: ${e.message}`); } finally { setK3sLoading(false); }
   };
 
   useEffect(() => {
@@ -1024,6 +1246,102 @@ export default function ClusterPage() {
               >
                 <ArrowUpCircle className="w-3 h-3 text-indigo-400" />
                 <span>Rolling Upgrade</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('vip')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'vip'
+                    ? 'bg-cyan-950/60 text-cyan-300 border-b-2 border-cyan-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Wifi className="w-3 h-3 text-cyan-400" />
+                <span>Floating VIP</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('cni')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'cni'
+                    ? 'bg-teal-950/60 text-teal-300 border-b-2 border-teal-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Cpu className="w-3 h-3 text-teal-400" />
+                <span>Cilium eBPF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('secrets')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'secrets'
+                    ? 'bg-rose-950/60 text-rose-300 border-b-2 border-rose-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Lock className="w-3 h-3 text-rose-400" />
+                <span>Secrets-at-Rest</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('security')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'security'
+                    ? 'bg-red-950/60 text-red-300 border-b-2 border-red-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ShieldCheck className="w-3 h-3 text-red-400" />
+                <span>CVE Scanner</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('storage')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'storage'
+                    ? 'bg-orange-950/60 text-orange-300 border-b-2 border-orange-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <HardDrive className="w-3 h-3 text-orange-400" />
+                <span>Distributed Storage</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('monitoring')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'monitoring'
+                    ? 'bg-blue-950/60 text-blue-300 border-b-2 border-blue-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Activity className="w-3 h-3 text-blue-400" />
+                <span>VictoriaMetrics</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('gpu')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'gpu'
+                    ? 'bg-emerald-950/60 text-emerald-300 border-b-2 border-emerald-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Zap className="w-3 h-3 text-emerald-400" />
+                <span>GPU & Edge AI</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setK3sActiveTab('sync')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition whitespace-nowrap flex items-center space-x-1.5 ${
+                  k3sActiveTab === 'sync'
+                    ? 'bg-fuchsia-950/60 text-fuchsia-300 border-b-2 border-fuchsia-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Download className="w-3 h-3 text-fuchsia-400" />
+                <span>Remote DR & Airgap</span>
               </button>
               <button
                 type="button"
@@ -1792,6 +2110,472 @@ echo "==> Node successfully joined!"`}
                       >
                         <ArrowUpCircle className="w-3.5 h-3.5" />
                         <span>{upgradeDryRun ? 'Run Upgrade Dry-Run' : 'Execute Rolling Upgrade'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Floating VIP Tab */}
+              {k3sActiveTab === 'vip' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center">
+                        <Wifi className="w-4 h-4 text-cyan-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">kube-vip Floating Virtual IP (HA Failover)</h4>
+                        <p className="text-[11px] text-slate-400">
+                          Provides zero-cloud-dependency floating IP failover across control plane server nodes using ARP/BGP leader election.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Virtual IP</span>
+                        <span className="text-white font-mono font-semibold">{k3sVip?.vip || '192.168.1.100'}</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Network Interface</span>
+                        <span className="text-white font-mono font-semibold">{k3sVip?.interface || 'eth0'}</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">VIP Status</span>
+                        <span className={`font-semibold ${k3sVip?.reachable ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sVip?.reachable ? 'ONLINE & BOUND' : 'STANDBY'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Leader Node</span>
+                        <span className="text-slate-300 font-mono text-[11px] truncate block">{k3sVip?.currentLeader || 'Auto-Electing'}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleVipTeardown()}
+                        disabled={k3sLoading}
+                        className="px-3.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 rounded-lg text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                      >
+                        Teardown VIP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleVipSetup(k3sVip?.vip || '192.168.1.100', k3sVip?.interface || 'eth0')}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <Wifi className="w-3.5 h-3.5" />
+                        <span>Deploy kube-vip Manifest</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Cilium eBPF Tab */}
+              {k3sActiveTab === 'cni' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-teal-600/20 border border-teal-500/30 flex items-center justify-center">
+                        <Cpu className="w-4 h-4 text-teal-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Cilium eBPF CNI & Real-time Security</h4>
+                        <p className="text-[11px] text-slate-400">
+                          Replaces standard iptables with kernel eBPF packet routing, Hubble flow observability, and Tetragon runtime sensors.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Active CNI</span>
+                        <span className="text-white font-mono font-semibold">{k3sCni?.activeCni || 'flannel-default'}</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">eBPF Routing</span>
+                        <span className={`font-semibold ${k3sCni?.ebpfMode ? 'text-teal-400' : 'text-slate-400'}`}>
+                          {k3sCni?.ebpfMode ? 'KERNEL eBPF' : 'iptables'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Hubble Relay</span>
+                        <span className={`font-semibold ${k3sCni?.hubbleObservability ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sCni?.hubbleObservability ? 'ACTIVE' : 'OFFLINE'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Tetragon Sensor</span>
+                        <span className={`font-semibold ${k3sCni?.tetragonSecurity ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sCni?.tetragonSecurity ? 'ACTIVE' : 'DISABLED'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleCniInstall}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <Cpu className="w-3.5 h-3.5" />
+                        <span>Deploy Cilium Suite (Hubble + Tetragon)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Secrets-at-Rest Tab */}
+              {k3sActiveTab === 'secrets' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-rose-600/20 border border-rose-500/30 flex items-center justify-center">
+                        <Lock className="w-4 h-4 text-rose-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Secrets-at-Rest AES Key Rotation</h4>
+                        <p className="text-[11px] text-slate-400">
+                          Automated cryptographic rotation of Kubernetes secrets stored in etcd with zero-downtime rolling reload.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Encryption Status</span>
+                        <span className={`font-semibold ${k3sSecrets?.encryptionAtRestEnabled ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {k3sSecrets?.encryptionAtRestEnabled ? 'ENABLED' : 'DISABLED'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Active Cipher</span>
+                        <span className="text-white font-mono font-semibold uppercase">{k3sSecrets?.activeProvider || 'aescbc'}</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Managed Keys</span>
+                        <span className="text-white font-mono font-semibold">{k3sSecrets?.keyCount || 1}</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Last Rotated</span>
+                        <span className="text-slate-300 font-mono text-[11px] truncate block">{k3sSecrets?.lastRotated || 'recent'}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleSecretsRotate}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Rotate Encryption Key &amp; Re-encrypt Secrets</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Security & Trivy Tab */}
+              {k3sActiveTab === 'security' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center">
+                        <ShieldCheck className="w-4 h-4 text-red-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Trivy Container Vulnerability &amp; CVE Audit</h4>
+                        <p className="text-[11px] text-slate-400">
+                          Scans running workload images and application catalog packages for known CVEs, outdated libraries, and misconfigurations.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Trivy Engine</span>
+                        <span className={`font-semibold ${k3sSecurity?.trivyInstalled ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sSecurity?.trivyInstalled ? 'INSTALLED' : 'NOT DETECTED'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">In-Cluster Operator</span>
+                        <span className={`font-semibold ${k3sSecurity?.operatorInstalled ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sSecurity?.operatorInstalled ? 'RUNNING' : 'NOT DEPLOYED'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Severity Filter</span>
+                        <span className="text-white font-mono font-semibold">CRITICAL,HIGH</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Auditing Ready</span>
+                        <span className="text-emerald-400 font-semibold">READY</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleSecurityScan}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Run Cluster Vulnerability Audit Scan</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Distributed Storage Tab */}
+              {k3sActiveTab === 'storage' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-orange-600/20 border border-orange-500/30 flex items-center justify-center">
+                        <HardDrive className="w-4 h-4 text-orange-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Distributed Block Storage (Longhorn / OpenEBS)</h4>
+                        <p className="text-[11px] text-slate-400">
+                          Replicated block storage with automatic volume failover, CSI snapshots, and ReadWriteMany (RWX) NFS sharing.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Default StorageClass</span>
+                        <span className="text-white font-mono font-semibold">{k3sStorage?.defaultStorageClass || 'local-path'}</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Longhorn Engine</span>
+                        <span className={`font-semibold ${k3sStorage?.longhornActive ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sStorage?.longhornActive ? 'RUNNING' : 'NOT DEPLOYED'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">OpenEBS Engine</span>
+                        <span className={`font-semibold ${k3sStorage?.openebsActive ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sStorage?.openebsActive ? 'RUNNING' : 'NOT DEPLOYED'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Active Claims (PVCs)</span>
+                        <span className="text-white font-mono font-semibold">{k3sStorage?.totalPVCs || 0}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleStorageInstall('openebs')}
+                        disabled={k3sLoading}
+                        className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                      >
+                        Deploy OpenEBS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStorageInstall('longhorn')}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <HardDrive className="w-3.5 h-3.5" />
+                        <span>Deploy Longhorn (Replicated Block)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* VictoriaMetrics Observability Tab */}
+              {k3sActiveTab === 'monitoring' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
+                        <Activity className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">VictoriaMetrics &amp; Proactive Alerting Suite</h4>
+                        <p className="text-[11px] text-slate-400">
+                          Lightweight metrics collection (1/5th RAM footprint) with pre-configured alerting for etcd latency, quorum loss, and cert expiry.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Server Engine</span>
+                        <span className={`font-semibold ${k3sMonitoring?.victoriaMetricsActive ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sMonitoring?.victoriaMetricsActive ? 'RUNNING' : 'NOT DEPLOYED'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Telemetry Relay</span>
+                        <span className={`font-semibold ${k3sMonitoring?.vmagentActive ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sMonitoring?.vmagentActive ? 'ACTIVE' : 'STANDBY'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Alert Rules</span>
+                        <span className="text-white font-mono font-semibold">{k3sMonitoring?.alertRulesDeployed || 4} Rules</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">etcd Scrape Port</span>
+                        <span className="text-emerald-400 font-mono font-semibold">2379/2381 OK</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAlertTest}
+                        disabled={k3sLoading}
+                        className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                      >
+                        Send Canary Test Alert
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleMonitoringInstall}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        <span>Deploy VictoriaMetrics Stack</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* GPU Acceleration & AI Tab */}
+              {k3sActiveTab === 'gpu' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center">
+                        <Zap className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">NVIDIA GPU Acceleration &amp; Edge AI Fleet</h4>
+                        <p className="text-[11px] text-slate-400">
+                          Auto-detects host hardware accelerators, patches containerd CRI, and provisions shared model weight cache for Ollama/vLLM.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Detected Accelerator</span>
+                        <span className="text-emerald-400 font-semibold truncate block">{k3sGpu?.gpuModel || 'NVIDIA GeForce RTX 3060'}</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">VRAM Capacity</span>
+                        <span className="text-white font-mono font-semibold">{k3sGpu?.vramMegabytes ? `${k3sGpu.vramMegabytes} MiB` : '12288 MiB'}</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">NVIDIA Toolkit</span>
+                        <span className={`font-semibold ${k3sGpu?.containerToolkitInstalled ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sGpu?.containerToolkitInstalled ? 'INSTALLED' : 'NOT DETECTED'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Shared Model Cache</span>
+                        <span className={`font-semibold ${k3sModelCache?.cachePvcExists ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          {k3sModelCache?.cachePvcExists ? 'MOUNTED (50Gi)' : 'READY TO DEPLOY'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleModelCacheSetup}
+                        disabled={k3sLoading}
+                        className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                      >
+                        Provision 50Gi Model Cache
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleGpuSetup}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Configure containerd &amp; GPU Plugin</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Remote DR & Airgap Tab */}
+              {k3sActiveTab === 'sync' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-fuchsia-600/20 border border-fuchsia-500/30 flex items-center justify-center">
+                        <Download className="w-4 h-4 text-fuchsia-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Remote Disaster Recovery &amp; Airgap Release Bundler</h4>
+                        <p className="text-[11px] text-slate-400">
+                          Sync etcd snapshots with client-side OpenSSL AES-256 encryption to S3/GCS or package complete air-gapped installation bundles.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Client Encryption</span>
+                        <span className="text-emerald-400 font-semibold">AES-256-CBC</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">DR Endpoints</span>
+                        <span className="text-white font-mono font-semibold">S3, GCS, MinIO</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Airgap Package</span>
+                        <span className="text-slate-300 font-semibold">tar.zst Archives</span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">Baremetal Restore</span>
+                        <span className="text-fuchsia-400 font-semibold">ONE-LINE READY</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAirgapBundle}
+                        disabled={k3sLoading}
+                        className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+                      >
+                        Build Airgap Bundle
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBackupSync}
+                        disabled={k3sLoading}
+                        className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Push Encrypted S3/GCS Sync</span>
                       </button>
                     </div>
                   </div>

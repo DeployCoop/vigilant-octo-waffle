@@ -233,6 +233,17 @@ spec:
         'src/k3s_health.sh',
         'src/k3s_cis.sh',
         'src/k3s_upgrade.sh',
+        'src/k3s_vip.sh',
+        'src/k3s_backup_sync.sh',
+        'src/k3s_airgap.sh',
+        'src/k3s_cni.sh',
+        'src/k3s_secrets_rotate.sh',
+        'src/k3s_security_scan.sh',
+        'src/k3s_storage.sh',
+        'src/k3s_monitoring.sh',
+        'src/alert_dispatcher.sh',
+        'src/k3s_gpu.sh',
+        'src/k3s_model_cache.sh',
       ];
 
       for (const scr of scripts) {
