@@ -23,6 +23,33 @@ elif [[ "${1:-}" == "k3s:registries" || "${1:-}" == "registries" ]]; then
 elif [[ "${1:-}" == "k3s:ping" || "${1:-}" == "ping" ]]; then
   shift
   exec ./src/k3s_ping.sh "$@"
+elif [[ "${1:-}" == "k3s:etcd" || "${1:-}" == "k3s:snapshot" || "${1:-}" == "snapshot" ]]; then
+  shift
+  exec ./src/k3s_etcd.sh "$@"
+elif [[ "${1:-}" == "k3s:drain" || "${1:-}" == "drain" ]]; then
+  shift
+  exec ./src/k3s_drain.sh drain "$@"
+elif [[ "${1:-}" == "k3s:cordon" || "${1:-}" == "cordon" ]]; then
+  shift
+  exec ./src/k3s_drain.sh cordon "$@"
+elif [[ "${1:-}" == "k3s:uncordon" || "${1:-}" == "uncordon" ]]; then
+  shift
+  exec ./src/k3s_drain.sh uncordon "$@"
+elif [[ "${1:-}" == "k3s:certs" || "${1:-}" == "certs" ]]; then
+  shift
+  exec ./src/k3s_certs.sh check "$@"
+elif [[ "${1:-}" == "k3s:rotate-certs" ]]; then
+  shift
+  exec ./src/k3s_certs.sh rotate "$@"
+elif [[ "${1:-}" == "k3s:health" || "${1:-}" == "k3s:status" ]]; then
+  shift
+  exec ./src/k3s_health.sh "$@"
+elif [[ "${1:-}" == "k3s:cis" || "${1:-}" == "cis" ]]; then
+  shift
+  exec ./src/k3s_cis.sh "$@"
+elif [[ "${1:-}" == "k3s:upgrade" || "${1:-}" == "upgrade" ]]; then
+  shift
+  exec ./src/k3s_upgrade.sh "$@"
 fi
 
 : "${BIG_LIST:=./src/big_list}"

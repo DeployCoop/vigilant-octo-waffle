@@ -227,6 +227,12 @@ spec:
         'src/k3s_kill.sh',
         'src/k3s_build.sh',
         'src/k3s_up.sh',
+        'src/k3s_etcd.sh',
+        'src/k3s_drain.sh',
+        'src/k3s_certs.sh',
+        'src/k3s_health.sh',
+        'src/k3s_cis.sh',
+        'src/k3s_upgrade.sh',
       ];
 
       for (const scr of scripts) {

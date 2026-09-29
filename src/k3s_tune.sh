@@ -115,6 +115,7 @@ tune_local() {
   add_line "fs.inotify.max_user_watches = 1048576" "${sysctl_file}"
   add_line "vm.max_map_count = 262144" "${sysctl_file}"
   add_line "net.core.somaxconn = 32768" "${sysctl_file}"
+  add_line "net.ipv4.ip_forward = 1" "${sysctl_file}"
 
   # Apply sysctl settings live
   if command -v sysctl >/dev/null 2>&1; then
@@ -156,6 +157,7 @@ fs.inotify.max_user_instances = 1024
 fs.inotify.max_user_watches = 1048576
 vm.max_map_count = 262144
 net.core.somaxconn = 32768
+net.ipv4.ip_forward = 1
 EOF_SYSCTL
 
     sysctl -p /etc/sysctl.d/99-k3s-tune.conf 2>/dev/null || sysctl --system 2>/dev/null || true

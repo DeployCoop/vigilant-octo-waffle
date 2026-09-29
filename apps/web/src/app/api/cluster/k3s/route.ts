@@ -12,6 +12,16 @@ import {
   upK3sCluster,
   deployK3sRegistries,
   listClusterNodeDetails,
+  getK3sHealth,
+  getEtcdSnapshots,
+  manageEtcdSnapshot,
+  drainK3sNode,
+  uncordonK3sNode,
+  cordonK3sNode,
+  checkK3sCertificates,
+  rotateK3sCertificates,
+  auditK3sCis,
+  upgradeK3sCluster,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 
@@ -24,6 +34,24 @@ export async function GET(req: Request) {
     const role = (searchParams.get('role') || 'agent') as 'agent' | 'server';
     const serverUrl = searchParams.get('serverUrl') || undefined;
     const token = searchParams.get('token') || undefined;
+
+    const action = searchParams.get('action');
+    if (action === 'health') {
+      const health = await getK3sHealth(root);
+      return NextResponse.json(health);
+    }
+    if (action === 'etcd') {
+      const etcd = await getEtcdSnapshots(root);
+      return NextResponse.json(etcd);
+    }
+    if (action === 'certs') {
+      const certs = await checkK3sCertificates(root);
+      return NextResponse.json(certs);
+    }
+    if (action === 'cis') {
+      const cis = await auditK3sCis(root);
+      return NextResponse.json(cis);
+    }
 
     const joinInfo = getK3sJoinInfo(root, { role, serverUrl, token });
     const nodes = await listClusterNodeDetails();
@@ -229,7 +257,71 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         taskId: task.id,
-        message: `Container registries deployment started (Task: ${task.id})`,
+        message: `K3s registries deployment started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'snapshot') {
+      const operation = body.operation || 'save';
+      const task = manageEtcdSnapshot(root, operation, body.name || body.target);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `etcd snapshot ${operation} task started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'drain') {
+      if (!body.nodeName) {
+        return NextResponse.json({ error: 'Node name is required for drain operation' }, { status: 400 });
+      }
+      const task = drainK3sNode(root, body.nodeName, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Node drain task started for ${body.nodeName} (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'uncordon') {
+      if (!body.nodeName) {
+        return NextResponse.json({ error: 'Node name is required for uncordon operation' }, { status: 400 });
+      }
+      const task = uncordonK3sNode(root, body.nodeName);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Node uncordon task started for ${body.nodeName} (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'cordon') {
+      if (!body.nodeName) {
+        return NextResponse.json({ error: 'Node name is required for cordon operation' }, { status: 400 });
+      }
+      const task = cordonK3sNode(root, body.nodeName);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Node cordon task started for ${body.nodeName} (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'rotate-certs') {
+      const task = rotateK3sCertificates(root);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `TLS certificate rotation task started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'upgrade') {
+      const task = upgradeK3sCluster(root, body.options);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `K3s zero-downtime rolling upgrade started (Task: ${task.id})`,
       });
     }
 
