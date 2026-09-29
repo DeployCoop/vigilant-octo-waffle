@@ -7,6 +7,7 @@ envsubst < "${HAPROXY_CONFIG_TPL}" > "${HAPROXY_INSTALL_TMP}"
 helm upgrade --install haproxy-kubernetes-ingress kubernetes-ingress \
   --repo https://haproxytech.github.io/helm-charts \
   --wait \
+  --timeout "${THIS_HELM_TIMEOUT:-15m0s}" \
   --set controller.image.tag=3.0 \
   --namespace ingress-haproxy --create-namespace \
   -f ${HAPROXY_INSTALL_TMP}
