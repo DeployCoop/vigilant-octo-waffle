@@ -87,8 +87,12 @@ resolve_registries_file() {
     return 0
   fi
 
-  if [[ -f "${PROJECT_ROOT}/.secrets/registries.yaml" ]]; then
-    echo "${PROJECT_ROOT}/.secrets/registries.yaml"
+  local gen="${PROJECT_ROOT}/.secrets/registries.yaml"
+  mkdir -p "${PROJECT_ROOT}/.secrets"
+
+  # Only reuse existing if it does not contain empty or unexpanded auth credentials
+  if [[ -f "${gen}" ]] && ! grep -qE 'username: (""|\${)' "${gen}" && ! grep -q 'auth:.*""' "${gen}"; then
+    echo "${gen}"
     return 0
   fi
 
@@ -97,24 +101,23 @@ resolve_registries_file() {
     return 0
   fi
 
-  # Generate from template
-  local tpl="${PROJECT_ROOT}/src/registries.yaml.tpl"
-  local gen="${PROJECT_ROOT}/.secrets/registries.yaml"
-  mkdir -p "${PROJECT_ROOT}/.secrets"
-
-  if [[ -f "${tpl}" ]]; then
-    if command -v envsubst >/dev/null 2>&1; then
-      envsubst < "${tpl}" > "${gen}"
-    else
-      cp "${tpl}" "${gen}"
-    fi
-  else
-    cat << 'EOF_REG' > "${gen}"
+  # Generate clean registries.yaml
+  cat << 'EOF_REG' > "${gen}"
 mirrors:
-  "*":
+  docker.io:
     endpoint:
       - "https://registry-1.docker.io"
 EOF_REG
+
+  # Only append auth config if non-empty credentials are provided
+  if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" ]]; then
+    cat << EOF_AUTH >> "${gen}"
+configs:
+  "docker.io":
+    auth:
+      username: "${DOCKER_USERNAME}"
+      password: "${DOCKER_PASSWORD}"
+EOF_AUTH
   fi
 
   echo "${gen}"
