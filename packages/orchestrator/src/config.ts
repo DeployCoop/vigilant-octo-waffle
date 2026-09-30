@@ -16,6 +16,7 @@ export interface VowConfig {
     adminUser: string;
     fluxNamespace: string;
     chartsDir: string;
+    appDomains: Record<string, string>;
   };
 }
 
@@ -200,6 +201,16 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
   const rawChartsDir = configMap['THIS_CHARTS_DIR'] || configMap['LOCAL_CHARTS_DIR'] || configMap['CHARTS_DIR'] || './charts';
   const resolvedChartsDir = path.isAbsolute(rawChartsDir) ? rawChartsDir : path.resolve(projectRoot, rawChartsDir);
 
+  const appDomains: Record<string, string> = {
+    monitaur: configMap['THIS_MONITAUR_DOMAIN'] || 'portal.monitaur.net',
+    fitdjinn: configMap['THIS_FITDJINN_DOMAIN'] || 'portal.fitdjinn.com',
+    bokbot: configMap['THIS_BOKBOT_DOMAIN'] || 'portal.bokbot.com',
+    ironcladgrants: configMap['THIS_IRONCLADGRANTS_DOMAIN'] || 'portal.ironcladgrants.com',
+    syncromancer: configMap['THIS_SYNCROMANCER_DOMAIN'] || 'portal.syncromancer.com',
+    billamadotnet: configMap['THIS_BILLAMADOTNET_DOMAIN'] || 'billama.net',
+    billama: configMap['THIS_BILLAMA_DOMAIN'] || 'portal.billama.net',
+  };
+
   return {
     raw: configMap,
     enablers,
@@ -214,8 +225,31 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
       adminUser,
       fluxNamespace,
       chartsDir: resolvedChartsDir,
+      appDomains,
     },
   };
+}
+
+/**
+ * Gets the configured domain for a specific application
+ */
+export function getAppDomain(projectRoot: string, appId: string): string | undefined {
+  const config = loadProjectConfig(projectRoot);
+  const normalized = appId.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return config.cluster.appDomains?.[normalized] || config.cluster.appDomains?.[appId];
+}
+
+/**
+ * Sets the configured domain for a specific application in .env
+ */
+export function setAppDomain(projectRoot: string, appId: string, domain: string): void {
+  const current = loadProjectConfig(projectRoot);
+  const envVar = `THIS_${appId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_DOMAIN`;
+  const updated = {
+    ...current.raw,
+    [envVar]: domain,
+  };
+  saveEnvFile(projectRoot, updated);
 }
 
 /**

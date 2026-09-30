@@ -127,7 +127,7 @@ export async function POST(req: Request) {
 
     // Action 2: Install or Upgrade a local chart
     if (action === 'install' || action === 'upgrade') {
-      const { chartId, releaseName, namespace, valuesYaml, wait, timeout, customDir } = body;
+      const { chartId, releaseName, namespace, valuesYaml, wait, timeout, customDir, domain, set } = body;
       if (!chartId) {
         return NextResponse.json({ error: 'chartId is required' }, { status: 400 });
       }
@@ -139,6 +139,8 @@ export async function POST(req: Request) {
         wait,
         timeout,
         customDir,
+        domain,
+        set,
       });
 
       return NextResponse.json({
@@ -177,7 +179,7 @@ export async function POST(req: Request) {
 
     // Action 5: Run `helm template`
     if (action === 'template') {
-      const { chartId, releaseName, namespace, valuesYaml, customDir } = body;
+      const { chartId, releaseName, namespace, valuesYaml, customDir, domain, set } = body;
       if (!chartId) {
         return NextResponse.json({ error: 'chartId is required' }, { status: 400 });
       }
@@ -187,6 +189,8 @@ export async function POST(req: Request) {
         namespace,
         valuesYaml,
         customDir,
+        domain,
+        set,
       });
 
       return NextResponse.json({ success: true, template: rendered });

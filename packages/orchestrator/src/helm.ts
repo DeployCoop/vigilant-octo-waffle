@@ -280,6 +280,7 @@ export function installLocalChart(
     wait?: boolean;
     timeout?: string;
     set?: Record<string, string>;
+    domain?: string;
     customDir?: string;
   } = {}
 ): TaskRun {
@@ -317,6 +318,20 @@ export function installLocalChart(
     const valuesFile = path.join(cacheDir, `${releaseName}-values.yaml`);
     fs.writeFileSync(valuesFile, options.valuesYaml, 'utf-8');
     args.push('-f', valuesFile);
+  }
+
+  // Domain injection for ingress routing
+  const targetDomain = options.domain || config.cluster.appDomains?.[chartId] || config.cluster.appDomains?.[releaseName];
+  if (targetDomain) {
+    if (!options.set || (!options.set['ingress.host'] && !options.set['web.ingress.hosts[0].host'] && !options.set['ingress.hosts[0].host'])) {
+      if (chartId === 'ironcladgrants' || chartId === 'ironclad-grants') {
+        args.push('--set', `web.ingress.hosts[0].host=${targetDomain}`);
+      } else if (chartId === 'fitdjinn') {
+        args.push('--set', `ingress.hosts[0].host=${targetDomain}`);
+      } else {
+        args.push('--set', `ingress.host=${targetDomain}`);
+      }
+    }
   }
 
   if (options.set) {
@@ -388,6 +403,8 @@ export async function templateLocalChart(
     releaseName?: string;
     valuesYaml?: string;
     customDir?: string;
+    domain?: string;
+    set?: Record<string, string>;
   } = {}
 ): Promise<string> {
   const chartDetail = getLocalChartDetail(projectRoot, chartId, options.customDir);
@@ -395,6 +412,7 @@ export async function templateLocalChart(
     throw new Error(`Local chart '${chartId}' not found`);
   }
 
+  const config = loadProjectConfig(projectRoot);
   const releaseName = options.releaseName || chartDetail.id;
   const namespace = options.namespace || 'default';
 
@@ -409,8 +427,28 @@ export async function templateLocalChart(
     valuesFlag = `-f ${JSON.stringify(valuesFile)}`;
   }
 
+  const setArgs: string[] = [];
+  const targetDomain = options.domain || config.cluster.appDomains?.[chartId] || config.cluster.appDomains?.[releaseName];
+  if (targetDomain) {
+    if (!options.set || (!options.set['ingress.host'] && !options.set['web.ingress.hosts[0].host'] && !options.set['ingress.hosts[0].host'])) {
+      if (chartId === 'ironcladgrants' || chartId === 'ironclad-grants') {
+        setArgs.push(`--set web.ingress.hosts[0].host=${JSON.stringify(targetDomain)}`);
+      } else if (chartId === 'fitdjinn') {
+        setArgs.push(`--set ingress.hosts[0].host=${JSON.stringify(targetDomain)}`);
+      } else {
+        setArgs.push(`--set ingress.host=${JSON.stringify(targetDomain)}`);
+      }
+    }
+  }
+
+  if (options.set) {
+    for (const [k, v] of Object.entries(options.set)) {
+      setArgs.push(`--set ${k}=${JSON.stringify(v)}`);
+    }
+  }
+
   try {
-    const cmd = `helm template ${JSON.stringify(releaseName)} ${JSON.stringify(chartDetail.chartPath)} --namespace ${JSON.stringify(namespace)} ${valuesFlag}`;
+    const cmd = `helm template ${JSON.stringify(releaseName)} ${JSON.stringify(chartDetail.chartPath)} --namespace ${JSON.stringify(namespace)} ${valuesFlag} ${setArgs.join(' ')}`;
     const { stdout } = await execAsync(cmd);
     return stdout;
   } catch (err: any) {
