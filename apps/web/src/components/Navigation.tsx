@@ -40,6 +40,7 @@ const navItems = [
   { name: 'Cluster Control', href: '/cluster', icon: Server },
   { name: 'Antigravity Copilot', href: '/antigravity', icon: Bot },
   { name: 'App Store', href: '/apps', icon: Layers },
+  { name: 'Waffle Pipelines', href: '/waffle', icon: Sparkles },
   { name: 'Helm Hub & Releases', href: '/helm', icon: Ship },
   { name: 'Architecture Graph', href: '/topology', icon: Network },
   { name: 'Pod Explorer & Shell', href: '/pods', icon: Boxes },

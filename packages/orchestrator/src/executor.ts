@@ -18,6 +18,7 @@ export const ALLOWED_EXECUTABLES = new Set([
   'ssh',
   'scp',
   'parallel',
+  'git',
 ]);
 
 export interface CommandValidationResult {

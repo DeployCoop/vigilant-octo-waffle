@@ -33,5 +33,5 @@ export * from './remote.js';
 export * from './flux.js';
 export * from './k3s.js';
 export * from './antigravity.js';
-
-
+export * from './waffle.js';
+export * from './waffle-blueprints.js';
