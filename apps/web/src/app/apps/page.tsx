@@ -22,6 +22,8 @@ import {
   X,
   Activity,
   Zap,
+  Ship,
+  FolderOpen,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
 
@@ -639,6 +641,33 @@ export default function AppsPage() {
           ))}
         </div>
       </div>
+
+      {selectedCategory === 'Custom & Local Charts' && (
+        <div className="p-4 bg-gradient-to-r from-sky-950/40 via-slate-900 to-indigo-950/30 border border-sky-800/50 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-sky-200 shadow-sm animate-fadeIn">
+          <div className="flex items-center space-x-2.5">
+            <Ship className="w-4 h-4 text-sky-400 shrink-0" />
+            <span>
+              These charts are discovered live from your configured directory. Learn how to structure and add your own charts in the <strong>Documentation</strong> or manage them in <strong>Helm Hub</strong>.
+            </span>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0">
+            <Link
+              href="/docs#custom-charts-overview"
+              className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-semibold rounded-lg transition-colors flex items-center space-x-1 shadow-sm"
+            >
+              <BookOpen className="w-3 h-3" />
+              <span>Read Docs</span>
+            </Link>
+            <Link
+              href="/helm"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors flex items-center space-x-1"
+            >
+              <FolderOpen className="w-3 h-3 text-sky-400" />
+              <span>Helm Hub</span>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Apps Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

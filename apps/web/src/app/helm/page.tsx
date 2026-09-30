@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Ship,
   RefreshCw,
@@ -21,6 +22,7 @@ import {
   Sliders,
   ShieldCheck,
   Info,
+  ChevronRight,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
 
@@ -344,14 +346,23 @@ export default function HelmPage() {
           </p>
         </div>
 
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="text-xs px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg flex items-center space-x-2 self-start md:self-auto transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh All</span>
-        </button>
+        <div className="flex items-center space-x-2.5 self-start md:self-auto">
+          <Link
+            href="/docs#custom-charts-overview"
+            className="text-xs px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg flex items-center space-x-2 transition-colors font-medium"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+            <span>Full Documentation</span>
+          </Link>
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="text-xs px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg flex items-center space-x-2 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh All</span>
+          </button>
+        </div>
       </div>
 
       {actionMessage && (
@@ -709,6 +720,20 @@ export default function HelmPage() {
             <p className="text-sm text-slate-300 leading-relaxed">
               Vigilant Octo Waffle allows anyone to bring their own collection of Helm charts. Simply place each chart in its own folder under the charts directory (configurable via <code className="text-sky-300 bg-slate-950 px-1.5 py-0.5 rounded font-mono">THIS_CHARTS_DIR</code> in <code className="text-sky-300 bg-slate-950 px-1.5 py-0.5 rounded font-mono">.env</code> or via the input box above).
             </p>
+
+            <div className="p-4 bg-sky-950/40 border border-sky-800/60 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-0.5">
+                <div className="font-semibold text-sky-200">Looking for the comprehensive step-by-step guide?</div>
+                <div className="text-slate-400">Read in-depth specifications for Chart.yaml, values.yaml, Go template helpers, TLS ingress annotations, and persistent storage.</div>
+              </div>
+              <Link
+                href="/docs#custom-charts-overview"
+                className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shrink-0 self-start sm:self-auto shadow-sm"
+              >
+                <span>Full Documentation</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
 
             <div className="space-y-2">
               <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Required Directory Layout</h4>

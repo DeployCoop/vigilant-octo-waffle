@@ -30,14 +30,17 @@ import {
   Smartphone,
   Bot,
   Sparkles,
+  BookOpen,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Documentation', href: '/docs', icon: BookOpen },
   { name: 'Cluster Control', href: '/cluster', icon: Server },
   { name: 'Antigravity Copilot', href: '/antigravity', icon: Bot },
   { name: 'App Store', href: '/apps', icon: Layers },
+  { name: 'Helm Hub & Releases', href: '/helm', icon: Ship },
   { name: 'Architecture Graph', href: '/topology', icon: Network },
   { name: 'Pod Explorer & Shell', href: '/pods', icon: Boxes },
   { name: 'Chaos Playground', href: '/chaos', icon: Flame },
@@ -52,7 +55,6 @@ const navItems = [
   { name: 'Cloud Exporter', href: '/export', icon: Cloud },
   { name: 'Storage & Volumes', href: '/storage', icon: HardDrive },
   { name: 'Credentials Vault', href: '/vault', icon: Key },
-  { name: 'Helm Releases', href: '/helm', icon: Ship },
   { name: 'Backups & Snapshots', href: '/backups', icon: Archive },
   { name: 'Config Studio', href: '/config', icon: Settings },
   { name: 'TLS & DNS', href: '/certificates', icon: ShieldAlert },
@@ -180,6 +182,15 @@ export function Header() {
       </div>
 
       <div className="flex items-center space-x-3" suppressHydrationWarning>
+        <Link
+          href="/docs"
+          suppressHydrationWarning
+          className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"
+          title="Vigilant Octo Waffle Documentation & Field Guide"
+        >
+          <BookOpen className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
+          <span>Docs</span>
+        </Link>
         <Link
           href="/antigravity"
           suppressHydrationWarning
