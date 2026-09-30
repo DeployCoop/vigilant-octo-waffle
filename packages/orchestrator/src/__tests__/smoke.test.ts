@@ -46,6 +46,15 @@ import {
   applyK3sRightSizing,
   getCopilotTools,
   executeCopilotTool,
+  listLocalCharts,
+  getLocalChartDetail,
+  getChartsDirectory,
+  setChartsDirectory,
+  getCombinedAppCatalog,
+  lintLocalChart,
+  templateLocalChart,
+  installLocalChart,
+  uninstallLocalChart,
 } from '../index.js';
 
 describe('Orchestrator Security & Smoke Tests', () => {
@@ -807,6 +816,82 @@ kubectl get ingress -A
       const resUnknown = await executeCopilotTool(projectRoot, 'invalid_tool');
       assert.equal(resUnknown.success, false);
       assert.ok(resUnknown.message.includes('Unknown Copilot tool'));
+    });
+  });
+
+  describe('Local Helm Charts & Custom Directories (Phase 13)', () => {
+    it('resolves and configures charts directory properly', () => {
+      const dir = getChartsDirectory(projectRoot);
+      assert.ok(typeof dir === 'string' && dir.length > 0);
+      assert.ok(path.isAbsolute(dir));
+    });
+
+    it('discovers local charts in default and example directories', () => {
+      const defaultCharts = listLocalCharts(projectRoot);
+      assert.ok(Array.isArray(defaultCharts));
+      assert.ok(defaultCharts.length > 0, 'Expected at least one chart in default charts dir');
+
+      const sampleChart = defaultCharts.find((c) => c.id === 'sample-app');
+      assert.ok(sampleChart, 'Expected sample-app chart to be discovered');
+      assert.equal(sampleChart.valid, true);
+      assert.equal(sampleChart.category, 'Custom & Local Charts');
+      assert.ok(sampleChart.templateCount > 0);
+      assert.equal(sampleChart.hasValues, true);
+      assert.equal(sampleChart.isLocalChart, true);
+
+      // Verify custom example.charts directory discovery
+      const exampleCharts = listLocalCharts(projectRoot, 'example.charts');
+      assert.ok(exampleCharts.length >= 2, 'Expected at least sample-app and static-site in example.charts');
+      const staticSite = exampleCharts.find((c) => c.id === 'static-site');
+      assert.ok(staticSite);
+      assert.equal(staticSite.valid, true);
+    });
+
+    it('retrieves full chart detail including raw manifests and templates', () => {
+      const detail = getLocalChartDetail(projectRoot, 'sample-app');
+      assert.ok(detail);
+      assert.ok(detail.rawChartYaml.includes('sample-app'));
+      assert.ok(detail.rawValuesYaml.includes('replicaCount'));
+      assert.ok(detail.templates.length > 0);
+      assert.ok(detail.templates.some((t) => t.name === 'deployment.yaml'));
+    });
+
+    it('merges discovered local charts into combined application catalog', () => {
+      const combined = getCombinedAppCatalog(projectRoot);
+      assert.ok(combined.length > APP_CATALOG.length, 'Combined catalog must include local charts');
+      const sampleApp = combined.find((a) => a.id === 'sample-app');
+      assert.ok(sampleApp, 'sample-app must appear in combined app catalog');
+      assert.equal(sampleApp.category, 'Custom & Local Charts');
+      assert.equal(sampleApp.isLocalChart, true);
+    });
+
+    it('runs helm lint against the example chart and reports 0 errors', async () => {
+      const lintResult = await lintLocalChart(projectRoot, 'sample-app');
+      assert.equal(lintResult.valid, true);
+      assert.ok(lintResult.output.includes('0 chart(s) failed'));
+    });
+
+    it('renders Kubernetes manifests via helm template', async () => {
+      const rendered = await templateLocalChart(projectRoot, 'sample-app');
+      assert.ok(rendered.includes('kind: Deployment'));
+      assert.ok(rendered.includes('kind: Service'));
+      assert.ok(rendered.includes('kind: Ingress'));
+    });
+
+    it('dispatches install and uninstall tasks via processManager', () => {
+      const installTask = installLocalChart(projectRoot, 'sample-app', {
+        releaseName: 'test-sample',
+        namespace: 'test-ns',
+        wait: false,
+      });
+      assert.ok(installTask);
+      assert.ok(installTask.id);
+      assert.equal(installTask.command, 'helm');
+
+      const uninstallTask = uninstallLocalChart(projectRoot, 'test-sample', 'test-ns');
+      assert.ok(uninstallTask);
+      assert.ok(uninstallTask.id);
+      assert.equal(uninstallTask.command, 'helm');
     });
   });
 });

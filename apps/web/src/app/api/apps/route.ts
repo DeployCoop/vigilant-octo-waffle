@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import {
   APP_CATALOG,
+  getCombinedAppCatalog,
   DEPLOYMENT_PRESETS,
   loadProjectConfig,
   saveEnablerFile,
@@ -16,10 +17,11 @@ export async function GET() {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);
     const domain = config.cluster.domain;
+    const catalog = getCombinedAppCatalog(root);
 
     const enabledAppIds: string[] = [];
 
-    const apps = APP_CATALOG.map((app) => {
+    const apps = catalog.map((app) => {
       const isEnabled = config.enablers[app.enablerVar] ?? true;
       if (isEnabled) {
         enabledAppIds.push(app.id);
@@ -64,8 +66,9 @@ export async function POST(req: Request) {
 
       const updatedEnablers: Record<string, boolean> = {};
       const presetAppSet = new Set(preset.apps);
+      const catalog = getCombinedAppCatalog(root);
 
-      for (const app of APP_CATALOG) {
+      for (const app of catalog) {
         updatedEnablers[app.enablerVar] = presetAppSet.has(app.id);
       }
 
@@ -81,8 +84,9 @@ export async function POST(req: Request) {
     if (Array.isArray(body.appIds)) {
       const targetAppSet = new Set(body.appIds);
       const updatedEnablers: Record<string, boolean> = {};
+      const catalog = getCombinedAppCatalog(root);
 
-      for (const app of APP_CATALOG) {
+      for (const app of catalog) {
         updatedEnablers[app.enablerVar] = targetAppSet.has(app.id);
       }
 

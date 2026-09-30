@@ -38,6 +38,9 @@ interface AppItem {
   docsUrl?: string;
   estimatedMemoryMb?: number;
   dependencies?: string[];
+  isLocalChart?: boolean;
+  chartVersion?: string;
+  chartPath?: string;
 }
 
 interface PresetItem {
@@ -77,6 +80,7 @@ const CATEGORIES = [
   'Collaboration & Business',
   'AI, ML & GPU',
   'Messaging & IoT',
+  'Custom & Local Charts',
 ];
 
 export default function AppsPage() {
@@ -653,10 +657,15 @@ export default function AppsPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h3 className="text-base font-bold text-slate-100">{app.name}</h3>
-                    <div className="flex items-center space-x-1.5 mt-1">
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <span className="text-[10px] font-mono text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/40">
                         {app.category}
                       </span>
+                      {app.isLocalChart && (
+                        <span className="text-[10px] font-mono font-medium text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40">
+                          Local Chart {app.chartVersion ? `v${app.chartVersion}` : ''}
+                        </span>
+                      )}
                       {app.estimatedMemoryMb && (
                         <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
                           {app.estimatedMemoryMb}MB

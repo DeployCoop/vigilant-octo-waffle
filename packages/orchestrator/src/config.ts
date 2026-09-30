@@ -5,6 +5,7 @@ import { substituteVariables } from './template.js';
 export interface VowConfig {
   raw: Record<string, string>;
   enablers: Record<string, boolean>;
+  chartsDir: string;
   cluster: {
     k8sPlatform: 'kind' | 'k3d' | 'k3s';
     ingress: 'nginx' | 'traefik' | 'haproxy';
@@ -14,6 +15,7 @@ export interface VowConfig {
     namespace: string;
     adminUser: string;
     fluxNamespace: string;
+    chartsDir: string;
   };
 }
 
@@ -195,10 +197,13 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
       : 'argocd';
   const fluxNamespace = configMap['THIS_FLUX_NAMESPACE'] || 'flux-system';
   const clusterIssuer = configMap['THIS_CLUSTER_ISSUER'] || 'mkcert-issuer';
+  const rawChartsDir = configMap['THIS_CHARTS_DIR'] || configMap['LOCAL_CHARTS_DIR'] || configMap['CHARTS_DIR'] || './charts';
+  const resolvedChartsDir = path.isAbsolute(rawChartsDir) ? rawChartsDir : path.resolve(projectRoot, rawChartsDir);
 
   return {
     raw: configMap,
     enablers,
+    chartsDir: resolvedChartsDir,
     cluster: {
       k8sPlatform: k8sType,
       ingress,
@@ -208,8 +213,29 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
       namespace,
       adminUser,
       fluxNamespace,
+      chartsDir: resolvedChartsDir,
     },
   };
+}
+
+/**
+ * Gets the resolved local Helm charts directory path
+ */
+export function getChartsDirectory(projectRoot: string): string {
+  const config = loadProjectConfig(projectRoot);
+  return config.chartsDir;
+}
+
+/**
+ * Sets the local Helm charts directory path in .env
+ */
+export function setChartsDirectory(projectRoot: string, newPath: string): void {
+  const current = loadProjectConfig(projectRoot);
+  const updated = {
+    ...current.raw,
+    THIS_CHARTS_DIR: newPath,
+  };
+  saveEnvFile(projectRoot, updated);
 }
 
 /**
