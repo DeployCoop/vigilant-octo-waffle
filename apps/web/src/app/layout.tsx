@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Sidebar, Header } from '@/components/Navigation';
+import { TerminalProvider } from '@/context/TerminalContext';
+import { TerminalModal } from '@/components/TerminalModal';
 
 export const metadata: Metadata = {
   title: 'Vigilant Octo Waffle | Local DevOps Control Plane',
@@ -130,13 +132,16 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex bg-slate-950 text-slate-100 antialiased selection:bg-sky-500 selection:text-white" suppressHydrationWarning>
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <Header />
-          <main className="flex-1 p-6 md:p-8 overflow-y-auto">
-            {children}
-          </main>
-        </div>
+        <TerminalProvider>
+          <Sidebar />
+          <div className="flex-1 flex flex-col min-w-0">
+            <Header />
+            <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+              {children}
+            </main>
+          </div>
+          <TerminalModal />
+        </TerminalProvider>
       </body>
     </html>
   );

@@ -23,6 +23,7 @@ import {
   Activity,
   Zap,
 } from 'lucide-react';
+import { useTerminal } from '@/context/TerminalContext';
 
 
 interface AppItem {
@@ -79,6 +80,7 @@ const CATEGORIES = [
 ];
 
 export default function AppsPage() {
+  const { openTerminal } = useTerminal();
   const [apps, setApps] = useState<AppItem[]>([]);
   const [presets, setPresets] = useState<PresetItem[]>([]);
   const [domain, setDomain] = useState('example.com');
@@ -162,6 +164,9 @@ export default function AppsPage() {
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error);
+      if (data.taskId) {
+        openTerminal(data.taskId, 'Bootstrapping FluxCD Controllers');
+      }
       setActionMessage('FluxCD bootstrap initiated via src/flux.sh. Provisioning controllers...');
       setTimeout(() => setActionMessage(null), 6000);
       setTimeout(() => fetchTelemetry(), 3000);
@@ -183,6 +188,9 @@ export default function AppsPage() {
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error);
+      if (data.taskId) {
+        openTerminal(data.taskId, 'Reconciling Flux Resources');
+      }
       setActionMessage(data.message || 'Flux reconciliation initiated across all Kustomizations and HelmReleases.');
       setTimeout(() => setActionMessage(null), 4000);
     } catch (err: any) {
@@ -309,6 +317,9 @@ export default function AppsPage() {
       });
       const data = await res.json();
       if (data.success) {
+        if (data.taskId) {
+          openTerminal(data.taskId, `Deploying ${app.name}`);
+        }
         setActionMessage(`Triggered deployment for ${app.name} (Task: ${data.taskId})`);
       }
     } catch (err: any) {

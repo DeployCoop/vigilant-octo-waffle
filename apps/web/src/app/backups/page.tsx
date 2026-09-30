@@ -14,6 +14,7 @@ import {
   Camera,
   Server,
 } from 'lucide-react';
+import { useTerminal } from '@/context/TerminalContext';
 
 interface BackupItem {
   id: string;
@@ -34,6 +35,7 @@ export default function BackupsPage() {
   const [backupName, setBackupName] = useState('');
   const [namespaces, setNamespaces] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { openTerminal } = useTerminal();
 
   const fetchBackups = async () => {
     setLoading(true);
@@ -72,6 +74,9 @@ export default function BackupsPage() {
       const data = await res.json();
       if (data.success) {
         setActionMessage(`Triggered backup ${backupName} (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `Backup: ${backupName.trim()}`);
+        }
         setShowModal(false);
         setBackupName('');
         setNamespaces('');
@@ -98,6 +103,9 @@ export default function BackupsPage() {
       const data = await res.json();
       if (data.success) {
         setActionMessage(`Triggered restore task for ${backup.name} (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `Restore: ${backup.name}`);
+        }
       }
     } catch (err: any) {
       setActionMessage(`Restore failed: ${err.message}`);

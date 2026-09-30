@@ -38,6 +38,7 @@ import {
   PlayCircle,
 } from 'lucide-react';
 import { copyToClipboard as copyText } from '@/lib/clipboard';
+import { useTerminal } from '@/context/TerminalContext';
 
 interface ClusterData {
   platform: string;
@@ -64,6 +65,7 @@ export default function ClusterPage() {
   const [scaling, setScaling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [nodeMetrics, setNodeMetrics] = useState<Record<string, { cpu: string; memory: string }>>({});
+  const { openTerminal } = useTerminal();
 
   // K3s multi-node join & operations state
   const [showK3sModal, setShowK3sModal] = useState(false);
@@ -323,6 +325,9 @@ export default function ClusterPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`SSH provision dispatched for ${k3sSshHost} (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `SSH Provision: ${k3sSshHost}`);
+        }
         setShowK3sModal(false);
       } else {
         setMessage(`SSH provision error: ${data.error}`);
@@ -364,6 +369,9 @@ export default function ClusterPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`Batch join dispatched (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `K3s Batch Join (${k3sRole})`);
+        }
         setShowK3sModal(false);
       } else {
         setMessage(`Batch join error: ${data.error}`);
@@ -404,6 +412,9 @@ export default function ClusterPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`K3s ${op} operation dispatched (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `K3s ${op.toUpperCase()}`);
+        }
         setShowK3sModal(false);
       } else {
         setMessage(`Operation error: ${data.error}`);
@@ -427,6 +438,9 @@ export default function ClusterPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`Node drain dispatched for ${nodeName} (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `Drain Node: ${nodeName}`);
+        }
         fetchCluster();
       } else {
         setMessage(`Drain error: ${data.error}`);
@@ -495,6 +509,9 @@ export default function ClusterPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`etcd snapshot ${operation} task started (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `etcd Snapshot: ${operation}`);
+        }
         if (operation === 'save') setSnapshotName('');
         setTimeout(fetchK3sProductionData, 2000);
       } else {
@@ -521,6 +538,9 @@ export default function ClusterPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`Certificate rotation dispatched (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, 'Rotate K3s Certificates');
+        }
         setTimeout(fetchK3sProductionData, 3000);
       } else {
         setMessage(`Rotation error: ${data.error}`);
@@ -550,6 +570,9 @@ export default function ClusterPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`Rolling upgrade started (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `K3s Upgrade (${upgradeVersion || 'latest'})`);
+        }
         setShowK3sModal(false);
       } else {
         setMessage(`Upgrade error: ${data.error}`);
@@ -826,6 +849,9 @@ export default function ClusterPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`Action '${action}' dispatched (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, `Cluster Action: ${action}`);
+        }
       } else {
         setMessage(`Error: ${data.error}`);
       }

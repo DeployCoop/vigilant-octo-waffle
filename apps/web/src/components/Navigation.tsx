@@ -31,6 +31,7 @@ import {
   Bot,
   Sparkles,
 } from 'lucide-react';
+import { useTerminal } from '@/context/TerminalContext';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -118,6 +119,7 @@ export function Header() {
   const [contexts, setContexts] = useState<string[]>([]);
   const [currentContext, setCurrentContext] = useState<string>('');
   const [switching, setSwitching] = useState(false);
+  const { runningTaskCount, activeTaskId, isMinimized, openTerminal, restoreTerminal } = useTerminal();
 
   useEffect(() => {
     fetch('/api/cluster/contexts')
@@ -186,14 +188,25 @@ export function Header() {
           <Sparkles className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
           <span>Antigravity</span>
         </Link>
-        <Link
-          href="/terminal"
-          suppressHydrationWarning
-          className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"
-        >
-          <Terminal className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
-          <span>Console</span>
-        </Link>
+        {runningTaskCount > 0 ? (
+          <button
+            onClick={() => (isMinimized ? restoreTerminal() : openTerminal(activeTaskId || ''))}
+            className="text-xs font-semibold bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-300 px-3 py-1.5 rounded-md border border-emerald-500/50 flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer animate-pulse"
+            title="Open active Terminal execution"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+            <span>Terminal ({runningTaskCount} active)</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => openTerminal(activeTaskId || '')}
+            className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors cursor-pointer"
+            title="Open pop-out Terminal console"
+          >
+            <Terminal className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
+            <span>Console</span>
+          </button>
+        )}
         <Link
           href="/apps"
           suppressHydrationWarning

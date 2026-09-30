@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { YamlDiffModal, type DetectedManifestPayload } from '@/components/YamlDiffModal';
+import { useTerminal } from '@/context/TerminalContext';
 
 type AIProvider = 'antigravity' | 'ollama' | 'vllm';
 
@@ -132,6 +133,7 @@ export default function AntigravityPage() {
   const [loading, setLoading] = useState(false);
   const [engine, setEngine] = useState<EngineInfo | null>(null);
   const [clusterSnapshot, setClusterSnapshot] = useState<ClusterSnapshot | null>(null);
+  const { openTerminal } = useTerminal();
 
   // Provider & Model State
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>('antigravity');
@@ -198,6 +200,10 @@ export default function AntigravityPage() {
           message: data.message || `Tool '${toolId}' dispatched successfully`,
           taskId: data.taskId,
         });
+
+        if (data.taskId) {
+          openTerminal(data.taskId, `AI Copilot: ${toolId}`);
+        }
 
         const toolEventMsg: ChatMessage = {
           id: `tool-${Date.now()}`,
@@ -521,6 +527,9 @@ export default function AntigravityPage() {
           output: `Task spawned successfully with ID: ${data.taskId}\nReal-time logs stream in the Live Terminal console.`,
           status: 'done',
         });
+        if (data.taskId) {
+          openTerminal(data.taskId, `CLI: ${trimmed}`);
+        }
       }
     } catch (err: any) {
       setCommandOutput({

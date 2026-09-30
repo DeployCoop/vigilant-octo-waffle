@@ -20,6 +20,7 @@ import {
   Cpu,
   Sparkles,
 } from 'lucide-react';
+import { useTerminal } from '@/context/TerminalContext';
 
 interface ClusterInfo {
   platform: string;
@@ -52,6 +53,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const { openTerminal } = useTerminal();
 
   const fetchData = async () => {
     try {
@@ -88,6 +90,9 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`Started full deployment (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, 'Full Cluster Deployment (up)');
+        }
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -107,6 +112,9 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`Cluster creation started (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, 'Cluster Provisioning');
+        }
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -123,6 +131,9 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         setMessage(`Cluster deletion task started (Task ID: ${data.taskId})`);
+        if (data.taskId) {
+          openTerminal(data.taskId, 'Cluster Teardown');
+        }
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
