@@ -1,14 +1,14 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: ${THIS_LVM_STORAGECLASS}
+  name: ${THIS_LVM_STORAGECLASS}-pattern
   annotations:
-    storageclass.kubernetes.io/is-default-class: "${THIS_LVM_IS_DEFAULT_SC}"
+    storageclass.kubernetes.io/is-default-class: "false"
     openebs.io/cas-type: local
 provisioner: ${THIS_OPENEBS_LVM_PROVISIONER}
 parameters:
   storage: "lvm"
-  volgroup: "${THIS_LVM_VG}"
+  vgpattern: "${THIS_LVM_VG_PATTERN}"
   thinProvision: "${THIS_LVM_THIN_PROVISION}"
   shared: "${THIS_LVM_SHARED}"
   fsType: "${THIS_LVM_FSTYPE}"

@@ -29,12 +29,18 @@ do_cmd_checks () {
   check_cmd tr
   check_cmd yq
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    check_cmd kind
-    check_cmd docker
+    if ! command -v kind >/dev/null 2>&1 && (command -v k3s >/dev/null 2>&1 || (command -v kubectl >/dev/null 2>&1 && kubectl get nodes 2>/dev/null | grep -qi "k3s")); then
+      THIS_K8S_TYPE="k3s"
+      export THIS_K8S_TYPE
+    else
+      check_cmd kind
+      check_cmd docker
+    fi
   elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
     check_cmd k3d
     check_cmd docker
-  elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
+  fi
+  if [[ $THIS_K8S_TYPE == "k3s" ]]; then
     if command -v k3s >/dev/null 2>&1 || [[ -x /usr/local/bin/k3s ]]; then
       # k3s is installed
       :
