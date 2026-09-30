@@ -17,6 +17,7 @@ export interface VowConfig {
     fluxNamespace: string;
     chartsDir: string;
     appDomains: Record<string, string>;
+    extraDomains: string[];
   };
 }
 
@@ -201,15 +202,21 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
   const rawChartsDir = configMap['THIS_CHARTS_DIR'] || configMap['LOCAL_CHARTS_DIR'] || configMap['CHARTS_DIR'] || './charts';
   const resolvedChartsDir = path.isAbsolute(rawChartsDir) ? rawChartsDir : path.resolve(projectRoot, rawChartsDir);
 
-  const appDomains: Record<string, string> = {
-    monitaur: configMap['THIS_MONITAUR_DOMAIN'] || 'portal.monitaur.net',
-    fitdjinn: configMap['THIS_FITDJINN_DOMAIN'] || 'portal.fitdjinn.com',
-    bokbot: configMap['THIS_BOKBOT_DOMAIN'] || 'portal.bokbot.com',
-    ironcladgrants: configMap['THIS_IRONCLADGRANTS_DOMAIN'] || 'portal.ironcladgrants.com',
-    syncromancer: configMap['THIS_SYNCROMANCER_DOMAIN'] || 'portal.syncromancer.com',
-    billamadotnet: configMap['THIS_BILLAMADOTNET_DOMAIN'] || 'billama.net',
-    billama: configMap['THIS_BILLAMA_DOMAIN'] || 'portal.billama.net',
-  };
+  const appDomains: Record<string, string> = {};
+  for (const [key, val] of Object.entries(configMap)) {
+    if (key.startsWith('THIS_') && key.endsWith('_DOMAIN') && key !== 'THIS_DOMAIN') {
+      const appId = key.slice(5, -7).toLowerCase();
+      if (val && val.trim()) {
+        appDomains[appId] = val.trim();
+      }
+    }
+  }
+
+  const extraDomainsRaw = configMap['THIS_EXTRA_DOMAINS'] || '';
+  const extraDomains: string[] = extraDomainsRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   return {
     raw: configMap,
@@ -226,6 +233,7 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
       fluxNamespace,
       chartsDir: resolvedChartsDir,
       appDomains,
+      extraDomains,
     },
   };
 }

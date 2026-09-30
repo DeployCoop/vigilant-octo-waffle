@@ -303,113 +303,38 @@ export default function ConfigPage() {
           </div>
         </div>
 
-        {/* Ecosystem Ingress & Domain Routing */}
+        {/* Custom Ingress & Domain Routing */}
         <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center space-x-2">
               <Network className="w-4 h-4 text-cyan-400" />
               <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
-                Ecosystem Ingress & Domain Routing
+                Custom Ingress Domains & DNS Routing
               </h3>
             </div>
-            <span className="text-[11px] text-slate-500">Custom FQDNs for Ecosystem Portals & APIs</span>
+            <span className="text-[11px] text-slate-500">External FQDNs for Ingress & DNS</span>
           </div>
 
           <p className="text-xs text-slate-400 leading-relaxed">
-            Configure external domain names and Ingress TLS hosts for decentralized applications,
-            APIs, and worker nodes. These domain names are mapped to Ingress controllers and DNS generators.
+            Configure external domain names and Ingress TLS hosts for cluster applications.
+            These domain names are dynamically registered into /etc/hosts and DNS zone record generators.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div className="space-y-4 pt-2">
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1">
-                Monitaur Portal (THIS_MONITAUR_DOMAIN)
+                Custom Extra Domains (THIS_EXTRA_DOMAINS)
               </label>
               <input
                 type="text"
-                value={config['THIS_MONITAUR_DOMAIN'] || 'portal.monitaur.net'}
-                onChange={(e) => handleChange('THIS_MONITAUR_DOMAIN', e.target.value)}
-                placeholder="portal.monitaur.net"
+                value={config['THIS_EXTRA_DOMAINS'] || ''}
+                onChange={(e) => handleChange('THIS_EXTRA_DOMAINS', e.target.value)}
+                placeholder="app1.example.com, api.example.org, custom.domain.io"
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">
-                FitDjinn Portal (THIS_FITDJINN_DOMAIN)
-              </label>
-              <input
-                type="text"
-                value={config['THIS_FITDJINN_DOMAIN'] || 'portal.fitdjinn.com'}
-                onChange={(e) => handleChange('THIS_FITDJINN_DOMAIN', e.target.value)}
-                placeholder="portal.fitdjinn.com"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">
-                BokBot Portal (THIS_BOKBOT_DOMAIN)
-              </label>
-              <input
-                type="text"
-                value={config['THIS_BOKBOT_DOMAIN'] || 'portal.bokbot.com'}
-                onChange={(e) => handleChange('THIS_BOKBOT_DOMAIN', e.target.value)}
-                placeholder="portal.bokbot.com"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">
-                IroncladGrants Portal (THIS_IRONCLADGRANTS_DOMAIN)
-              </label>
-              <input
-                type="text"
-                value={config['THIS_IRONCLADGRANTS_DOMAIN'] || 'portal.ironcladgrants.com'}
-                onChange={(e) => handleChange('THIS_IRONCLADGRANTS_DOMAIN', e.target.value)}
-                placeholder="portal.ironcladgrants.com"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">
-                Syncromancer Portal (THIS_SYNCROMANCER_DOMAIN)
-              </label>
-              <input
-                type="text"
-                value={config['THIS_SYNCROMANCER_DOMAIN'] || 'portal.syncromancer.com'}
-                onChange={(e) => handleChange('THIS_SYNCROMANCER_DOMAIN', e.target.value)}
-                placeholder="portal.syncromancer.com"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">
-                Billama Website (THIS_BILLAMADOTNET_DOMAIN)
-              </label>
-              <input
-                type="text"
-                value={config['THIS_BILLAMADOTNET_DOMAIN'] || 'billama.net'}
-                onChange={(e) => handleChange('THIS_BILLAMADOTNET_DOMAIN', e.target.value)}
-                placeholder="billama.net"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-400 mb-1">
-                Billama Central Platform & API (THIS_BILLAMA_DOMAIN)
-              </label>
-              <input
-                type="text"
-                value={config['THIS_BILLAMA_DOMAIN'] || 'portal.billama.net'}
-                onChange={(e) => handleChange('THIS_BILLAMA_DOMAIN', e.target.value)}
-                placeholder="portal.billama.net"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
-              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                Comma-separated list of custom FQDNs to include in DNS and /etc/hosts generation
+              </span>
             </div>
           </div>
         </div>

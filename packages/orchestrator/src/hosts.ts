@@ -57,15 +57,7 @@ export const DEFAULT_SUBDOMAINS = [
   'vigil',
 ];
 
-export const DEFAULT_ECOSYSTEM_DOMAINS: string[] = [
-  'portal.monitaur.net',
-  'portal.fitdjinn.com',
-  'portal.bokbot.com',
-  'portal.ironcladgrants.com',
-  'portal.syncromancer.com',
-  'billama.net',
-  'portal.billama.net',
-];
+export const DEFAULT_EXTRA_DOMAINS: string[] = [];
 
 export type DnsMode = 'sslip' | 'nip' | 'hosts' | 'custom';
 
@@ -94,7 +86,7 @@ export function formatIngressHostname(
 
 export function getFullHostnames(
   domain: string,
-  extraDomains: string[] = DEFAULT_ECOSYSTEM_DOMAINS
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
 ): string[] {
   const standard = DEFAULT_SUBDOMAINS.map((sub) => (sub ? `${sub}.${domain}` : domain));
   const seen = new Set(standard);
@@ -116,7 +108,7 @@ export function getFullHostnames(
 export function generateHostsBlock(
   domain: string,
   ip = '127.0.0.1',
-  extraDomains: string[] = DEFAULT_ECOSYSTEM_DOMAINS
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
 ): string {
   const lines = getFullHostnames(domain, extraDomains).map((host) => `${ip} ${host}`);
   return lines.join('\n');
@@ -128,7 +120,7 @@ export function generateHostsBlock(
 export function generateBindRecords(
   domain: string,
   targetIps: string[],
-  extraDomains: string[] = DEFAULT_ECOSYSTEM_DOMAINS
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
 ): string {
   const blocks: string[] = [];
   const subdomains = DEFAULT_SUBDOMAINS.filter((s) => s.length > 0);
@@ -151,7 +143,7 @@ export function generateBindRecords(
 export function generateCloudflareRecords(
   domain: string,
   targetIps: string[],
-  extraDomains: string[] = DEFAULT_ECOSYSTEM_DOMAINS
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
 ): string {
   const blocks: string[] = [];
   const subdomains = DEFAULT_SUBDOMAINS.filter((s) => s.length > 0);
@@ -189,7 +181,7 @@ export function generateCoreDnsConfig(domain = 'example.com', ip = '127.0.0.1'):
  */
 export function checkEtcHosts(
   domain: string,
-  extraDomains: string[] = DEFAULT_ECOSYSTEM_DOMAINS
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
 ): {
   isConfigured: boolean;
   missingCount: number;
