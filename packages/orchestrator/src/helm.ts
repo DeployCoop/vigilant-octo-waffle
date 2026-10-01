@@ -174,44 +174,48 @@ function parseChartDirectory(chartDir: string, projectRoot: string): LocalChartD
  * Lists all local charts in the configured charts directory (or custom path)
  */
 export function listLocalCharts(projectRoot: string, customDir?: string): LocalChartDefinition[] {
-  let targetDir: string;
+  const dirsToScan: string[] = [];
+
   if (customDir && customDir.trim()) {
     const trimmed = customDir.trim();
-    targetDir = path.isAbsolute(trimmed) ? trimmed : path.resolve(projectRoot, trimmed);
+    dirsToScan.push(path.isAbsolute(trimmed) ? trimmed : path.resolve(projectRoot, trimmed));
   } else {
-    targetDir = getChartsDirectory(projectRoot);
+    const configured = getChartsDirectory(projectRoot);
+    if (configured) dirsToScan.push(configured);
+    const defaultCharts = path.resolve(projectRoot, 'charts');
+    if (!dirsToScan.includes(defaultCharts)) dirsToScan.push(defaultCharts);
+    const exampleCharts = path.resolve(projectRoot, 'example.charts');
+    if (!dirsToScan.includes(exampleCharts)) dirsToScan.push(exampleCharts);
   }
 
-  if (!fs.existsSync(targetDir)) {
-    return [];
-  }
+  const chartMap = new Map<string, LocalChartDefinition>();
 
-  const stat = fs.statSync(targetDir);
-  if (!stat.isDirectory()) {
-    return [];
-  }
+  for (const dir of dirsToScan) {
+    if (!fs.existsSync(dir)) continue;
+    const stat = fs.statSync(dir);
+    if (!stat.isDirectory()) continue;
 
-  // Check if targetDir itself is a Helm chart
-  const singleChart = parseChartDirectory(targetDir, projectRoot);
-  if (singleChart && singleChart.valid) {
-    return [singleChart];
-  }
+    // Check if dir itself is a chart
+    const singleChart = parseChartDirectory(dir, projectRoot);
+    if (singleChart && singleChart.valid) {
+      if (!chartMap.has(singleChart.id)) chartMap.set(singleChart.id, singleChart);
+      continue;
+    }
 
-  // Scan subdirectories
-  const entries = fs.readdirSync(targetDir, { withFileTypes: true });
-  const charts: LocalChartDefinition[] = [];
-
-  for (const entry of entries) {
-    if (entry.isDirectory() && !entry.name.startsWith('.')) {
-      const subPath = path.join(targetDir, entry.name);
-      const chart = parseChartDirectory(subPath, projectRoot);
-      if (chart) {
-        charts.push(chart);
+    // Scan subdirectories
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        const subPath = path.join(dir, entry.name);
+        const chart = parseChartDirectory(subPath, projectRoot);
+        if (chart && !chartMap.has(chart.id)) {
+          chartMap.set(chart.id, chart);
+        }
       }
     }
   }
 
-  return charts.sort((a, b) => a.name.localeCompare(b.name));
+  return Array.from(chartMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**

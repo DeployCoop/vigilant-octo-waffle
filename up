@@ -1,191 +1,80 @@
 #!/usr/bin/env bash
-if [[ "${1:-}" == "k3s:up" || "${1:-}" == "k3s:build" ]]; then
-  shift
-  exec ./src/k3s_up.sh "$@"
-elif [[ "${1:-}" == "k3s:down" || "${1:-}" == "k3s:kill" || "${1:-}" == "kill" ]]; then
-  shift
-  exec ./src/k3s_kill.sh "$@"
-elif [[ "${1:-}" == "k3s:rebuild" ]]; then
-  shift
-  exec ./src/k3s_build.sh --rebuild "$@"
-elif [[ "${1:-}" == "k3s:add-node" || "${1:-}" == "k3s:join" || "${1:-}" == "add-node" ]]; then
-  shift
-  exec ./src/k3s_add_node.sh "$@"
-elif [[ "${1:-}" == "k3s:tune" || "${1:-}" == "tune" ]]; then
-  shift
-  exec ./src/k3s_tune.sh "$@"
-elif [[ "${1:-}" == "k3s:kmod" || "${1:-}" == "kmod" ]]; then
-  shift
-  exec ./src/k3s_kmod.sh "$@"
-elif [[ "${1:-}" == "k3s:registries" || "${1:-}" == "registries" ]]; then
-  shift
-  exec ./src/k3s_registries.sh "$@"
-elif [[ "${1:-}" == "k3s:ping" || "${1:-}" == "ping" ]]; then
-  shift
-  exec ./src/k3s_ping.sh "$@"
-elif [[ "${1:-}" == "k3s:etcd" || "${1:-}" == "k3s:snapshot" || "${1:-}" == "snapshot" ]]; then
-  shift
-  exec ./src/k3s_etcd.sh "$@"
-elif [[ "${1:-}" == "k3s:drain" || "${1:-}" == "drain" ]]; then
-  shift
-  exec ./src/k3s_drain.sh drain "$@"
-elif [[ "${1:-}" == "k3s:cordon" || "${1:-}" == "cordon" ]]; then
-  shift
-  exec ./src/k3s_drain.sh cordon "$@"
-elif [[ "${1:-}" == "k3s:uncordon" || "${1:-}" == "uncordon" ]]; then
-  shift
-  exec ./src/k3s_drain.sh uncordon "$@"
-elif [[ "${1:-}" == "k3s:certs" || "${1:-}" == "certs" ]]; then
-  shift
-  exec ./src/k3s_certs.sh check "$@"
-elif [[ "${1:-}" == "k3s:rotate-certs" ]]; then
-  shift
-  exec ./src/k3s_certs.sh rotate "$@"
-elif [[ "${1:-}" == "k3s:health" || "${1:-}" == "k3s:status" ]]; then
-  shift
-  exec ./src/k3s_health.sh "$@"
-elif [[ "${1:-}" == "k3s:cis" || "${1:-}" == "cis" ]]; then
-  shift
-  exec ./src/k3s_cis.sh "$@"
-elif [[ "${1:-}" == "k3s:upgrade" || "${1:-}" == "upgrade" ]]; then
-  shift
-  exec ./src/k3s_upgrade.sh "$@"
-elif [[ "${1:-}" == "k3s:vip" || "${1:-}" == "vip" ]]; then
-  shift
-  exec ./src/k3s_vip.sh "$@"
-elif [[ "${1:-}" == "k3s:sync" || "${1:-}" == "k3s:backup-sync" || "${1:-}" == "sync" ]]; then
-  shift
-  exec ./src/k3s_backup_sync.sh "$@"
-elif [[ "${1:-}" == "k3s:airgap" || "${1:-}" == "airgap" ]]; then
-  shift
-  exec ./src/k3s_airgap.sh "$@"
-elif [[ "${1:-}" == "k3s:cni" || "${1:-}" == "cni" ]]; then
-  shift
-  exec ./src/k3s_cni.sh "$@"
-elif [[ "${1:-}" == "k3s:rotate-secrets" || "${1:-}" == "rotate-secrets" ]]; then
-  shift
-  exec ./src/k3s_secrets_rotate.sh "$@"
-elif [[ "${1:-}" == "k3s:scan" || "${1:-}" == "k3s:security-scan" || "${1:-}" == "scan" ]]; then
-  shift
-  exec ./src/k3s_security_scan.sh "$@"
-elif [[ "${1:-}" == "k3s:storage" || "${1:-}" == "storage" ]]; then
-  shift
-  exec ./src/k3s_storage.sh "$@"
-elif [[ "${1:-}" == "k3s:monitoring" || "${1:-}" == "monitoring" ]]; then
-  shift
-  exec ./src/k3s_monitoring.sh "$@"
-elif [[ "${1:-}" == "k3s:alert" || "${1:-}" == "alert" ]]; then
-  shift
-  exec ./src/alert_dispatcher.sh "$@"
-elif [[ "${1:-}" == "k3s:gpu" || "${1:-}" == "gpu" ]]; then
-  shift
-  exec ./src/k3s_gpu.sh "$@"
-elif [[ "${1:-}" == "k3s:cache" || "${1:-}" == "k3s:model-cache" ]]; then
-  shift
-  exec ./src/k3s_model_cache.sh "$@"
-elif [[ "${1:-}" == "k3s:healer" || "${1:-}" == "k3s:heal" || "${1:-}" == "heal" ]]; then
-  shift
-  exec ./src/k3s_healer.sh "$@"
-elif [[ "${1:-}" == "k3s:dr-drill" || "${1:-}" == "k3s:drill" || "${1:-}" == "drill" ]]; then
-  shift
-  exec ./src/k3s_dr_drill.sh "$@"
-elif [[ "${1:-}" == "k3s:gateway" || "${1:-}" == "gateway" ]]; then
-  shift
-  exec ./src/k3s_gateway.sh "$@"
-elif [[ "${1:-}" == "k3s:pool" || "${1:-}" == "pool" ]]; then
-  shift
-  exec ./src/k3s_pool.sh "$@"
-elif [[ "${1:-}" == "k3s:finops" || "${1:-}" == "finops" ]]; then
-  shift
-  exec ./src/k3s_finops.sh "$@"
+set -e
+
+# ==============================================================================
+# up - Unified Entrypoint for Vigilant Octo Waffle Orchestrator & Ink TUI
+# ==============================================================================
+# All legacy shell scripting has been migrated to TypeScript domain libraries
+# in packages/orchestrator and the interactive/headless CLI in apps/ink.
+# ==============================================================================
+
+# Ensure Node & pnpm are on PATH
+export PATH="/root/.nvm/versions/node/v24.21.0/bin:${PATH}"
+
+if [[ $# -eq 0 ]]; then
+  if [[ -t 1 && -z "${CI:-}" ]]; then
+    exec ./bin/vow
+  else
+    exec ./bin/vow up
+  fi
 fi
 
-: "${BIG_LIST:=./src/big_list}"
-source ./src/sourceror.bash
-export this_cwd=$(pwd)
-
-main() {
-  set -e
-  src/secrets.sh
-  if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    src/kindDown.sh
-    sleep 1
-    if [[ ${THIS_REG_ENABLE} == "true" ]]; then
-      src/localregistry_start.sh
-    fi
-    src/kindUp.sh
-    if [[ ${THIS_REG_ENABLE} == "true" ]]; then
-      #src/registry-proxy.sh
-      src/localregistry_setupnodes.sh
-    fi
-  elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
-    src/k3dDown.sh
-    sleep 1
-    src/k3dUp.sh
-  elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
-    if kubectl get nodes >/dev/null 2>&1; then
-      echo "==> K3s cluster is running and reachable via kubectl, proceeding..."
+case "$1" in
+  ink|tui|ui|-i|--interactive)
+    shift || true
+    exec ./bin/vow -i "$@"
+    ;;
+  vow)
+    shift
+    exec ./bin/vow "$@"
+    ;;
+  up)
+    shift
+    exec ./bin/vow up "$@"
+    ;;
+  doctor|config:doctor|config:check|config:fix)
+    shift
+    exec ./bin/vow doctor "$@"
+    ;;
+  namespaces|namespaces:sync|ns:sync)
+    shift
+    exec ./bin/vow namespaces "$@"
+    ;;
+  secrets|secrets:sync|sync:secrets)
+    shift
+    exec ./bin/vow secrets "$@"
+    ;;
+  ingress|ingress:*|certmanager)
+    shift
+    exec ./bin/vow ingress "$@"
+    ;;
+  storage|storage:*|k3s:storage)
+    shift
+    exec ./bin/vow storage "$@"
+    ;;
+  app|apps)
+    shift
+    exec ./bin/vow app "$@"
+    ;;
+  k3s|k3s:*)
+    sub="${1#k3s:}"
+    shift
+    if [[ "$sub" == "k3s" ]]; then
+      exec ./bin/vow k3s "$@"
     else
-      echo "==> K3s cluster is not running. Initializing and bringing up K3s..."
-      ./src/k3s_up.sh --skip-up
-      if ! kubectl get nodes >/dev/null 2>&1; then
-        echo "Error: K3s cluster failed to start." >&2
-        exit 1
-      fi
+      exec ./bin/vow k3s "$sub" "$@"
     fi
-  else
-    echo "THIS_K8S_TYPE is not set, aborting!"
-    exit 1
-  fi
-  set -eu
-  set -x
-  src/namespacer.sh monitoring
-  src/namespacer.sh nfs-server
-  initializer "$this_cwd/init/cluster"
-
-  if [[ ${THIS_EARLY_END} == 'true' ]]; then
-    exit 0
-  fi
-
-  # certmanager
-  src/certmanager.sh
-  w8_all_namespace cert-manager
-
-  kubectl apply -f .secrets/${THIS_SECRETS}.yaml
-  if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
-    src/traefik.sh
-  elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
-    src/nginx.sh
-    w8_all_namespace ingress-nginx
-  elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
-    src/haproxy.sh
-  else
-    echo 'unrecognized ingress'
-    exit 1
-  fi
-  if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    echo 'kind'
-  elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
-    echo 'k3d'
-  else
-    echo 'k3s'
-  fi
-  # CD Runners: ArgoCD and/or FluxCD (https://fluxcd.io)
-  if [[ "${THIS_CD_RUNNER:-argocd}" == "argocd" || "${THIS_CD_RUNNER:-argocd}" == "both" ]]; then
-    src/argocd.sh
-  fi
-  if [[ "${THIS_CD_RUNNER:-argocd}" == "flux" || "${THIS_CD_RUNNER:-argocd}" == "fluxcd" || "${THIS_CD_RUNNER:-argocd}" == "both" ]]; then
-    src/flux.sh
-  fi
-  #openEBS
-  src/openebs.sh
-  src/rook-ceph-operator.sh
-  src/csi-driver-nfs.sh
-  # kubegres
-  src/kubegres.sh
-  src/keycloak.sh
-  src/dockerCreds.sh
-  para_runner "${BIG_LIST}"
-}
-
-time main
+    ;;
+  waffle|waffle:*)
+    sub="${1#waffle:}"
+    shift
+    if [[ "$sub" == "waffle" ]]; then
+      exec ./bin/vow waffle "$@"
+    else
+      exec ./bin/vow waffle "$sub" "$@"
+    fi
+    ;;
+  *)
+    exec ./bin/vow "$@"
+    ;;
+esac

@@ -168,11 +168,11 @@ loki:
       size: ${THIS_DEFAULT_STORAGE_SIZE}
 
   minio:
-    replicas: 3
+    replicas: 1
     drivesPerNode: 1
-    mode: distributed
+    mode: standalone
     # Disable this if you want to enabled external s3 bucket, and uncomment the storage section above.
-    enabled: true
+    enabled: ${THIS_OPENEBS_ENABLE_MINIO:-false}
     persistence:
       # -- Enabled persistence for minio
       enabled: true

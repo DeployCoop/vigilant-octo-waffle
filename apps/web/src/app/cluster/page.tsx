@@ -2526,6 +2526,13 @@ echo "==> Node successfully joined!"`}
                     </div>
 
                     <div className="pt-2 flex justify-end gap-2">
+                      <Link
+                        href="/storage"
+                        className="px-3.5 py-1.5 bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border border-sky-500/40 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition"
+                      >
+                        <Settings className="w-3.5 h-3.5 text-sky-400" />
+                        <span>OpenEBS Console &amp; VG Config</span>
+                      </Link>
                       <button
                         type="button"
                         onClick={() => handleStorageInstall('openebs')}

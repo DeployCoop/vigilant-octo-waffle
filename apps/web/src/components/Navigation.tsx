@@ -33,6 +33,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
+import { AudioToggle } from '@/components/ui/AudioToggle';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -183,6 +184,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center space-x-3" suppressHydrationWarning>
+        <AudioToggle />
         <Link
           href="/docs"
           suppressHydrationWarning

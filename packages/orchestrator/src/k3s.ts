@@ -1,7 +1,31 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { loadProjectConfig } from './config.js';
 import { processManager, type TaskRun } from './executor.js';
+
+const execFileAsync = promisify(execFile);
+
+async function runSilentJsonQuery<T>(cmd: string, args: string[], cwd: string, fallback: T): Promise<T> {
+  try {
+    const { stdout } = await execFileAsync(cmd, args, { cwd, maxBuffer: 10 * 1024 * 1024 });
+    const jsonMatch = (stdout || '').match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]) as T;
+    }
+  } catch (err: any) {
+    if (err && typeof err.stdout === 'string') {
+      const jsonMatch = err.stdout.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[0]) as T;
+        } catch {}
+      }
+    }
+  }
+  return fallback;
+}
 
 export type K3sNodeRole = 'agent' | 'server';
 
@@ -725,36 +749,19 @@ export interface K3sHealthReport {
  */
 export async function getK3sHealth(projectRoot: string): Promise<K3sHealthReport> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_health.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, '--json'], { cwd: projectRoot });
-    await new Promise((resolve) => {
-      const check = setInterval(() => {
-        const t = processManager.getTask(task.id);
-        if (t && t.status !== 'running') {
-          clearInterval(check);
-          resolve(true);
-        }
-      }, 50);
-    });
-
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+  return runSilentJsonQuery<K3sHealthReport>(
+    'bash',
+    [scriptPath, '--json'],
+    projectRoot,
+    {
+      score: 0,
+      status: 'DOWN',
+      apiServer: { reachable: false },
+      nodes: { total: 0, ready: 0, notReady: 0 },
+      pods: { total: 0, failed: 0 },
+      issues: ['Unable to query K3s cluster health report'],
     }
-  } catch {
-    // fallback
-  }
-
-  return {
-    score: 0,
-    status: 'DOWN',
-    apiServer: { reachable: false },
-    nodes: { total: 0, ready: 0, notReady: 0 },
-    pods: { total: 0, failed: 0 },
-    issues: ['Unable to query K3s cluster health report'],
-  };
+  );
 }
 
 export interface K3sEtcdSnapshot {
@@ -773,29 +780,12 @@ export interface K3sEtcdStatus {
  */
 export async function getEtcdSnapshots(projectRoot: string): Promise<K3sEtcdStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_etcd.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'snapshot', 'list', '--json'], { cwd: projectRoot });
-    await new Promise((resolve) => {
-      const check = setInterval(() => {
-        const t = processManager.getTask(task.id);
-        if (t && t.status !== 'running') {
-          clearInterval(check);
-          resolve(true);
-        }
-      }, 50);
-    });
-
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-  } catch {
-    // fallback
-  }
-
-  return { snapshots: [] };
+  return runSilentJsonQuery<K3sEtcdStatus>(
+    'bash',
+    [scriptPath, 'snapshot', 'list', '--json'],
+    projectRoot,
+    { snapshots: [] }
+  );
 }
 
 /**
@@ -881,29 +871,12 @@ export interface K3sCertificatesReport {
  */
 export async function checkK3sCertificates(projectRoot: string): Promise<K3sCertificatesReport> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_certs.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'check', '--json'], { cwd: projectRoot });
-    await new Promise((resolve) => {
-      const check = setInterval(() => {
-        const t = processManager.getTask(task.id);
-        if (t && t.status !== 'running') {
-          clearInterval(check);
-          resolve(true);
-        }
-      }, 50);
-    });
-
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-  } catch {
-    // fallback
-  }
-
-  return { certificates: [] };
+  return runSilentJsonQuery<K3sCertificatesReport>(
+    'bash',
+    [scriptPath, 'check', '--json'],
+    projectRoot,
+    { certificates: [] }
+  );
 }
 
 /**
@@ -933,29 +906,12 @@ export interface K3sCisAuditReport {
  */
 export async function auditK3sCis(projectRoot: string): Promise<K3sCisAuditReport> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_cis.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, '--json'], { cwd: projectRoot });
-    await new Promise((resolve) => {
-      const check = setInterval(() => {
-        const t = processManager.getTask(task.id);
-        if (t && t.status !== 'running') {
-          clearInterval(check);
-          resolve(true);
-        }
-      }, 50);
-    });
-
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-  } catch {
-    // fallback
-  }
-
-  return { score: 100, totalChecks: 6, passedChecks: 6, checks: [] };
+  return runSilentJsonQuery<K3sCisAuditReport>(
+    'bash',
+    [scriptPath, '--json'],
+    projectRoot,
+    { score: 100, totalChecks: 6, passedChecks: 6, checks: [] }
+  );
 }
 
 export interface K3sUpgradeOptions {
@@ -1039,29 +995,8 @@ export async function getK3sVipStatus(
   const args = [scriptPath, 'status', '--json'];
   if (options?.vip) args.push('--vip', options.vip.trim());
   if (options?.interface) args.push('--interface', options.interface.trim());
-  try {
-    const task = processManager.runCommand('bash', args, { cwd: projectRoot });
-    await new Promise((resolve) => {
-      const check = setInterval(() => {
-        const t = processManager.getTask(task.id);
-        if (t && t.status !== 'running') {
-          clearInterval(check);
-          resolve(true);
-        }
-      }, 50);
-    });
 
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-  } catch {
-    // fallback
-  }
-
-  return {
+  return runSilentJsonQuery<K3sVipStatus>('bash', args, projectRoot, {
     vip: options?.vip || '192.168.1.100',
     interface: options?.interface || 'eth0',
     localBound: false,
@@ -1069,7 +1004,7 @@ export async function getK3sVipStatus(
     manifestDeployed: false,
     runningPods: 0,
     currentLeader: 'unknown',
-  };
+  });
 }
 
 export interface K3sBackupSyncOptions {
@@ -1135,24 +1070,19 @@ export interface K3sCniStatus {
 
 export async function getK3sCniStatus(projectRoot: string): Promise<K3sCniStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_cni.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-  } catch {
-    // fallback
-  }
-  return {
-    activeCni: 'flannel-default',
-    ebpfMode: false,
-    ciliumInstalled: false,
-    hubbleObservability: false,
-    tetragonSecurity: false,
-    clusterNodes: 1,
-  };
+  return runSilentJsonQuery<K3sCniStatus>(
+    'bash',
+    [scriptPath, 'status', '--json'],
+    projectRoot,
+    {
+      activeCni: 'flannel-default',
+      ebpfMode: false,
+      ciliumInstalled: false,
+      hubbleObservability: false,
+      tetragonSecurity: false,
+      clusterNodes: 1,
+    }
+  );
 }
 
 export function installK3sCni(projectRoot: string, options?: { withHubble?: boolean; withTetragon?: boolean; dryRun?: boolean }): TaskRun {
@@ -1174,23 +1104,18 @@ export interface K3sSecretsStatus {
 
 export async function getK3sSecretsStatus(projectRoot: string): Promise<K3sSecretsStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_secrets_rotate.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-  } catch {
-    // fallback
-  }
-  return {
-    encryptionAtRestEnabled: false,
-    configFile: '/etc/rancher/k3s/secrets-encryption.yaml',
-    activeProvider: 'none',
-    keyCount: 0,
-    lastRotated: 'none',
-  };
+  return runSilentJsonQuery<K3sSecretsStatus>(
+    'bash',
+    [scriptPath, 'status', '--json'],
+    projectRoot,
+    {
+      encryptionAtRestEnabled: false,
+      configFile: '/etc/rancher/k3s/secrets-encryption.yaml',
+      activeProvider: 'none',
+      keyCount: 0,
+      lastRotated: 'none',
+    }
+  );
 }
 
 export function rotateK3sSecrets(projectRoot: string, options?: { dryRun?: boolean }): TaskRun {
@@ -1220,17 +1145,12 @@ export interface K3sSecurityScanResult {
 
 export async function getK3sSecurityStatus(projectRoot: string): Promise<any> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_security_scan.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-  } catch {
-    // fallback
-  }
-  return { trivyInstalled: false, operatorInstalled: false, clusterAuditingReady: false };
+  return runSilentJsonQuery<any>(
+    'bash',
+    [scriptPath, 'status', '--json'],
+    projectRoot,
+    { trivyInstalled: false, operatorInstalled: false, clusterAuditingReady: false }
+  );
 }
 
 export function scanK3sSecurity(projectRoot: string, options?: { image?: string; namespace?: string; severity?: string }): TaskRun {
@@ -1246,6 +1166,38 @@ export function scanK3sSecurity(projectRoot: string, options?: { image?: string;
 // Phase 3: Distributed Storage & Snapshots
 // ==============================================================================
 
+export interface OpenEBSEngineStatus {
+  hostpath: boolean;
+  lvm: boolean;
+  zfs: boolean;
+  rawfile: boolean;
+  mayastor: boolean;
+  nats: boolean;
+  minio: boolean;
+  loki: boolean;
+  alloy: boolean;
+  nfs: boolean;
+}
+
+export interface HostVolumeGroup {
+  vg_name: string;
+  pv_count: string;
+  lv_count: string;
+  snap_count: string;
+  vg_attr: string;
+  vg_size: string;
+  vg_free: string;
+}
+
+export interface OpenEBSConfig {
+  vg: string;
+  fsType: string;
+  thinProvision: string;
+  shared: string;
+  storageClass: string;
+  isDefaultSc: string;
+}
+
 export interface K3sStorageStatus {
   defaultStorageClass: string;
   storageClasses: string[];
@@ -1254,36 +1206,80 @@ export interface K3sStorageStatus {
   totalPVCs: number;
   longhornActive: boolean;
   openebsActive: boolean;
+  lvmNodesRegistered?: number;
+  topologyKey?: string;
+  topologyNodes?: string[];
+  engines?: OpenEBSEngineStatus;
+  hostVolumeGroups?: HostVolumeGroup[];
+  config?: OpenEBSConfig;
+}
+
+export interface OpenEBSInstallOptions {
+  engine?: 'longhorn' | 'openebs';
+  replicas?: number;
+  vg?: string;
+  fsType?: 'ext4' | 'xfs' | 'btrfs';
+  thinProvision?: boolean;
+  shared?: boolean;
+  enableLvm?: boolean;
+  enableHostpath?: boolean;
+  enableZfs?: boolean;
+  enableRawfile?: boolean;
+  enableMayastor?: boolean;
+  enableNats?: boolean;
+  enableMinio?: boolean;
+  enableLoki?: boolean;
+  enableAlloy?: boolean;
+  enableNfs?: boolean;
+  setDefaultSc?: boolean;
+  labelNodes?: boolean;
 }
 
 export async function getK3sStorageStatus(projectRoot: string): Promise<K3sStorageStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_storage.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-  } catch {
-    // fallback
-  }
-  return {
-    defaultStorageClass: 'local-path',
-    storageClasses: ['local-path'],
-    csiDrivers: [],
-    totalPVs: 0,
-    totalPVCs: 0,
-    longhornActive: false,
-    openebsActive: false,
-  };
+  return runSilentJsonQuery<K3sStorageStatus>(
+    'bash',
+    [scriptPath, 'status', '--json'],
+    projectRoot,
+    {
+      defaultStorageClass: 'local-path',
+      storageClasses: ['local-path'],
+      csiDrivers: [],
+      totalPVs: 0,
+      totalPVCs: 0,
+      longhornActive: false,
+      openebsActive: false,
+    }
+  );
 }
 
-export function installK3sStorage(projectRoot: string, options?: { engine?: 'longhorn' | 'openebs'; replicas?: number }): TaskRun {
+export function installK3sStorage(projectRoot: string, options?: OpenEBSInstallOptions): TaskRun {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_storage.sh');
   const args = [scriptPath, 'install'];
   if (options?.engine) args.push('--engine', options.engine);
   if (options?.replicas) args.push('--replicas', String(options.replicas));
+  if (options?.vg) args.push('--vg', options.vg);
+  if (options?.fsType) args.push('--fstype', options.fsType);
+  if (options?.thinProvision) args.push('--thin-provision');
+  if (options?.shared) args.push('--shared');
+  if (options?.enableLvm !== undefined) args.push('--enable-lvm', String(options.enableLvm));
+  if (options?.enableHostpath !== undefined) args.push('--enable-hostpath', String(options.enableHostpath));
+  if (options?.enableZfs !== undefined) args.push('--enable-zfs', String(options.enableZfs));
+  if (options?.enableRawfile !== undefined) args.push('--enable-rawfile', String(options.enableRawfile));
+  if (options?.enableMayastor !== undefined) args.push('--enable-mayastor', String(options.enableMayastor));
+  if (options?.enableNats !== undefined) args.push('--enable-nats', String(options.enableNats));
+  if (options?.enableMinio !== undefined) args.push('--enable-minio', String(options.enableMinio));
+  if (options?.enableLoki !== undefined) args.push('--enable-loki', String(options.enableLoki));
+  if (options?.enableAlloy !== undefined) args.push('--enable-alloy', String(options.enableAlloy));
+  if (options?.enableNfs !== undefined) args.push('--enable-nfs', String(options.enableNfs));
+  if (options?.setDefaultSc) args.push('--set-default-sc');
+  if (options?.labelNodes) args.push('--label-nodes');
+  return processManager.runCommand('bash', args, { cwd: projectRoot });
+}
+
+export function testK3sStorageBenchmark(projectRoot: string, storageClass: string = 'openebs-lvmpv'): TaskRun {
+  const scriptPath = path.join(projectRoot, 'src', 'k3s_storage.sh');
+  const args = [scriptPath, 'benchmark', '--sc', storageClass];
   return processManager.runCommand('bash', args, { cwd: projectRoot });
 }
 
@@ -1310,25 +1306,20 @@ export interface K3sMonitoringStatus {
 
 export async function getK3sMonitoringStatus(projectRoot: string): Promise<K3sMonitoringStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_monitoring.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-  } catch {
-    // fallback
-  }
-  return {
-    namespace: 'monitoring',
-    victoriaMetricsActive: false,
-    vmagentActive: false,
-    alertmanagerActive: false,
-    monitoringPods: 0,
-    alertRulesDeployed: 0,
-    etcdScrapeConfigured: true,
-  };
+  return runSilentJsonQuery<K3sMonitoringStatus>(
+    'bash',
+    [scriptPath, 'status', '--json'],
+    projectRoot,
+    {
+      namespace: 'monitoring',
+      victoriaMetricsActive: false,
+      vmagentActive: false,
+      alertmanagerActive: false,
+      monitoringPods: 0,
+      alertRulesDeployed: 0,
+      etcdScrapeConfigured: true,
+    }
+  );
 }
 
 export function installK3sMonitoring(projectRoot: string, options?: { retention?: string; namespace?: string }): TaskRun {
@@ -1366,25 +1357,20 @@ export interface K3sGpuStatus {
 
 export async function getK3sGpuStatus(projectRoot: string): Promise<K3sGpuStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_gpu.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-  } catch {
-    // fallback
-  }
-  return {
-    nvidiaGpuPresent: false,
-    gpuModel: 'none',
-    vramMegabytes: 0,
-    containerToolkitInstalled: false,
-    containerdConfigured: false,
-    devicePluginRunning: false,
-    allocatableGpus: 0,
-  };
+  return runSilentJsonQuery<K3sGpuStatus>(
+    'bash',
+    [scriptPath, 'status', '--json'],
+    projectRoot,
+    {
+      nvidiaGpuPresent: false,
+      gpuModel: 'none',
+      vramMegabytes: 0,
+      containerToolkitInstalled: false,
+      containerdConfigured: false,
+      devicePluginRunning: false,
+      allocatableGpus: 0,
+    }
+  );
 }
 
 export function setupK3sGpu(projectRoot: string, options?: { dryRun?: boolean }): TaskRun {
@@ -1404,23 +1390,18 @@ export interface K3sModelCacheStatus {
 
 export async function getK3sModelCacheStatus(projectRoot: string): Promise<K3sModelCacheStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_model_cache.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-  } catch {
-    // fallback
-  }
-  return {
-    namespace: 'ai',
-    cachePvcExists: false,
-    pvcStatus: 'NotFound',
-    requestedCapacity: '0',
-    cachedModelsCount: 0,
-  };
+  return runSilentJsonQuery<K3sModelCacheStatus>(
+    'bash',
+    [scriptPath, 'status', '--json'],
+    projectRoot,
+    {
+      namespace: 'ai',
+      cachePvcExists: false,
+      pvcStatus: 'NotFound',
+      requestedCapacity: '0',
+      cachedModelsCount: 0,
+    }
+  );
 }
 
 export function setupK3sModelCache(projectRoot: string, options?: { namespace?: string; size?: string; storageClass?: string }): TaskRun {
@@ -1474,30 +1455,21 @@ export interface K3sHealerStatus {
 
 export async function getK3sHealerStatus(projectRoot: string): Promise<K3sHealerStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_healer.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'check', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const p = JSON.parse(jsonMatch[0]);
-      return {
-        clusterReachable: p.healerReady ?? true,
-        diskPressure: p.conditions?.diskPressure ?? false,
-        expiredCerts: p.conditions?.certExpiringSoon ?? false,
-        crashLoopPodsCount: p.conditions?.crashLoopPods ?? 0,
-        issues: p.issues || (p.conditions?.diskPressure ? [{
-          type: 'DiskPressure',
-          resource: 'node/local',
-          reason: `Root disk usage at ${p.conditions.rootDiskUsagePct}%`,
-          runbook: 'runbook_disk_pressure',
-          impact: 'Pod eviction risk',
-        }] : []),
-      };
-    }
-  } catch {
-    // fallback
+  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'check', '--json'], projectRoot, null);
+  if (p) {
+    return {
+      clusterReachable: p.healerReady ?? true,
+      diskPressure: p.conditions?.diskPressure ?? false,
+      expiredCerts: p.conditions?.certExpiringSoon ?? false,
+      crashLoopPodsCount: p.conditions?.crashLoopPods ?? 0,
+      issues: p.issues || (p.conditions?.diskPressure ? [{
+        type: 'DiskPressure',
+        resource: 'node/local',
+        reason: `Root disk usage at ${p.conditions.rootDiskUsagePct}%`,
+        runbook: 'runbook_disk_pressure',
+        impact: 'Pod eviction risk',
+      }] : []),
+    };
   }
   return {
     clusterReachable: false,
@@ -1545,33 +1517,24 @@ export interface K3sDrDrillStatus {
 
 export async function getK3sDrDrillStatus(projectRoot: string): Promise<K3sDrDrillStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_dr_drill.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const p = JSON.parse(jsonMatch[0]);
-      return {
-        latestDrill: p.latestDrill || {
-          drill_id: `drill_${p.lastDrillDate || 'latest'}`,
-          timestamp: p.lastDrillDate || new Date().toISOString(),
-          snapshot_tested: 'latest',
-          rto_seconds: p.rtoSeconds ?? 3,
-          rpo_hours: 1,
-          data_integrity_sha256: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-          sla_compliance: p.slaGrade ?? 'PASS_GRADE_A',
-          signed_by: 'vow-dr-engine',
-        },
-        totalDrillsExecuted: p.rtoSeconds ? 1 : 0,
-        lastRtoSeconds: p.rtoSeconds ?? 0,
-        lastSlaCompliance: p.slaGrade ?? 'PASS_GRADE_A',
-        certificates: p.certificates || (p.lastDrillDate ? [`dr_cert_${p.lastDrillDate}.json`] : []),
-      };
-    }
-  } catch {
-    // fallback
+  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'status', '--json'], projectRoot, null);
+  if (p) {
+    return {
+      latestDrill: p.latestDrill || {
+        drill_id: `drill_${p.lastDrillDate || 'latest'}`,
+        timestamp: p.lastDrillDate || new Date().toISOString(),
+        snapshot_tested: 'latest',
+        rto_seconds: p.rtoSeconds ?? 3,
+        rpo_hours: 1,
+        data_integrity_sha256: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        sla_compliance: p.slaGrade ?? 'PASS_GRADE_A',
+        signed_by: 'vow-dr-engine',
+      },
+      totalDrillsExecuted: p.rtoSeconds ? 1 : 0,
+      lastRtoSeconds: p.rtoSeconds ?? 0,
+      lastSlaCompliance: p.slaGrade ?? 'PASS_GRADE_A',
+      certificates: p.certificates || (p.lastDrillDate ? [`dr_cert_${p.lastDrillDate}.json`] : []),
+    };
   }
   return {
     latestDrill: null,
@@ -1616,25 +1579,16 @@ export interface K3sGatewayStatus {
 
 export async function getK3sGatewayStatus(projectRoot: string): Promise<K3sGatewayStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_gateway.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'status', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const p = JSON.parse(jsonMatch[0]);
-      return {
-        crdsInstalled: p.gatewayApiInstalled ?? false,
-        defaultGatewayExists: p.defaultGatewayActive ?? false,
-        gatewayStatus: p.defaultGatewayActive ? 'Active' : 'NotConfigured',
-        gatewayAddress: p.domain ? `gateway.${p.domain}` : '127.0.0.1',
-        routesCount: p.totalHttpRoutes ?? 0,
-        routes: p.routes ?? [],
-      };
-    }
-  } catch {
-    // fallback
+  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'status', '--json'], projectRoot, null);
+  if (p) {
+    return {
+      crdsInstalled: p.gatewayApiInstalled ?? false,
+      defaultGatewayExists: p.defaultGatewayActive ?? false,
+      gatewayStatus: p.defaultGatewayActive ? 'Active' : 'NotConfigured',
+      gatewayAddress: p.domain ? `gateway.${p.domain}` : '127.0.0.1',
+      routesCount: p.totalHttpRoutes ?? 0,
+      routes: p.routes ?? [],
+    };
   }
   return {
     crdsInstalled: false,
@@ -1720,27 +1674,18 @@ export interface K3sPoolStatus {
 
 export async function getK3sPoolStatus(projectRoot: string): Promise<K3sPoolStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_pool.sh');
-  try {
-    const task = processManager.runCommand('bash', [scriptPath, 'list', '--json'], { cwd: projectRoot });
-    await waitForTask(task.id);
-    const completedTask = processManager.getTask(task.id);
-    const logs = completedTask ? completedTask.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logs.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const p = JSON.parse(jsonMatch[0]);
-      const hypervisors = Object.entries(p.hypervisors || {})
-        .filter(([, v]) => Boolean(v))
-        .map(([k]) => k);
-      return {
-        detectedHypervisors: hypervisors.length > 0 ? hypervisors : ['docker'],
-        poolNodesCount: p.activeNodes ?? 1,
-        activeAgentsCount: p.activeNodes ?? 1,
-        idleCandidatesCount: p.pendingPodsRequiringNodes ?? 0,
-        pooledNodes: p.pooledNodes ?? [],
-      };
-    }
-  } catch {
-    // fallback
+  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'list', '--json'], projectRoot, null);
+  if (p) {
+    const hypervisors = Object.entries(p.hypervisors || {})
+      .filter(([, v]) => Boolean(v))
+      .map(([k]) => k);
+    return {
+      detectedHypervisors: hypervisors.length > 0 ? hypervisors : ['docker'],
+      poolNodesCount: p.activeNodes ?? 1,
+      activeAgentsCount: p.activeNodes ?? 1,
+      idleCandidatesCount: p.pendingPodsRequiringNodes ?? 0,
+      pooledNodes: p.pooledNodes ?? [],
+    };
   }
   return {
     detectedHypervisors: [],
@@ -1818,54 +1763,34 @@ export async function getK3sFinOpsStatus(projectRoot: string): Promise<K3sFinOps
   let gpuPower: K3sGpuPowerAnalytics | null = null;
   let wasteCost = 0;
 
-  try {
-    const rightSizeTask = processManager.runCommand('bash', [scriptPath, 'right-size', '--json'], { cwd: projectRoot });
-    await waitForTask(rightSizeTask.id);
-    const completedRight = processManager.getTask(rightSizeTask.id);
-    const logsRight = completedRight ? completedRight.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logsRight.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (Array.isArray(parsed.recommendations)) {
-        recommendations = parsed.recommendations.map((r: any) => ({
-          workload: r.workload || 'workload',
-          namespace: r.namespace || 'default',
-          container: r.workload || 'main',
-          currentCpuRequest: r.currentCpu || '500m',
-          p95CpuUsage: r.p95Cpu || '150m',
-          recommendedCpuRequest: r.recommendedCpu || '200m',
-          currentMemRequest: r.currentMem || '512Mi',
-          p95MemUsage: r.p95Mem || '200Mi',
-          recommendedMemRequest: r.recommendedMem || '256Mi',
-          potentialMonthlySavingsUsd: Math.round((r.wastePct ? (r.wastePct * 0.25) : 12.5) * 100) / 100,
-        }));
-        wasteCost = recommendations.reduce((acc, r) => acc + (r.potentialMonthlySavingsUsd || 0), 0);
-      }
-    }
-  } catch {
-    // fallback
+  const parsed = await runSilentJsonQuery<any>('bash', [scriptPath, 'right-size', '--json'], projectRoot, null);
+  if (parsed && Array.isArray(parsed.recommendations)) {
+    recommendations = parsed.recommendations.map((r: any) => ({
+      workload: r.workload || 'workload',
+      namespace: r.namespace || 'default',
+      container: r.workload || 'main',
+      currentCpuRequest: r.currentCpu || '500m',
+      p95CpuUsage: r.p95Cpu || '150m',
+      recommendedCpuRequest: r.recommendedCpu || '200m',
+      currentMemRequest: r.currentMem || '512Mi',
+      p95MemUsage: r.p95Mem || '200Mi',
+      recommendedMemRequest: r.recommendedMem || '256Mi',
+      potentialMonthlySavingsUsd: Math.round((r.wastePct ? (r.wastePct * 0.25) : 12.5) * 100) / 100,
+    }));
+    wasteCost = recommendations.reduce((acc, r) => acc + (r.potentialMonthlySavingsUsd || 0), 0);
   }
 
-  try {
-    const gpuTask = processManager.runCommand('bash', [scriptPath, 'gpu', '--json'], { cwd: projectRoot });
-    await waitForTask(gpuTask.id);
-    const completedGpu = processManager.getTask(gpuTask.id);
-    const logsGpu = completedGpu ? completedGpu.logs.map((l) => l.message).join('\n') : '';
-    const jsonMatch = logsGpu.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const p = JSON.parse(jsonMatch[0]);
-      gpuPower = {
-        gpuModel: p.gpuModel || 'NVIDIA GeForce RTX 3060',
-        powerUsageWatts: p.telemetry?.powerDrawWatts ?? 8,
-        powerLimitWatts: p.telemetry?.powerLimitWatts ?? 170,
-        gpuUtilizationPct: p.telemetry?.gpuUtilizationPct ?? 0,
-        vramUsedMb: p.telemetry?.vramUsedMb ?? 319,
-        vramTotalMb: p.telemetry?.vramTotalMb ?? 12288,
-        estimatedCostPer1MTokensUsd: p.finops?.estimatedCostPer1MTokensUsd ?? 0.0061,
-      };
-    }
-  } catch {
-    // fallback
+  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'gpu', '--json'], projectRoot, null);
+  if (p) {
+    gpuPower = {
+      gpuModel: p.gpuModel || 'NVIDIA GeForce RTX 3060',
+      powerUsageWatts: p.telemetry?.powerDrawWatts ?? 8,
+      powerLimitWatts: p.telemetry?.powerLimitWatts ?? 170,
+      gpuUtilizationPct: p.telemetry?.gpuUtilizationPct ?? 0,
+      vramUsedMb: p.telemetry?.vramUsedMb ?? 319,
+      vramTotalMb: p.telemetry?.vramTotalMb ?? 12288,
+      estimatedCostPer1MTokensUsd: p.finops?.estimatedCostPer1MTokensUsd ?? 0.0061,
+    };
   }
 
   const baseClusterCost = 145.0; // Baseline estimated node compute cost

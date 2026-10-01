@@ -25,6 +25,15 @@ PVC_NAME=""
 SNAPSHOT_NAME=""
 LABEL_NODES="${THIS_OPENEBS_LVM_LABEL_NODES:-true}"
 LVM_VG="${THIS_LVM_VG:-${THIS_NAME:-example}VG}"
+if [[ "${LVM_VG}" == "exampleVG" || -z "${LVM_VG}" ]]; then
+  if command -v vgs >/dev/null 2>&1; then
+    detected_vg=$(sudo -n vgs --noheadings -o vg_name 2>/dev/null | awk '{print $1}' | head -n 1 || true)
+    if [[ -n "${detected_vg}" ]]; then
+      LVM_VG="${detected_vg}"
+      export THIS_LVM_VG="${detected_vg}"
+    fi
+  fi
+fi
 LVM_VG_PATTERN="${THIS_LVM_VG_PATTERN:-.*}"
 TOPOLOGY_KEY="${THIS_OPENEBS_LVM_TOPOLOGY_KEY:-openebs.io/lvm}"
 TOPOLOGY_VALUE="${THIS_OPENEBS_LVM_TOPOLOGY_VALUE:-true}"
@@ -33,8 +42,14 @@ SHARED_VOL="${THIS_LVM_SHARED:-yes}"
 ACTION="${1:-status}"
 shift || true
 
+STORAGE_CLASS=""
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --sc|--storageclass|--storage-class)
+      STORAGE_CLASS="$2"
+      shift 2
+      ;;
     --json)
       JSON_OUTPUT=true
       shift
@@ -80,6 +95,54 @@ while [[ $# -gt 0 ]]; do
     --shared)
       SHARED_VOL="yes"
       export THIS_LVM_SHARED="yes"
+      shift
+      ;;
+    --fstype)
+      export THIS_LVM_FSTYPE="$2"
+      shift 2
+      ;;
+    --enable-lvm)
+      export THIS_OPENEBS_ENGINE_LVM="$2"
+      shift 2
+      ;;
+    --enable-hostpath)
+      export THIS_OPENEBS_ENGINE_HOSTPATH="$2"
+      shift 2
+      ;;
+    --enable-zfs)
+      export THIS_OPENEBS_ENGINE_ZFS="$2"
+      shift 2
+      ;;
+    --enable-rawfile)
+      export THIS_OPENEBS_ENGINE_RAWFILE="$2"
+      shift 2
+      ;;
+    --enable-mayastor)
+      export THIS_OPENEBS_ENGINE_MAYASTOR="$2"
+      shift 2
+      ;;
+    --enable-nats)
+      export THIS_OPENEBS_ENABLE_NATS="$2"
+      shift 2
+      ;;
+    --enable-minio)
+      export THIS_OPENEBS_ENABLE_MINIO="$2"
+      shift 2
+      ;;
+    --enable-loki)
+      export THIS_OPENEBS_ENABLE_LOKI="$2"
+      shift 2
+      ;;
+    --enable-alloy)
+      export THIS_OPENEBS_ENABLE_ALLOY="$2"
+      shift 2
+      ;;
+    --enable-nfs)
+      export THIS_OPENEBS_INSTALL_NFS="$2"
+      shift 2
+      ;;
+    --set-default-sc)
+      export THIS_LVM_IS_DEFAULT_SC="true"
       shift
       ;;
     --pvc)
@@ -261,6 +324,56 @@ cmd_status() {
         labeled_nodes+=("${n}")
       fi
     done
+    local hostpath_active=false
+    local lvm_active=false
+    local zfs_active=false
+    local rawfile_active=false
+    local mayastor_active=false
+    local minio_active=false
+    local nats_active=false
+    local loki_active=false
+    local alloy_active=false
+    local nfs_active=false
+
+    if kubectl get deployment -n openebs openebs-localpv-provisioner --no-headers 2>/dev/null | grep -q "1/1"; then
+      hostpath_active=true
+    fi
+    if kubectl get pods -n openebs -l app=openebs-lvm-node --no-headers 2>/dev/null | grep -q "Running" || kubectl get csidriver local.csi.openebs.io >/dev/null 2>&1; then
+      lvm_active=true
+    fi
+    if kubectl get pods -n openebs -l app=openebs-zfs-node --no-headers 2>/dev/null | grep -q "Running" || kubectl get csidriver zfs.csi.openebs.io >/dev/null 2>&1; then
+      zfs_active=true
+    fi
+    if kubectl get csidriver rawfile.csi.openebs.io >/dev/null 2>&1; then
+      rawfile_active=true
+    fi
+    if kubectl get csidriver io.openebs.csi-mayastor >/dev/null 2>&1; then
+      mayastor_active=true
+    fi
+    if kubectl get pods -n openebs -l app.kubernetes.io/name=minio --no-headers 2>/dev/null | grep -q "Running" || kubectl get pods -n minio --no-headers 2>/dev/null | grep -q "Running"; then
+      minio_active=true
+    fi
+    if kubectl get pods -n openebs -l app.kubernetes.io/name=nats --no-headers 2>/dev/null | grep -q "Running"; then
+      nats_active=true
+    fi
+    if kubectl get pods -n openebs -l app=loki --no-headers 2>/dev/null | grep -q "Running"; then
+      loki_active=true
+    fi
+    if kubectl get pods -n openebs -l app.kubernetes.io/name=alloy --no-headers 2>/dev/null | grep -q "Running"; then
+      alloy_active=true
+    fi
+    if kubectl get pods -n nfs-server --no-headers 2>/dev/null | grep -q "Running"; then
+      nfs_active=true
+    fi
+  fi
+
+  local vgs_json="[]"
+  if command -v vgs >/dev/null 2>&1; then
+    local raw_vgs
+    raw_vgs=$(vgs --reportformat json 2>/dev/null || true)
+    if [[ -n "${raw_vgs}" ]] && echo "${raw_vgs}" | grep -q '"report"'; then
+      vgs_json=$(echo "${raw_vgs}" | jq -c '.report[0].vg // []' 2>/dev/null || echo "[]")
+    fi
   fi
 
   if [[ "${JSON_OUTPUT}" == "true" ]]; then
@@ -293,7 +406,28 @@ cmd_status() {
   "openebsActive": ${openebs_running},
   "lvmNodesRegistered": ${lvm_nodes_count},
   "topologyKey": "${THIS_OPENEBS_LVM_TOPOLOGY_KEY:-openebs.io/lvm}",
-  "topologyNodes": [$(printf '"%s",' "${labeled_nodes[@]}" | sed 's/,$//')]
+  "topologyNodes": [$(printf '"%s",' "${labeled_nodes[@]}" | sed 's/,$//')],
+  "engines": {
+    "hostpath": ${hostpath_active},
+    "lvm": ${lvm_active},
+    "zfs": ${zfs_active},
+    "rawfile": ${rawfile_active},
+    "mayastor": ${mayastor_active},
+    "nats": ${nats_active},
+    "minio": ${minio_active},
+    "loki": ${loki_active},
+    "alloy": ${alloy_active},
+    "nfs": ${nfs_active}
+  },
+  "hostVolumeGroups": ${vgs_json},
+  "config": {
+    "vg": "${THIS_LVM_VG:-AirVG}",
+    "fsType": "${THIS_LVM_FSTYPE:-ext4}",
+    "thinProvision": "${THIS_LVM_THIN_PROVISION:-no}",
+    "shared": "${THIS_LVM_SHARED:-yes}",
+    "storageClass": "${THIS_LVM_STORAGECLASS:-openebs-lvmpv}",
+    "isDefaultSc": "${THIS_LVM_IS_DEFAULT_SC:-false}"
+  }
 }
 EOF
     return 0
@@ -382,6 +516,137 @@ cmd_list_snapshots() {
   kubectl get volumesnapshot -A 2>/dev/null || echo "No VolumeSnapshots found."
 }
 
+cmd_benchmark() {
+  local sc="${STORAGE_CLASS}"
+  if [[ -z "${sc}" ]]; then
+    sc=$(kubectl get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null || true)
+    if [[ -z "${sc}" ]]; then
+      sc=$(kubectl get sc -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "local-path")
+    fi
+  fi
+
+  local target_ns="default"
+  if [[ -n "${THIS_NAMESPACE:-}" ]] && kubectl get namespace "${THIS_NAMESPACE}" >/dev/null 2>&1; then
+    target_ns="${THIS_NAMESPACE}"
+  fi
+
+  local run_id="bench-$(date +%s)"
+  local pvc_bench="storage-bench-pvc-${run_id}"
+  local pod_bench="storage-bench-pod-${run_id}"
+
+  echo "==> Running storage benchmark on StorageClass '${sc}' (namespace: ${target_ns})..."
+
+  cleanup() {
+    if [[ -n "${pod_bench:-}" ]]; then
+      kubectl delete pod "${pod_bench}" -n "${target_ns:-default}" --ignore-not-found --grace-period=0 --force >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${pvc_bench:-}" ]]; then
+      kubectl delete pvc "${pvc_bench}" -n "${target_ns:-default}" --ignore-not-found --grace-period=0 --force >/dev/null 2>&1 || true
+    fi
+  }
+  trap cleanup EXIT
+
+  cat <<EOF | kubectl apply -f - >/dev/null
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${pvc_bench}
+  namespace: ${target_ns}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ${sc}
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${pod_bench}
+  namespace: ${target_ns}
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ${pvc_bench}
+  containers:
+    - name: bench
+      image: alpine:latest
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          echo "Starting disk benchmark..."
+          # Sequential Write 100MB
+          START=\$(date +%s%N)
+          dd if=/dev/zero of=/data/testfile bs=1M count=100 conv=fdatasync 2>/dev/null
+          END=\$(date +%s%N)
+          ELAPSED_MS=\$(( (END - START) / 1000000 ))
+          if [ "\$ELAPSED_MS" -gt 0 ]; then
+            THROUGHPUT_MB=\$(( 100 * 1000 / ELAPSED_MS ))
+          else
+            THROUGHPUT_MB=100
+          fi
+
+          # Random 4k write latency test
+          START_4K=\$(date +%s%N)
+          dd if=/dev/zero of=/data/testfile4k bs=4k count=1000 conv=fdatasync 2>/dev/null
+          END_4K=\$(date +%s%N)
+          LATENCY_MS=\$(( (END_4K - START_4K) / 1000000 ))
+
+          rm -f /data/testfile /data/testfile4k
+          echo "RESULT:sc=${sc}:throughput_mb_s=\${THROUGHPUT_MB}:seq_write_ms=\${ELAPSED_MS}:lat_4k_ms=\${LATENCY_MS}"
+      volumeMounts:
+        - name: data
+          mountPath: /data
+EOF
+
+  echo "--> Waiting for benchmark pod '${pod_bench}' to complete..."
+  kubectl wait --for=condition=Ready pod/"${pod_bench}" -n "${target_ns}" --timeout=60s >/dev/null 2>&1 || true
+  kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/"${pod_bench}" -n "${target_ns}" --timeout=90s >/dev/null 2>&1 || true
+
+  local raw_output
+  raw_output=$(kubectl logs "${pod_bench}" -n "${target_ns}" 2>/dev/null || echo "")
+
+  local throughput_mb_s="N/A"
+  local seq_write_ms="N/A"
+  local lat_4k_ms="N/A"
+
+  if [[ "${raw_output}" =~ RESULT:sc=([^:]+):throughput_mb_s=([0-9]+):seq_write_ms=([0-9]+):lat_4k_ms=([0-9]+) ]]; then
+    throughput_mb_s="${BASH_REMATCH[2]}"
+    seq_write_ms="${BASH_REMATCH[3]}"
+    lat_4k_ms="${BASH_REMATCH[4]}"
+  fi
+
+  if [[ "${JSON_OUTPUT}" == "true" ]]; then
+    cat <<EOF
+{
+  "storageClass": "${sc}",
+  "namespace": "${target_ns}",
+  "status": "completed",
+  "metrics": {
+    "sequentialWriteSpeedMBs": ${throughput_mb_s:-0},
+    "sequentialWriteTimeMs": ${seq_write_ms:-0},
+    "random4kWriteTimeMs": ${lat_4k_ms:-0}
+  }
+}
+EOF
+    return 0
+  fi
+
+  echo ""
+  echo "=================================================================="
+  echo "               Storage Benchmark Performance Report               "
+  echo "=================================================================="
+  echo "  StorageClass Tested     : ${sc}"
+  echo "  Namespace               : ${target_ns}"
+  echo "  Sequential Write Speed  : ${throughput_mb_s} MB/s"
+  echo "  Sequential Write 100MB  : ${seq_write_ms} ms"
+  echo "  Random 4K (1000 ops)    : ${lat_4k_ms} ms"
+  echo "=================================================================="
+}
+
 case "${ACTION}" in
   status)
     cmd_status
@@ -402,6 +667,9 @@ case "${ACTION}" in
     ;;
   list-snapshots)
     cmd_list_snapshots
+    ;;
+  benchmark|bench)
+    cmd_benchmark
     ;;
   *)
     cmd_status

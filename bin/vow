@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${THIS_DIR}/.." && pwd)"
+
+export PATH="/root/.nvm/versions/node/v24.21.0/bin:${PATH}"
+
+exec node "${ROOT_DIR}/apps/ink/bin/vow.js" "$@"

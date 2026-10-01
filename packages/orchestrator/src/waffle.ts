@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import YAML from 'yaml';
 import { z } from 'zod';
 import { loadProjectConfig, getChartsDirectory } from './config.js';
+import { checkOpenEbsStatus, isOpenEbsInstalledAndReady } from './storage.js';
 
 const execAsync = promisify(exec);
 
@@ -829,32 +830,39 @@ export class WaffleRunner extends EventEmitter {
       );
 
     if (needsOpenEBS) {
-      this.logToRun('[PREFLIGHT] OpenEBS Dynamic LocalPV required. Verifying cluster StorageClass...');
+      this.logToRun('[PREFLIGHT] OpenEBS Dynamic LocalPV required. Verifying cluster StorageClass and provisioner...');
       if (!dryRun) {
-        try {
-          const { stdout } = await execAsync('kubectl get sc openebs-hostpath -o jsonpath="{.metadata.name}"');
-          if (stdout.trim() === 'openebs-hostpath') {
-            this.logToRun('[PREFLIGHT] StorageClass "openebs-hostpath" is verified and active.');
-            return;
-          }
-        } catch {
-          this.logToRun('[PREFLIGHT] StorageClass "openebs-hostpath" not found. Initiating dynamic provisioning...');
-          // Check if local openebs chart exists
-          const localOpenEBSChart = path.join(baseDir, 'openebs');
-          if (fs.existsSync(localOpenEBSChart)) {
-            this.logToRun('[PREFLIGHT] Found local OpenEBS chart at ./openebs. Installing via Helm...');
+        const openebsStatus = await checkOpenEbsStatus(this.projectRoot);
+        if (openebsStatus.isReady) {
+          this.logToRun(`[PREFLIGHT] OpenEBS is verified and active: ${openebsStatus.message}.`);
+          return;
+        }
+
+        this.logToRun('[PREFLIGHT] OpenEBS not fully detected. Initiating dynamic provisioning...');
+        // Check if local openebs chart exists
+        const localOpenEBSChart = path.join(baseDir, 'openebs');
+        if (fs.existsSync(localOpenEBSChart)) {
+          this.logToRun('[PREFLIGHT] Found local OpenEBS chart at ./openebs. Installing via Helm...');
+          try {
             await execAsync(`helm upgrade --install openebs ${JSON.stringify(localOpenEBSChart)} --namespace openebs --create-namespace --wait --timeout 5m`);
             this.logToRun('[PREFLIGHT] Successfully deployed OpenEBS Dynamic LocalPV provisioner.');
-          } else {
-            // Attempt storage script fallback
-            const storageScript = path.join(this.projectRoot, 'src', 'k3s_storage.sh');
-            if (fs.existsSync(storageScript)) {
-              this.logToRun('[PREFLIGHT] Running src/k3s_storage.sh install --engine openebs...');
-              await execAsync(`bash ${JSON.stringify(storageScript)} install --engine openebs`);
-              this.logToRun('[PREFLIGHT] OpenEBS provisioned via cluster storage script.');
+          } catch (err: any) {
+            const recheck = await checkOpenEbsStatus(this.projectRoot);
+            if (recheck.isReady) {
+              this.logToRun(`[PREFLIGHT] OpenEBS is verified active despite Helm upgrade notice: ${recheck.message}`);
             } else {
-              this.logToRun('[PREFLIGHT] Warning: OpenEBS provisioner script not available. Proceeding with deployment...');
+              throw err;
             }
+          }
+        } else {
+          // Attempt storage script fallback
+          const storageScript = path.join(this.projectRoot, 'src', 'k3s_storage.sh');
+          if (fs.existsSync(storageScript)) {
+            this.logToRun('[PREFLIGHT] Running src/k3s_storage.sh install --engine openebs...');
+            await execAsync(`bash ${JSON.stringify(storageScript)} install --engine openebs`);
+            this.logToRun('[PREFLIGHT] OpenEBS provisioned via cluster storage script.');
+          } else {
+            this.logToRun('[PREFLIGHT] Warning: OpenEBS provisioner script not available. Proceeding with deployment...');
           }
         }
       } else {
@@ -904,6 +912,40 @@ export class WaffleRunner extends EventEmitter {
       const releaseName = step.releaseName || step.id;
       const namespace = step.namespace || pipeline.settings?.defaultNamespace || 'default';
       const timeout = step.timeout || '5m';
+
+      // OpenEBS idempotency detection:
+      // If this step deploys OpenEBS (chart path, step id, or release name),
+      // verify if OpenEBS is already operational in the cluster to prevent Helm immutable field conflicts.
+      const isOpenEbsStep =
+        step.id.toLowerCase().includes('openebs') ||
+        releaseName.toLowerCase().includes('openebs') ||
+        step.chart.toLowerCase().includes('openebs');
+
+      if (isOpenEbsStep && !dryRun) {
+        log('Checking if OpenEBS Storage Fabric is already active in cluster...');
+        const openebsStatus = await checkOpenEbsStatus(this.projectRoot);
+        if (openebsStatus.isReady) {
+          log('[openebs] OpenEBS is already deployed and operational in cluster:');
+          if (openebsStatus.storageClasses.length > 0) {
+            log(`  * StorageClasses: ${openebsStatus.storageClasses.join(', ')}`);
+          }
+          if (openebsStatus.readyDeployments.length > 0) {
+            log(`  * Ready Deployments: ${openebsStatus.readyDeployments.join(', ')}`);
+          }
+          log(`  * Running Pods: ${openebsStatus.runningPods}`);
+          log('[openebs] Skipping "helm upgrade" to prevent immutable field conflicts (StorageClass parameters & Deployment selector).');
+
+          stepProg.status = 'completed';
+          stepProg.finishedAt = new Date().toISOString();
+          stepProg.durationMs = Date.now() - startTimer;
+          runProgress.completedSteps++;
+
+          log(`Step "${step.name}" finished in ${(stepProg.durationMs / 1000).toFixed(1)}s (already active).`);
+          this.emit('step_complete', { stepId: step.id, status: 'completed' });
+          this.emit('progress', runProgress);
+          return true;
+        }
+      }
 
       log(`Preparing Helm deployment: release="${releaseName}", namespace="${namespace}", chart="${step.chart}"`);
 
@@ -978,6 +1020,35 @@ export class WaffleRunner extends EventEmitter {
       this.emit('progress', runProgress);
       return true;
     } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      const releaseName = step.releaseName || step.id;
+      const isOpenEbsStep =
+        step.id.toLowerCase().includes('openebs') ||
+        releaseName.toLowerCase().includes('openebs') ||
+        step.chart.toLowerCase().includes('openebs');
+
+      if (isOpenEbsStep && (errMsg.includes('field is immutable') || errMsg.includes('cannot patch'))) {
+        const fallbackCheck = await checkOpenEbsStatus(this.projectRoot).catch(() => ({
+          isReady: false,
+          message: '',
+          storageClasses: [],
+          readyDeployments: [],
+          runningPods: 0,
+        }));
+        if (fallbackCheck.isReady) {
+          log(`[openebs] Warning: Helm upgrade reported immutable field conflict, but OpenEBS is verified active in cluster: ${fallbackCheck.message}`);
+          log(`[openebs] Marking step "${step.name}" as completed.`);
+
+          stepProg.status = 'completed';
+          stepProg.finishedAt = new Date().toISOString();
+          stepProg.durationMs = Date.now() - startTimer;
+          runProgress.completedSteps++;
+          this.emit('step_complete', { stepId: step.id, status: 'completed' });
+          this.emit('progress', runProgress);
+          return true;
+        }
+      }
+
       stepProg.status = 'failed';
       stepProg.finishedAt = new Date().toISOString();
       stepProg.durationMs = Date.now() - startTimer;

@@ -47,7 +47,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [activeTaskTitle, setActiveTaskTitle] = useState<string | null>(null);
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
-  const [autoPopOnNewTask, setAutoPopOnNewTaskState] = useState<boolean>(true);
+  const [autoPopOnNewTask, setAutoPopOnNewTaskState] = useState<boolean>(false);
 
   // Track task IDs we've already seen so we only auto-pop on genuinely new running tasks
   const seenTaskIdsRef = useRef<Set<string>>(new Set());
@@ -122,7 +122,10 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
         for (const t of list) {
           if (!seenTaskIdsRef.current.has(t.id)) {
             seenTaskIdsRef.current.add(t.id);
-            if (t.status === 'running') {
+            const isInternalQuery = (t.args || []).some(
+              (a) => a === '--json' || a === 'status' || a === 'list' || a === 'check'
+            );
+            if (t.status === 'running' && !isInternalQuery) {
               const cmdLabel = `${t.command} ${t.args.slice(0, 2).join(' ')}`.trim();
               openTerminal(t.id, cmdLabel || 'Process Execution');
               break;

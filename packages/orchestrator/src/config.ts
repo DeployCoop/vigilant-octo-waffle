@@ -114,8 +114,29 @@ export function parseEnvFile(content: string): Record<string, string> {
     if (!trimmed || trimmed.startsWith('#')) continue;
     const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
     if (match) {
-      const [, key, val] = match;
-      result[key] = val.replace(/^["']|["']$/g, '').trim();
+      const [, key, rawVal] = match;
+      let val = rawVal.trim();
+      if (val.startsWith('"')) {
+        const closingQuote = val.indexOf('"', 1);
+        if (closingQuote !== -1) {
+          val = val.substring(1, closingQuote);
+        } else {
+          val = val.replace(/^["']|["']$/g, '').trim();
+        }
+      } else if (val.startsWith("'")) {
+        const closingQuote = val.indexOf("'", 1);
+        if (closingQuote !== -1) {
+          val = val.substring(1, closingQuote);
+        } else {
+          val = val.replace(/^["']|["']$/g, '').trim();
+        }
+      } else {
+        const commentIdx = val.indexOf('#');
+        if (commentIdx !== -1) {
+          val = val.substring(0, commentIdx).trim();
+        }
+      }
+      result[key] = val;
     }
   }
   return result;
@@ -139,13 +160,33 @@ export function parseEnablerFile(content: string): Record<string, boolean> {
 }
 
 /**
+ * Traverses upwards to locate the workspace root containing pnpm-workspace.yaml or src/default.env
+ */
+export function findProjectRoot(startDir: string = process.cwd()): string {
+  let curr = path.resolve(startDir);
+  while (curr !== path.dirname(curr)) {
+    if (
+      fs.existsSync(path.join(curr, 'pnpm-workspace.yaml')) ||
+      fs.existsSync(path.join(curr, 'src', 'default.env'))
+    ) {
+      return curr;
+    }
+    curr = path.dirname(curr);
+  }
+  return startDir;
+}
+
+/**
  * Loads entire configuration from project root directory
  */
-export function loadProjectConfig(projectRoot: string): VowConfig {
-  const defaultEnvPath = path.join(projectRoot, 'src', 'default.env');
-  const userEnvPath = path.join(projectRoot, '.env');
-  const enablerPath = path.join(projectRoot, '.env.enabler');
-  const exampleEnablerPath = path.join(projectRoot, 'src', 'example.env.enabler');
+export function loadProjectConfig(projectRoot: string = findProjectRoot()): VowConfig {
+  const resolvedRoot = fs.existsSync(path.join(projectRoot, 'src', 'default.env'))
+    ? projectRoot
+    : findProjectRoot(projectRoot);
+  const defaultEnvPath = path.join(resolvedRoot, 'src', 'default.env');
+  const userEnvPath = path.join(resolvedRoot, '.env');
+  const enablerPath = path.join(resolvedRoot, '.env.enabler');
+  const exampleEnablerPath = path.join(resolvedRoot, 'src', 'example.env.enabler');
 
   let configMap: Record<string, string> = {};
 

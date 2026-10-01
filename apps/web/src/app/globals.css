@@ -46,3 +46,104 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* Cyberdeck Glassmorphism */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+.glass-card-interactive {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-interactive:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+  transform: translateY(-2px);
+}
+
+.neon-glow-cyan {
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.35);
+}
+
+.neon-glow-emerald {
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.35);
+}
+
+.neon-glow-amber {
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.35);
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes orbitClockwise {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbitCounterClockwise {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes sonarPing {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+}
+
+.animate-shimmer {
+  background-size: 200% 100%;
+  animation: shimmer 2.5s infinite linear;
+}
+
+.animate-orbit-cw {
+  animation: orbitClockwise 8s linear infinite;
+}
+
+.animate-orbit-ccw {
+  animation: orbitCounterClockwise 12s linear infinite;
+}
+
+.animate-sonar {
+  animation: sonarPing 3s ease-in-out infinite;
+}
+
+/* CSS Registered Property for smooth 60fps Progress Ring transitions */
+@property --value {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}

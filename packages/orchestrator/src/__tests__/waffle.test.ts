@@ -210,4 +210,36 @@ stages: []
     assert.equal(recorded?.runId, run.runId);
     assert.equal(recorded?.status, 'completed');
   });
+
+  it('detects OpenEBS step during execution and avoids failing on immutable fields', async () => {
+    const runner = new WaffleRunner(process.cwd());
+    const pipeline: WafflePipeline = {
+      metadata: { name: 'test-openebs-detect' },
+      stages: [
+        {
+          id: 'storage-stage',
+          name: 'Storage',
+          steps: [
+            {
+              id: 'openebs',
+              name: 'OpenEBS LocalPV Provisioner',
+              chart: '/root/charts/openebs',
+              namespace: 'openebs',
+            },
+          ],
+        },
+      ],
+    };
+
+    const runResult = await runner.executePipeline({
+      sourceId: 'openebs-detect-test',
+      pipeline,
+      baseDir: process.cwd(),
+      dryRun: false,
+    });
+
+    assert.equal(runResult.status, 'completed');
+    assert.equal(runResult.completedSteps, 1);
+    assert.equal(runResult.failedSteps, 0);
+  });
 });

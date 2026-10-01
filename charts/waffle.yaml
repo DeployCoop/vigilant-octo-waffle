@@ -1,0 +1,95 @@
+apiVersion: waffle.dev/v1
+kind: WafflePipeline
+metadata:
+  name: canonical-cloud-stack
+  version: 1.0.0
+  description: Canonical production-grade cloud stack with storage, database, caching, and web layers.
+  authors:
+    - name: Vigilant Octo Waffle Community
+      email: dev@vow.local
+  tags:
+    - canonical
+    - production
+    - postgres
+    - redis
+    - nextcloud
+
+settings:
+  defaultNamespace: canonical-stack
+  defaultStorageClass: local-path
+  defaultClusterIssuer: letsencrypt-prod
+  globalTimeout: 10m
+  rollbackOnFailure: true
+
+preflight:
+  storage:
+    requireStorageClass: local-path
+    autoInstallOpenEBS: false
+  ingress:
+    requireController: nginx
+  resources:
+    minCpuCores: 2
+    minMemoryGb: 4
+
+stages:
+  - id: 01-storage-and-secrets
+    name: Foundation & Secrets
+    description: Core cluster namespaces and storage preparation
+    mode: parallel
+    steps:
+      - id: openebs-provisioner
+        name: OpenEBS LocalPV
+        chart: openebs
+        releaseName: openebs-core
+        namespace: openebs
+        values:
+          localpv-provisioner:
+            enabled: true
+
+  - id: 02-data-layer
+    name: Stateful Data Tier
+    description: High-availability Postgres and Redis backends
+    mode: parallel
+    steps:
+      - id: postgres-db
+        name: PostgreSQL Database
+        chart: postgres
+        releaseName: postgres-main
+        namespace: canonical-stack
+        values:
+          auth:
+            database: appdb
+            username: appuser
+        healthChecks:
+          - type: podReady
+            timeout: 2m
+
+      - id: redis-cache
+        name: Redis Distributed Cache
+        chart: redis
+        releaseName: redis-master
+        namespace: canonical-stack
+        values:
+          architecture: standalone
+        healthChecks:
+          - type: podReady
+            timeout: 2m
+
+  - id: 03-application-tier
+    name: Application & Ingress Tier
+    description: Nextcloud collaborative workspace and monitoring
+    mode: series
+    steps:
+      - id: nextcloud-app
+        name: Nextcloud Hub
+        chart: nextcloud
+        releaseName: nextcloud
+        namespace: canonical-stack
+        values:
+          nextcloud:
+            host: nextcloud.example.com
+        healthChecks:
+          - type: http
+            url: http://nextcloud.canonical-stack.svc.cluster.local:80/status.php
+            expectedStatus: 200
+            timeout: 3m
