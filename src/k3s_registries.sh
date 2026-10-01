@@ -91,7 +91,7 @@ resolve_registries_file() {
   mkdir -p "${PROJECT_ROOT}/.secrets"
 
   # Only reuse existing if it does not contain empty or unexpanded auth credentials
-  if [[ -f "${gen}" ]] && ! grep -qE 'username: (""|\${)' "${gen}" && ! grep -q 'auth:.*""' "${gen}"; then
+  if [[ -f "${gen}" ]] && ! grep -q '\${' "${gen}" && ! grep -qE '(username|password):[[:space:]]*(""|\x27\x27|[[:space:]]*$)' "${gen}"; then
     echo "${gen}"
     return 0
   fi
@@ -109,8 +109,8 @@ mirrors:
       - "https://registry-1.docker.io"
 EOF_REG
 
-  # Only append auth config if non-empty credentials are provided
-  if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" ]]; then
+  # Only append auth config if non-empty, non-variable credentials are provided
+  if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" && "${DOCKER_USERNAME}" != \${* && "${DOCKER_PASSWORD}" != \${* ]]; then
     cat << EOF_AUTH >> "${gen}"
 configs:
   "docker.io":
