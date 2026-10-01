@@ -55,10 +55,11 @@ import {
   templateLocalChart,
   installLocalChart,
   uninstallLocalChart,
+  findProjectRoot,
 } from '../index.js';
 
 describe('Orchestrator Security & Smoke Tests', () => {
-  const projectRoot = path.resolve(process.cwd(), '../..');
+  const projectRoot = findProjectRoot();
 
   describe('Command Validation & Allowlist', () => {
     it('allows all approved standard binaries', () => {
@@ -402,10 +403,12 @@ spec:
 
       const killTask = killK3sCluster(projectRoot, {
         all: true,
+        dryRun: true,
       });
       assert.ok(killTask.id);
       assert.ok(killTask.args.some((a) => a.includes('k3s_kill.sh')));
       assert.ok(killTask.args.includes('--all'));
+      assert.ok(killTask.args.includes('--dry-run'));
 
       const buildTask = buildK3sCluster(projectRoot, {
         rebuild: true,
@@ -420,11 +423,13 @@ spec:
         targetsFile: 'targets.txt',
         parallel: 8,
         skipTune: true,
+        dryRun: true,
       });
       assert.ok(upTask.id);
       assert.ok(upTask.args.some((a) => a.includes('k3s_up.sh')));
       assert.ok(upTask.args.includes('--targets'));
       assert.ok(upTask.args.includes('--skip-tune'));
+      assert.ok(upTask.args.includes('--dry-run'));
     });
   });
 

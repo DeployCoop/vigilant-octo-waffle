@@ -84,12 +84,30 @@ export async function executePostgresQuery(
   }
 
   // Find a postgres pod
-  const ns = options?.namespace || 'default';
-  const { stdout: podOut } = await execAsync(
-    `kubectl get pods -n ${ns} -l 'app=postgres' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -A -l 'app.kubernetes.io/name=postgresql' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true`
-  );
+  let ns = options?.namespace;
+  let podName = '';
 
-  const podName = podOut.trim();
+  if (ns) {
+    const { stdout: explicitPodOut } = await execAsync(
+      `kubectl get pods -n ${ns} -l 'app=postgres' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -n ${ns} -l 'app.kubernetes.io/component=postgres' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -n ${ns} -l 'app.kubernetes.io/name=postgresql' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true`
+    );
+    podName = explicitPodOut.trim();
+  }
+
+  if (!podName) {
+    // Search across cluster for any running PostgreSQL pod (Supabase, Kubegres, Bitnami)
+    const { stdout: anyPodOut } = await execAsync(
+      `kubectl get pods -A -l 'app.kubernetes.io/component=postgres' -o jsonpath='{.items[0].metadata.namespace}/{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -A -l 'app=postgres' -o jsonpath='{.items[0].metadata.namespace}/{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -A -l 'app.kubernetes.io/name=postgresql' -o jsonpath='{.items[0].metadata.namespace}/{.items[0].metadata.name}' 2>/dev/null || true`
+    );
+    const entry = anyPodOut.trim();
+    if (entry && entry.includes('/')) {
+      const parts = entry.split('/');
+      ns = parts[0];
+      podName = parts[1];
+    }
+  }
+
+  if (!ns) ns = 'default';
   if (!podName) {
     // If no live DB pod found, simulate response for demonstration / offline cluster
     const latency = Date.now() - start;

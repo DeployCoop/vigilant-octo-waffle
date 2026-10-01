@@ -29,6 +29,7 @@ SKIP_JOIN=false
 SKIP_TUNE=false
 SKIP_UP=true
 REGISTRIES_FILE=""
+DRY_RUN=false
 
 usage() {
   cat << 'EOF'
@@ -94,6 +95,10 @@ while [[ $# -gt 0 ]]; do
       REGISTRIES_FILE="$2"
       shift 2
       ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -111,6 +116,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${DRY_RUN}" == "true" ]]; then
+  echo "[DRY-RUN] Would bring up K3s control-plane and join worker nodes (targets: ${TARGETS_FILE:-none}, skipJoin: ${SKIP_JOIN}, skipTune: ${SKIP_TUNE})."
+  exit 0
+fi
 
 # Auto-detect targets file if not explicitly specified
 if [[ -z "${TARGETS_FILE}" ]]; then

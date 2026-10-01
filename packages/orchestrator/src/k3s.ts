@@ -574,6 +574,7 @@ export interface K3sKillOptions {
   parallel?: number;
   sshPort?: number;
   sshKey?: string;
+  dryRun?: boolean;
 }
 
 /**
@@ -583,6 +584,9 @@ export function killK3sCluster(projectRoot: string, options?: K3sKillOptions): T
   const scriptPath = path.join(projectRoot, 'src', 'k3s_kill.sh');
   const args: string[] = [scriptPath, '-y'];
 
+  if (options?.dryRun) {
+    args.push('--dry-run');
+  }
   if (options?.all) {
     args.push('--all');
   } else if (options?.local) {
@@ -694,6 +698,7 @@ export interface K3sUpOptions {
   skipTune?: boolean;
   runPlatformUp?: boolean;
   registriesFile?: string;
+  dryRun?: boolean;
 }
 
 /**
@@ -703,6 +708,9 @@ export function upK3sCluster(projectRoot: string, options?: K3sUpOptions): TaskR
   const scriptPath = path.join(projectRoot, 'src', 'k3s_up.sh');
   const args: string[] = [scriptPath];
 
+  if (options?.dryRun) {
+    args.push('--dry-run');
+  }
   if (options?.targetsFile) {
     args.push('--targets', options.targetsFile.trim());
   }
@@ -1450,6 +1458,7 @@ export interface K3sHealerStatus {
   diskPressure: boolean;
   expiredCerts: boolean;
   crashLoopPodsCount: number;
+  supabaseCompatOk?: boolean;
   issues: K3sHealerIssue[];
 }
 
@@ -1457,18 +1466,33 @@ export async function getK3sHealerStatus(projectRoot: string): Promise<K3sHealer
   const scriptPath = path.join(projectRoot, 'src', 'k3s_healer.sh');
   const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'check', '--json'], projectRoot, null);
   if (p) {
-    return {
-      clusterReachable: p.healerReady ?? true,
-      diskPressure: p.conditions?.diskPressure ?? false,
-      expiredCerts: p.conditions?.certExpiringSoon ?? false,
-      crashLoopPodsCount: p.conditions?.crashLoopPods ?? 0,
-      issues: p.issues || (p.conditions?.diskPressure ? [{
+    const issues: K3sHealerIssue[] = p.issues || [];
+    if (p.conditions?.diskPressure) {
+      issues.push({
         type: 'DiskPressure',
         resource: 'node/local',
         reason: `Root disk usage at ${p.conditions.rootDiskUsagePct}%`,
         runbook: 'runbook_disk_pressure',
         impact: 'Pod eviction risk',
-      }] : []),
+      });
+    }
+    if (p.conditions?.supabaseCompatOk === false) {
+      issues.push({
+        type: 'SupabaseCompat',
+        resource: 'pod/supabase-postgres-0',
+        reason: 'Missing PostgreSQL 16+ uuid=text operator or unapplied GoTrue auth migrations',
+        runbook: 'runbook_supabase_compat',
+        impact: 'GoTrue Auth CrashLoopBackOff',
+      });
+    }
+
+    return {
+      clusterReachable: p.healerReady ?? true,
+      diskPressure: p.conditions?.diskPressure ?? false,
+      expiredCerts: p.conditions?.certExpiringSoon ?? false,
+      crashLoopPodsCount: p.conditions?.crashLoopPods ?? 0,
+      supabaseCompatOk: p.conditions?.supabaseCompatOk ?? true,
+      issues,
     };
   }
   return {

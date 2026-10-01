@@ -565,6 +565,19 @@ export async function POST(req: Request) {
       });
     }
 
+    if (action === 'repair-gotrue') {
+      const task = runK3sHealer(root, {
+        autoRemediate: true,
+        dryRun: false,
+        runbook: 'runbook_supabase_compat',
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Supabase GoTrue compatibility repair initiated (Task: ${task.id})`,
+      });
+    }
+
     if (action === 'dr-drill-run') {
       const task = runK3sDrDrill(root, {
         dryRun: body.dryRun,

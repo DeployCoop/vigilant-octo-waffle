@@ -114,8 +114,12 @@ export async function applyInitializerDirectory(
   for (const item of rendered) {
     try {
       // Apply via kubectl stdin
+      const kubeEnv = {
+        ...process.env,
+        KUBECONFIG: process.env.KUBECONFIG || (fs.existsSync('/etc/rancher/k3s/k3s.yaml') ? '/etc/rancher/k3s/k3s.yaml' : undefined),
+      };
       await new Promise<void>((resolve, reject) => {
-        const proc = exec('kubectl apply -f -', { cwd: projectRoot }, (err, stdout, stderr) => {
+        const proc = exec('kubectl apply -f -', { cwd: projectRoot, env: kubeEnv }, (err, stdout, stderr) => {
           if (err) {
             reject(new Error(stderr || err.message));
           } else {

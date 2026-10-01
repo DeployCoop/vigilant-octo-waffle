@@ -261,8 +261,12 @@ export async function ensureNamespaceWithSecurity(
 ): Promise<void> {
   const pss = options?.enforce || (PRIVILEGED_NAMESPACES.has(name) ? 'privileged' : 'baseline');
   const manifest = generateSingleNamespaceManifest(name, pss, options?.category || 'app');
+  const kubeEnv = {
+    ...process.env,
+    KUBECONFIG: process.env.KUBECONFIG || (fs.existsSync('/etc/rancher/k3s/k3s.yaml') ? '/etc/rancher/k3s/k3s.yaml' : undefined),
+  };
   await new Promise<void>((resolve, reject) => {
-    const proc = exec('kubectl apply -f -', { cwd: projectRoot }, (err) => (err ? reject(err) : resolve()));
+    const proc = exec('kubectl apply -f -', { cwd: projectRoot, env: kubeEnv }, (err) => (err ? reject(err) : resolve()));
     proc.stdin?.write(manifest);
     proc.stdin?.end();
   });

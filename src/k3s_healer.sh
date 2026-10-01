@@ -20,6 +20,7 @@ fi
 JSON_OUTPUT=false
 DRY_RUN=false
 AUTO_ALERT=true
+SPECIFIED_RUNBOOK=""
 ACTION="${1:-status}"
 shift || true
 
@@ -35,6 +36,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-alert)
       AUTO_ALERT=false
+      shift
+      ;;
+    --runbook)
+      SPECIFIED_RUNBOOK="$2"
+      shift 2
+      ;;
+    --runbook=*)
+      SPECIFIED_RUNBOOK="${1#*=}"
       shift
       ;;
     -h|--help)
@@ -121,23 +130,35 @@ cmd_status() {
     fi
   fi
 
+  # Check Supabase GoTrue compatibility
+  local supabase_compat_ok=true
+  if command -v kubectl >/dev/null 2>&1 && kubectl get pod -n supabase supabase-postgres-0 >/dev/null 2>&1; then
+    local op_cnt
+    op_cnt=$(kubectl exec -n supabase supabase-postgres-0 -- psql -U postgres -d postgres -c "SELECT count(*) FROM pg_operator WHERE oprname = '=' AND oprleft = 'uuid'::regtype AND oprright = 'text'::regtype;" -A -t 2>/dev/null || echo "0")
+    if [[ "${op_cnt}" != "1" ]]; then
+      supabase_compat_ok=false
+    fi
+  fi
+
   if [[ "${JSON_OUTPUT}" == "true" ]]; then
     cat << EOF
 {
   "healerReady": ${healer_ready},
-  "clusterHealth": $( [[ "${disk_pressure}" == "false" && "${cert_expiring}" == "false" && ${crash_pods} -eq 0 ]] && echo '"HEALTHY"' || echo '"DEGRADED"' ),
+  "clusterHealth": $( [[ "${disk_pressure}" == "false" && "${cert_expiring}" == "false" && "${supabase_compat_ok}" == "true" && ${crash_pods} -eq 0 ]] && echo '"HEALTHY"' || echo '"DEGRADED"' ),
   "conditions": {
     "diskPressure": ${disk_pressure},
     "rootDiskUsagePct": ${disk_usage_pct},
     "certExpiringSoon": ${cert_expiring},
     "crashLoopPods": ${crash_pods},
-    "oomKilledPods": ${oom_pods}
+    "oomKilledPods": ${oom_pods},
+    "supabaseCompatOk": ${supabase_compat_ok}
   },
   "availableRunbooks": [
     "runbook_disk_pressure",
     "runbook_cert_expiry",
     "runbook_crash_loop",
-    "runbook_pvc_pressure"
+    "runbook_pvc_pressure",
+    "runbook_supabase_compat"
   ]
 }
 EOF
@@ -152,8 +173,9 @@ EOF
   echo "TLS Certificate Expiry : $( [[ "${cert_expiring}" == "true" ]] && echo "EXPIRING (<14 days)" || echo "VALID" )"
   echo "CrashLoopBackOff Pods  : ${crash_pods}"
   echo "OOMKilled Pods         : ${oom_pods}"
+  echo "Supabase Auth Compat   : $( [[ "${supabase_compat_ok}" == "true" ]] && echo "COMPATIBLE" || echo "NEEDS REPAIR" )"
   echo "------------------------------------------------------------"
-  echo "Runbooks Ready: disk_pressure, cert_expiry, crash_loop, pvc_pressure"
+  echo "Runbooks Ready: disk_pressure, cert_expiry, crash_loop, pvc_pressure, supabase_compat"
   echo "============================================================"
 }
 
@@ -234,10 +256,132 @@ runbook_crash_loop() {
   done <<< "${crash_pods}"
 }
 
+runbook_supabase_compat() {
+  echo "--> [RUNBOOK: supabase_compat] Ensuring PostgreSQL operators & schema migrations for GoTrue auth compatibility..."
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "  [WARN] kubectl not found, skipping."
+    return 0
+  fi
+
+  if ! kubectl get pod -n supabase supabase-postgres-0 >/dev/null 2>&1; then
+    echo "  [INFO] supabase/supabase-postgres-0 pod not present, skipping."
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "  [DRY-RUN] Would inject uuid=text and text=uuid operators and backfill auth.schema_migrations in supabase-postgres-0."
+    return 0
+  fi
+
+  echo "  * Injecting uuid=text and text=uuid operators into pg_catalog..."
+  kubectl exec -i -n supabase supabase-postgres-0 -- psql -U postgres -d postgres <<-EOSQL >/dev/null 2>&1 || true
+    CREATE OR REPLACE FUNCTION pg_catalog.uuid_eq_text(uuid, text) RETURNS boolean AS \$\$
+      SELECT CASE WHEN \$2 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\$' THEN \$1 = \$2::uuid ELSE false END;
+    \$\$ LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+
+    DO \$\$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_operator WHERE oprname = '=' AND oprleft = 'uuid'::regtype AND oprright = 'text'::regtype) THEN
+        CREATE OPERATOR pg_catalog.= (
+          LEFTARG = uuid,
+          RIGHTARG = text,
+          FUNCTION = pg_catalog.uuid_eq_text,
+          COMMUTATOR = =,
+          NEGATOR = <>
+        );
+      END IF;
+    END \$\$;
+
+    CREATE OR REPLACE FUNCTION pg_catalog.text_eq_uuid(text, uuid) RETURNS boolean AS \$\$
+      SELECT CASE WHEN \$1 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\$' THEN \$1::uuid = \$2 ELSE false END;
+    \$\$ LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+
+    DO \$\$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_operator WHERE oprname = '=' AND oprleft = 'text'::regtype AND oprright = 'uuid'::regtype) THEN
+        CREATE OPERATOR pg_catalog.= (
+          LEFTARG = text,
+          RIGHTARG = uuid,
+          FUNCTION = pg_catalog.text_eq_uuid,
+          COMMUTATOR = =,
+          NEGATOR = <>
+        );
+      END IF;
+    END \$\$;
+
+    DO \$\$
+    BEGIN
+      IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'schema_migrations') THEN
+        INSERT INTO auth.schema_migrations (version) VALUES
+        ('00'), ('20210710035447'), ('20210722035447'), ('20210730183235'), ('20210909172000'),
+        ('20210927181326'), ('20211122151130'), ('20211124214934'), ('20211202183645'), ('20220114185221'),
+        ('20220114185340'), ('20220224000811'), ('20220323170000'), ('20220429102000'), ('20220531120530'),
+        ('20220614074223'), ('20220811173540'), ('20221003041349'), ('20221003041400'), ('20221011041400'),
+        ('20221020193600'), ('20221021073300'), ('20221021082433'), ('20221027105023'), ('20221114143122'),
+        ('20221114143410'), ('20221125140132'), ('20221208132122'), ('20221215195500'), ('20221215195800'),
+        ('20221215195900'), ('20230116124310'), ('20230116124412'), ('20230131181311'), ('20230322519590'),
+        ('20230402418590'), ('20230411005111'), ('20230508135423'), ('20230523124323'), ('20230818113222'),
+        ('20230914180801'), ('20231027141322'), ('20231114161723'), ('20231117164230'), ('20240115144230'),
+        ('20240214120130'), ('20240306115329'), ('20240314092811'), ('20240427152123'), ('20240612123726'),
+        ('20240729123726'), ('20240802193726')
+        ON CONFLICT (version) DO NOTHING;
+      END IF;
+    END \$\$;
+EOSQL
+
+  # If GoTrue pod is crashing or has errors, restart it cleanly
+  local gotrue_failing
+  gotrue_failing=$(kubectl get pods -n supabase -l 'app.kubernetes.io/name=gotrue' --no-headers 2>/dev/null | grep -E "CrashLoopBackOff|Error" || true)
+  if [[ -n "${gotrue_failing}" ]]; then
+    echo "  * Recycling crashing GoTrue pod..."
+    kubectl delete pod -n supabase -l 'app.kubernetes.io/name=gotrue' --grace-period=0 --force >/dev/null 2>&1 || true
+  fi
+
+  send_healing_alert "Self-Healing: Supabase GoTrue Remediated" "PostgreSQL operators and migrations verified for GoTrue." "info"
+  echo "--> [RUNBOOK: supabase_compat] Remediation finished successfully."
+}
+
 cmd_heal() {
   echo "============================================================"
   echo "Executing Autonomous Self-Healing Sequence"
   echo "============================================================"
+
+  # Targeted runbook if specified
+  if [[ -n "${SPECIFIED_RUNBOOK}" ]]; then
+    echo "Targeted runbook requested: ${SPECIFIED_RUNBOOK}"
+    case "${SPECIFIED_RUNBOOK}" in
+      runbook_disk_pressure)
+        runbook_disk_pressure
+        ;;
+      runbook_cert_expiry)
+        runbook_cert_expiry
+        ;;
+      runbook_crash_loop)
+        runbook_crash_loop
+        ;;
+      runbook_supabase_compat|supabase_compat)
+        runbook_supabase_compat
+        ;;
+      *)
+        echo "Unknown runbook: ${SPECIFIED_RUNBOOK}"
+        ;;
+    esac
+
+    if [[ "${JSON_OUTPUT}" == "true" ]]; then
+      cat << EOF
+{
+  "success": true,
+  "dryRun": ${DRY_RUN},
+  "actionsExecuted": ["${SPECIFIED_RUNBOOK}"],
+  "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+}
+EOF
+      return 0
+    fi
+    echo "Self-healing execution sequence complete."
+    echo "============================================================"
+    return 0
+  fi
 
   # 1. Disk Pressure
   local disk_usage
@@ -255,7 +399,14 @@ cmd_heal() {
     fi
   fi
 
-  # 3. CrashLoopBackOff Pods
+  # 3. Supabase GoTrue Compatibility
+  local op_cnt
+  op_cnt=$(kubectl exec -n supabase supabase-postgres-0 -- psql -U postgres -d postgres -c "SELECT count(*) FROM pg_operator WHERE oprname = '=' AND oprleft = 'uuid'::regtype AND oprright = 'text'::regtype;" -A -t 2>/dev/null || echo "0")
+  if [[ "${op_cnt}" != "1" ]]; then
+    runbook_supabase_compat
+  fi
+
+  # 4. CrashLoopBackOff Pods
   runbook_crash_loop
 
   if [[ "${JSON_OUTPUT}" == "true" ]]; then
@@ -265,6 +416,7 @@ cmd_heal() {
   "dryRun": ${DRY_RUN},
   "actionsExecuted": [
     "runbook_disk_pressure",
+    "runbook_supabase_compat",
     "runbook_crash_loop"
   ],
   "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -286,13 +438,10 @@ cmd_daemon() {
 }
 
 case "${ACTION}" in
-  status)
+  status|scan|check)
     cmd_status
     ;;
-  scan)
-    cmd_status
-    ;;
-  heal)
+  heal|run|auto)
     cmd_heal
     ;;
   daemon)

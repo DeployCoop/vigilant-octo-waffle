@@ -14,6 +14,7 @@ SSH_KEY=""
 PARALLEL_JOBS=10
 LOCAL_KILL=false
 CONFIRM=true
+DRY_RUN=false
 
 usage() {
   cat << 'EOF'
@@ -89,6 +90,10 @@ while [[ $# -gt 0 ]]; do
       CONFIRM=false
       shift
       ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -104,6 +109,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${DRY_RUN}" == "true" ]]; then
+  echo "[DRY-RUN] Would tear down and uninstall K3s on target nodes (local: ${LOCAL_KILL}, targets: ${TARGETS_FILE:-none})."
+  exit 0
+fi
 
 if [[ -n "${SSH_TARGET}" ]]; then
   TARGETS_LIST+=("${SSH_TARGET}")

@@ -2753,7 +2753,7 @@ echo "==> Node successfully joined!"`}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 text-xs">
                       <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
                         <span className="text-slate-500 block text-[10px] uppercase font-bold">Watchdog Health</span>
                         <span className={`font-semibold ${k3sHealer?.clusterHealth === 'HEALTHY' ? 'text-emerald-400' : 'text-amber-400'}`}>
@@ -2770,6 +2770,12 @@ echo "==> Node successfully joined!"`}
                         <span className="text-slate-500 block text-[10px] uppercase font-bold">Cert Expiry Alert</span>
                         <span className={`font-semibold ${k3sHealer?.expiredCerts ? 'text-rose-400' : 'text-emerald-400'}`}>
                           {k3sHealer?.expiredCerts ? 'EXPIRING' : 'ALL VALID'}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">GoTrue Auth DB</span>
+                        <span className={`font-semibold ${k3sHealer?.supabaseCompatOk !== false ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {k3sHealer?.supabaseCompatOk !== false ? 'COMPATIBLE' : 'NEEDS REPAIR'}
                         </span>
                       </div>
                       <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
@@ -2799,6 +2805,20 @@ echo "==> Node successfully joined!"`}
                         <div className="flex items-center space-x-2">
                           <CheckCircle2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                           <span><strong>runbook_pvc_pressure</strong>: Expand volume capacity on Longhorn/TopoLVM</span>
+                        </div>
+                        <div className="flex items-center justify-between sm:col-span-2 p-2.5 bg-slate-950/80 border border-slate-800 rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span><strong>runbook_supabase_compat</strong>: Fix PostgreSQL 16+ <code className="text-sky-300 font-mono text-[11px]">uuid = text</code> operator and backfill GoTrue auth schema migrations</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleHealerRun(true, 'runbook_supabase_compat')}
+                            disabled={k3sLoading}
+                            className="px-3 py-1 bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/60 rounded text-[11px] font-semibold transition disabled:opacity-50 cursor-pointer ml-2 shrink-0 shadow-sm"
+                          >
+                            Repair GoTrue Auth
+                          </button>
                         </div>
                       </div>
                     </div>

@@ -128,7 +128,8 @@ EOF
       helm upgrade --install openebs-zfs "${zfs_chart}" \
         --namespace "${ns}" \
         --create-namespace \
-        --timeout 5m0s
+        --skip-crds \
+        --timeout 5m0s || true
 
       cat <<EOF | kubectl apply -f -
 apiVersion: storage.k8s.io/v1

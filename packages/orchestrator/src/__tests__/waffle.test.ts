@@ -13,9 +13,11 @@ import {
   getBuiltinBlueprints,
   getBlueprintById,
   type WafflePipeline,
+  findProjectRoot,
 } from '../index.js';
 
 describe('Waffle Meta-Package Engine Tests', () => {
+  const projectRoot = findProjectRoot();
   const sampleValidYaml = `
 apiVersion: waffle.dev/v1
 kind: WafflePipeline
@@ -212,7 +214,7 @@ stages: []
   });
 
   it('detects OpenEBS step during execution and avoids failing on immutable fields', async () => {
-    const runner = new WaffleRunner(process.cwd());
+    const runner = new WaffleRunner(projectRoot);
     const pipeline: WafflePipeline = {
       metadata: { name: 'test-openebs-detect' },
       stages: [
@@ -225,6 +227,7 @@ stages: []
               name: 'OpenEBS LocalPV Provisioner',
               chart: '/root/charts/openebs',
               namespace: 'openebs',
+              createNamespace: true,
             },
           ],
         },
@@ -234,10 +237,13 @@ stages: []
     const runResult = await runner.executePipeline({
       sourceId: 'openebs-detect-test',
       pipeline,
-      baseDir: process.cwd(),
+      baseDir: projectRoot,
       dryRun: true,
     });
 
+    if (runResult.status !== 'completed') {
+      console.error('Waffle test failure stages:', JSON.stringify(runResult.stages, null, 2));
+    }
     assert.equal(runResult.status, 'completed');
     assert.equal(runResult.completedSteps, 1);
     assert.equal(runResult.failedSteps, 0);

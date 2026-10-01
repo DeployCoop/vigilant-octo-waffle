@@ -13,7 +13,7 @@
   "scripts": {
     "prepare": "tsc",
     "build": "tsc",
-    "test": "node --test dist/__tests__/*.test.js",
+    "test": "node --test --test-concurrency=1 dist/__tests__/*.test.js",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },

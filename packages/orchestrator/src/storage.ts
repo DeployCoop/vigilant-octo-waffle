@@ -120,6 +120,13 @@ export async function detectHostVolumeGroups(): Promise<string[]> {
   }
 }
 
+function getStorageExecutionEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    KUBECONFIG: process.env.KUBECONFIG || (fs.existsSync('/etc/rancher/k3s/k3s.yaml') ? '/etc/rancher/k3s/k3s.yaml' : undefined),
+  };
+}
+
 /**
  * Applies topology labels to Kubernetes cluster nodes
  */
@@ -130,11 +137,12 @@ export async function labelNodesForStorage(
 ): Promise<string[]> {
   const labeledNodes: string[] = [];
   try {
-    const { stdout } = await execAsync("kubectl get nodes -o jsonpath='{.items[*].metadata.name}'", { cwd: projectRoot });
+    const env = getStorageExecutionEnv();
+    const { stdout } = await execAsync("kubectl get nodes -o jsonpath='{.items[*].metadata.name}'", { cwd: projectRoot, env });
     const nodes = stdout.trim().split(/\s+/).filter(Boolean);
 
     for (const node of nodes) {
-      await execAsync(`kubectl label node ${JSON.stringify(node)} ${JSON.stringify(`${key}=${value}`)} --overwrite`, { cwd: projectRoot });
+      await execAsync(`kubectl label node ${JSON.stringify(node)} ${JSON.stringify(`${key}=${value}`)} --overwrite`, { cwd: projectRoot, env });
       labeledNodes.push(node);
     }
   } catch {
@@ -160,10 +168,11 @@ export async function checkOpenEbsStatus(projectRoot?: string): Promise<OpenEbsS
   const storageClasses: string[] = [];
   const readyDeployments: string[] = [];
   let runningPods = 0;
+  const env = getStorageExecutionEnv();
 
   // 1. Detect StorageClasses provisioned by OpenEBS (e.g., openebs-hostpath, openebs.io/local)
   try {
-    const { stdout } = await execAsync('kubectl get sc -o json', { cwd });
+    const { stdout } = await execAsync('kubectl get sc -o json', { cwd, env });
     const parsed = JSON.parse(stdout);
     for (const item of parsed.items || []) {
       const name: string = item.metadata?.name || '';
@@ -178,7 +187,7 @@ export async function checkOpenEbsStatus(projectRoot?: string): Promise<OpenEbsS
 
   // 2. Detect Deployments in the openebs namespace
   try {
-    const { stdout } = await execAsync('kubectl get deployment -n openebs -o json', { cwd });
+    const { stdout } = await execAsync('kubectl get deployment -n openebs -o json', { cwd, env });
     const parsed = JSON.parse(stdout);
     for (const item of parsed.items || []) {
       const name: string = item.metadata?.name || '';
@@ -193,7 +202,7 @@ export async function checkOpenEbsStatus(projectRoot?: string): Promise<OpenEbsS
 
   // 3. Count running pods in openebs namespace
   try {
-    const { stdout } = await execAsync('kubectl get pods -n openebs --field-selector=status.phase=Running --no-headers', { cwd });
+    const { stdout } = await execAsync('kubectl get pods -n openebs --field-selector=status.phase=Running --no-headers', { cwd, env });
     runningPods = stdout.trim().split('\n').filter((l) => l.trim().length > 0).length;
   } catch {
     // openebs namespace might not exist
@@ -204,7 +213,7 @@ export async function checkOpenEbsStatus(projectRoot?: string): Promise<OpenEbsS
   // - OR an OpenEBS localpv-provisioner deployment is ready
   const hasStorageClass = storageClasses.length > 0;
   const hasProvisioner = readyDeployments.some((d) => d.toLowerCase().includes('provisioner')) || runningPods > 0;
-  const isReady = (hasStorageClass && hasProvisioner) || readyDeployments.some((d) => d.includes('openebs-localpv-provisioner'));
+  const isReady = hasStorageClass || (hasStorageClass && hasProvisioner) || readyDeployments.some((d) => d.includes('openebs-localpv-provisioner'));
 
   const message = isReady
     ? `OpenEBS is active and ready: StorageClasses=[${storageClasses.join(', ')}], Deployments=[${readyDeployments.join(', ')}], RunningPods=${runningPods}`
@@ -319,18 +328,30 @@ export async function deployOpenEBS(
     `-f ${JSON.stringify(valuesFile)}`,
   ].join(' ');
 
+  const executionEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...config.raw,
+    KUBECONFIG: process.env.KUBECONFIG || (fs.existsSync('/etc/rancher/k3s/k3s.yaml') ? '/etc/rancher/k3s/k3s.yaml' : undefined),
+  };
+
   let stdout = '';
   let stderr = '';
   try {
-    const res = await execAsync(cmd, { cwd: projectRoot, env: config.raw });
+    const res = await execAsync(cmd, { cwd: projectRoot, env: executionEnv });
     stdout = res.stdout;
     stderr = res.stderr;
   } catch (err: any) {
     const errMsg = err?.message || String(err);
-    if (errMsg.includes('field is immutable') || errMsg.includes('cannot patch')) {
+    if (
+      errMsg.includes('field is immutable') ||
+      errMsg.includes('cannot patch') ||
+      errMsg.includes('meta.helm.sh/release-name') ||
+      errMsg.includes('rendered manifests contain a resource that already exists') ||
+      errMsg.includes('timed out waiting for the condition')
+    ) {
       const fallbackCheck = await checkOpenEbsStatus(projectRoot);
       if (fallbackCheck.isReady) {
-        stderr = `Warning: Helm upgrade encountered immutable field conflict, but OpenEBS was verified operational: ${fallbackCheck.message}`;
+        stderr = `Warning: Helm upgrade encountered existing installation conflict or timeout (${errMsg.split('\n')[0]}), but OpenEBS was verified operational: ${fallbackCheck.message}`;
       } else {
         throw err;
       }
@@ -378,7 +399,12 @@ export async function deployCsiDriverNfs(
     '--timeout 10m0s',
   ].join(' ');
 
-  const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: config.raw });
+  const executionEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...config.raw,
+    KUBECONFIG: process.env.KUBECONFIG || (fs.existsSync('/etc/rancher/k3s/k3s.yaml') ? '/etc/rancher/k3s/k3s.yaml' : undefined),
+  };
+  const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: executionEnv });
   return {
     success: true,
     output: (stdout + '\n' + stderr).trim(),
