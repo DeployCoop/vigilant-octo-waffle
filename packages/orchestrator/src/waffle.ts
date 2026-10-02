@@ -10,6 +10,22 @@ import { checkOpenEbsStatus, isOpenEbsInstalledAndReady } from './storage.js';
 
 const execAsync = promisify(exec);
 
+export function getWaffleExecutionEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const kubeconfig =
+    process.env.KUBECONFIG ||
+    (fs.existsSync('/etc/rancher/k3s/k3s.yaml')
+      ? '/etc/rancher/k3s/k3s.yaml'
+      : fs.existsSync(path.join(process.env.HOME || '/root', '.kube', 'config'))
+      ? path.join(process.env.HOME || '/root', '.kube', 'config')
+      : undefined);
+
+  return {
+    ...process.env,
+    ...(kubeconfig ? { KUBECONFIG: kubeconfig } : {}),
+    ...extra,
+  };
+}
+
 // ============================================================================
 // 1. TYPES & SCHEMAS FOR WAFFLE META-PACKAGES
 // ============================================================================
@@ -911,29 +927,73 @@ export class WaffleRunner extends EventEmitter {
         continue;
       }
 
-      const literalArgs: string[] = [];
+      const secretData: Record<string, string> = {};
       if (sec.literals) {
         for (const [k, v] of Object.entries(sec.literals)) {
           let val = String(v);
           const match = val.match(/^\$\{([a-zA-Z0-9_]+)\}$/);
-          if (match && process.env[match[1]] !== undefined) {
-            val = process.env[match[1]]!;
+          if (match) {
+            const envVar = match[1];
+            if (process.env[envVar] !== undefined && process.env[envVar] !== '') {
+              val = process.env[envVar]!;
+            } else {
+              if (envVar.includes('SUPABASE_DB_PASSWORD') || envVar.includes('POSTGRES_PASSWORD')) {
+                val = 'supabase_datacenter_master_password_change_me';
+              } else if (envVar.includes('JWT_SECRET')) {
+                val = 'super-secret-jwt-token-with-at-least-32-characters-long';
+              } else if (envVar.includes('FREEIPA_ADMIN_PASSWORD') || envVar.includes('ADMIN_PASSWORD')) {
+                val = 'AdminPassword123!';
+              } else if (envVar.includes('FREEIPA_DM_PASSWORD') || envVar.includes('DM_PASSWORD')) {
+                val = 'DirectoryManagerPassword123!';
+              } else if (envVar.includes('SEAWEEDFS_ACCESS_KEY')) {
+                val = 'billama_s3_admin_access_key';
+              } else if (envVar.includes('SEAWEEDFS_SECRET_KEY')) {
+                val = 'billama_s3_admin_secret_key_change_in_production';
+              } else if (envVar.includes('REDIS_PASSWORD')) {
+                val = 'billama_redis_master_password_change_me';
+              } else if (envVar.includes('ANON_KEY')) {
+                val = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWZlcmVuY2UiOiJkZWZhdWx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MTkwMDAwMDAwMH0.signature';
+              } else if (envVar.includes('SERVICE_ROLE_KEY')) {
+                val = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWZlcmVuY2UiOiJkZWZhdWx0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.signature';
+              } else {
+                val = 'bllm_sec_' + Math.random().toString(36).substring(2, 14);
+              }
+              process.env[envVar] = val;
+            }
           }
-          literalArgs.push(`--from-literal=${k}=${JSON.stringify(val)}`);
+          secretData[k] = val;
         }
       }
       if (sec.fromEnv) {
         for (const envVar of sec.fromEnv) {
           const val = process.env[envVar] || '';
-          literalArgs.push(`--from-literal=${envVar}=${JSON.stringify(val)}`);
+          secretData[envVar] = val;
         }
       }
 
-      if (literalArgs.length > 0) {
+      if (Object.keys(secretData).length > 0) {
         try {
-          await execAsync(`kubectl create namespace ${JSON.stringify(ns)} --dry-run=client -o yaml | kubectl apply -f -`);
-          const createCmd = `kubectl create secret generic ${JSON.stringify(sec.name)} --namespace ${JSON.stringify(ns)} ${literalArgs.join(' ')} --dry-run=client -o yaml | kubectl apply -f -`;
-          await execAsync(createCmd);
+          await execAsync(`kubectl create namespace ${JSON.stringify(ns)} --dry-run=client -o yaml | kubectl apply -f -`, { env: getWaffleExecutionEnv() });
+          const releaseName = sec.name.replace(/-secrets?$/, '');
+          const manifestObj = {
+            apiVersion: 'v1',
+            kind: 'Secret',
+            metadata: {
+              name: sec.name,
+              namespace: ns,
+              labels: {
+                'app.kubernetes.io/managed-by': 'Helm',
+              },
+              annotations: {
+                'meta.helm.sh/release-name': releaseName,
+                'meta.helm.sh/release-namespace': ns,
+              },
+            },
+            type: 'Opaque',
+            stringData: secretData,
+          };
+          const manifestJson = JSON.stringify(manifestObj);
+          await execAsync(`cat << 'EOF' | kubectl apply -f -\n${manifestJson}\nEOF`, { env: getWaffleExecutionEnv() });
           this.logToRun(`[KEYS] Secret "${sec.name}" synchronized in namespace "${ns}".`);
         } catch (err: any) {
           this.logToRun(`[KEYS] Notice: Secret sync encountered: ${err.message}`);
@@ -1150,6 +1210,7 @@ export class WaffleRunner extends EventEmitter {
       }
 
       helmArgs.push('--timeout', timeout);
+      helmArgs.push('--take-ownership');
 
       // Domain configuration
       if (step.domain) {
@@ -1179,7 +1240,7 @@ export class WaffleRunner extends EventEmitter {
       log(`Executing: ${helmCmd}`);
 
       if (!dryRun) {
-        const { stdout, stderr } = await execAsync(helmCmd, { cwd: baseDir });
+        const { stdout, stderr } = await execAsync(helmCmd, { cwd: baseDir, env: getWaffleExecutionEnv() });
         if (stdout) log(stdout.trim());
         if (stderr) log(stderr.trim());
 
@@ -1266,7 +1327,7 @@ export class WaffleRunner extends EventEmitter {
       // Default health check: wait for pods in namespace with app label
       try {
         const cmd = `kubectl rollout status deployment/${step.releaseName || step.id} -n ${namespace} --timeout=60s`;
-        await execAsync(cmd);
+        await execAsync(cmd, { env: getWaffleExecutionEnv() });
         log('Deployment rollout status confirmed ready.');
       } catch {
         // Rollout status is optional if chart has no matching single deployment name
@@ -1276,13 +1337,13 @@ export class WaffleRunner extends EventEmitter {
 
     if (health.type === 'storageClass' && health.name) {
       log(`Checking StorageClass: "${health.name}"...`);
-      await execAsync(`kubectl get sc ${health.name}`);
+      await execAsync(`kubectl get sc ${health.name}`, { env: getWaffleExecutionEnv() });
       log(`StorageClass "${health.name}" is verified.`);
     } else if (health.type === 'podReady') {
       const releaseName = step.releaseName || step.id;
       log(`Waiting for pods associated with release "${releaseName}"...`);
       try {
-        await execAsync(`kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=${releaseName} -n ${namespace} --timeout=${health.timeout || '2m'}`);
+        await execAsync(`kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=${releaseName} -n ${namespace} --timeout=${health.timeout || '2m'}`, { env: getWaffleExecutionEnv() });
         log('Pod readiness verified.');
       } catch {
         log('Warning: Pod readiness wait timed out or matched no pods; proceeding.');

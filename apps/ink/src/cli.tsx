@@ -135,23 +135,26 @@ program
       process.exit(1);
     }
 
-    const raw = fs.readFileSync(filePath, 'utf8');
+    const resolvedPath = path.resolve(filePath);
+    const baseDir = fs.statSync(resolvedPath).isDirectory() ? resolvedPath : path.dirname(resolvedPath);
+
+    const raw = fs.readFileSync(resolvedPath, 'utf8');
     const pipe = parseWaffleYaml(raw);
 
     if (subaction === 'validate') {
-      const res = validateWafflePipeline(pipe, process.cwd());
+      const res = validateWafflePipeline(pipe, baseDir);
       console.log(res.valid ? `✔ Pipeline '${pipe.metadata.name}' valid` : `✖ Validation failed: ${res.errors.join(', ')}`);
       if (!res.valid) process.exit(1);
     } else if (subaction === 'run') {
       console.log(`==> Running Waffle pipeline '${pipe.metadata.name}'...`);
-      const runner = new WaffleRunner(process.cwd());
+      const runner = new WaffleRunner(baseDir);
       runner.on('progress', (p) => {
         if (p.currentStep) console.log(`  ▶ Step: ${p.currentStep} (${p.status})`);
       });
       const record = await runner.executePipeline({
         sourceId: pipe.metadata.name,
         pipeline: pipe,
-        baseDir: process.cwd(),
+        baseDir,
         dryRun: opts.dryRun,
       });
       console.log(`✔ Pipeline finished with status: ${record.status.toUpperCase()}`);

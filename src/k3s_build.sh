@@ -82,6 +82,10 @@ while [[ $# -gt 0 ]]; do
       REGISTRIES_FILE="$2"
       shift 2
       ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
     -y|--yes)
       NON_INTERACTIVE=true
       shift
@@ -103,6 +107,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${DRY_RUN}" == "true" ]]; then
+  echo "[DRY-RUN] Would build K3s cluster (rebuild: ${REBUILD}, targets: ${TARGETS_FILE:-none}, skipJoin: ${SKIP_JOIN}, skipTune: ${SKIP_TUNE}, skipUp: ${SKIP_UP})."
+  exit 0
+fi
 
 # Auto-detect targets file if not explicitly specified
 if [[ -z "${TARGETS_FILE}" ]]; then

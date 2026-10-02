@@ -612,6 +612,7 @@ export function killK3sCluster(projectRoot: string, options?: K3sKillOptions): T
 }
 
 export interface K3sBuildOptions {
+  dryRun?: boolean;
   rebuild?: boolean;
   targetsFile?: string;
   parallel?: number;
@@ -628,6 +629,9 @@ export function buildK3sCluster(projectRoot: string, options?: K3sBuildOptions):
   const scriptPath = path.join(projectRoot, 'src', 'k3s_build.sh');
   const args: string[] = [scriptPath, '-y'];
 
+  if (options?.dryRun) {
+    args.push('--dry-run');
+  }
   if (options?.rebuild) {
     args.push('--rebuild');
   }

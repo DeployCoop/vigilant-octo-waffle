@@ -411,11 +411,13 @@ spec:
       assert.ok(killTask.args.includes('--dry-run'));
 
       const buildTask = buildK3sCluster(projectRoot, {
+        dryRun: true,
         rebuild: true,
         skipUp: true,
       });
       assert.ok(buildTask.id);
       assert.ok(buildTask.args.some((a) => a.includes('k3s_build.sh')));
+      assert.ok(buildTask.args.includes('--dry-run'));
       assert.ok(buildTask.args.includes('--rebuild'));
       assert.ok(buildTask.args.includes('--skip-up'));
 

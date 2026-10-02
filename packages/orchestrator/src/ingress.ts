@@ -9,6 +9,22 @@ import { ensureNamespaceWithSecurity } from './namespaces.js';
 
 const execAsync = promisify(exec);
 
+function getIngressExecutionEnv(extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
+  const kubeconfig =
+    process.env.KUBECONFIG ||
+    (fs.existsSync('/etc/rancher/k3s/k3s.yaml')
+      ? '/etc/rancher/k3s/k3s.yaml'
+      : fs.existsSync(path.join(process.env.HOME || '/root', '.kube', 'config'))
+      ? path.join(process.env.HOME || '/root', '.kube', 'config')
+      : undefined);
+
+  return {
+    ...process.env,
+    ...(kubeconfig ? { KUBECONFIG: kubeconfig } : {}),
+    ...extra,
+  };
+}
+
 export type IngressProvider = 'traefik' | 'nginx' | 'haproxy';
 
 export interface IngressDeploymentResult {
@@ -68,7 +84,7 @@ export async function deployCertManager(
   ].join(' ');
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: config.raw });
+    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
     return {
       success: true,
       output: (stdout + '\n' + stderr).trim(),
@@ -188,7 +204,7 @@ export async function deployIngressNginx(
   ].join(' ');
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: config.raw });
+    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
     return {
       provider: 'nginx',
       success: true,
@@ -270,7 +286,7 @@ export async function deployTraefik(
   ].join(' ');
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: config.raw });
+    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
     return {
       provider: 'traefik',
       success: true,
@@ -332,7 +348,7 @@ export async function deployHAProxy(
   ].join(' ');
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: config.raw });
+    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
     return {
       provider: 'haproxy',
       success: true,
