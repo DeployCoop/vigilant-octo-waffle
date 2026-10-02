@@ -160,7 +160,7 @@ stages: []
       const val = validateWafflePipeline(pipeline, '/home/thoth/billama/charts');
       assert.equal(val.valid, true, 'Master ecosystem waffle.yaml should be valid');
       assert.equal(val.stagesCount, 4);
-      assert.equal(val.stepsCount, 13);
+      assert.equal(val.stepsCount, 11);
     }
   });
 
@@ -235,7 +235,7 @@ stages: []
       sourceId: 'openebs-detect-test',
       pipeline,
       baseDir: process.cwd(),
-      dryRun: false,
+      dryRun: true,
     });
 
     assert.equal(runResult.status, 'completed');

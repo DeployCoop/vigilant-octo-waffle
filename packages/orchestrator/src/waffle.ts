@@ -54,6 +54,39 @@ export interface WaffleHealthCheck {
   timeout?: string;
 }
 
+export interface WaffleSecretKey {
+  name: string;
+  namespace?: string;
+  literals?: Record<string, string>;
+  fromEnv?: string[];
+}
+
+export interface WaffleKeysConfig {
+  secrets?: WaffleSecretKey[];
+  envFile?: string;
+}
+
+export interface WaffleBuildTarget {
+  name: string;
+  context: string;
+  dockerfile?: string;
+  image: string;
+  tag?: string;
+}
+
+export interface WaffleGitOpsConfig {
+  engine?: 'argocd' | 'flux' | 'waffle';
+  branch?: string;
+  autoBuildOnPush?: boolean;
+  webhookPath?: string;
+}
+
+export interface WaffleBuildsConfig {
+  registry?: string;
+  gitops?: WaffleGitOpsConfig;
+  targets?: WaffleBuildTarget[];
+}
+
 export interface WaffleStep {
   id: string;
   name: string;
@@ -67,6 +100,7 @@ export interface WaffleStep {
   values?: Record<string, any>;
   set?: Record<string, string | number | boolean>;
   healthCheck?: WaffleHealthCheck;
+  keys?: Record<string, string> | WaffleSecretKey;
 }
 
 export interface WaffleStage {
@@ -84,6 +118,8 @@ export interface WafflePipeline {
   metadata: WafflePipelineMetadata;
   settings?: WaffleSettings;
   preflight?: WafflePreflight;
+  keys?: WaffleKeysConfig;
+  builds?: WaffleBuildsConfig;
   stages: WaffleStage[];
 }
 
@@ -100,7 +136,7 @@ export const WafflePipelineMetadataSchema = z.object({
 
 export const WaffleSettingsSchema = z.object({
   defaultNamespace: z.string().optional().default('default'),
-  defaultStorageClass: z.string().optional().default('openebs-hostpath'),
+  defaultStorageClass: z.string().optional().default('openebs-lvmpv'),
   defaultClusterIssuer: z.string().optional().default('letsencrypt-prod'),
   globalTimeout: z.string().optional().default('30m'),
   rollbackOnFailure: z.boolean().optional().default(true),
@@ -130,6 +166,39 @@ export const WaffleHealthCheckSchema = z.object({
   timeout: z.string().optional().default('3m'),
 });
 
+export const WaffleSecretKeySchema = z.object({
+  name: z.string(),
+  namespace: z.string().optional(),
+  literals: z.record(z.string()).optional(),
+  fromEnv: z.array(z.string()).optional(),
+});
+
+export const WaffleKeysConfigSchema = z.object({
+  secrets: z.array(WaffleSecretKeySchema).optional().default([]),
+  envFile: z.string().optional(),
+});
+
+export const WaffleBuildTargetSchema = z.object({
+  name: z.string(),
+  context: z.string(),
+  dockerfile: z.string().optional(),
+  image: z.string(),
+  tag: z.string().optional().default('latest'),
+});
+
+export const WaffleGitOpsSchema = z.object({
+  engine: z.enum(['argocd', 'flux', 'waffle']).optional().default('flux'),
+  branch: z.string().optional().default('main'),
+  autoBuildOnPush: z.boolean().optional().default(true),
+  webhookPath: z.string().optional(),
+});
+
+export const WaffleBuildsSchema = z.object({
+  registry: z.string().optional().default('localhost:5001'),
+  gitops: WaffleGitOpsSchema.optional(),
+  targets: z.array(WaffleBuildTargetSchema).optional().default([]),
+});
+
 export const WaffleStepSchema = z.object({
   id: z.string().min(1, 'Step ID is required'),
   name: z.string().min(1, 'Step name is required'),
@@ -143,6 +212,7 @@ export const WaffleStepSchema = z.object({
   values: z.record(z.any()).optional(),
   set: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
   healthCheck: WaffleHealthCheckSchema.optional(),
+  keys: z.union([z.record(z.string()), WaffleSecretKeySchema]).optional(),
 });
 
 export const WaffleStageSchema = z.object({
@@ -160,6 +230,8 @@ export const WafflePipelineSchema = z.object({
   metadata: WafflePipelineMetadataSchema,
   settings: WaffleSettingsSchema.optional().default({}),
   preflight: WafflePreflightSchema,
+  keys: WaffleKeysConfigSchema.optional(),
+  builds: WaffleBuildsSchema.optional(),
   stages: z.array(WaffleStageSchema).min(1, 'Pipeline must have at least one stage'),
 });
 
@@ -731,6 +803,17 @@ export class WaffleRunner extends EventEmitter {
       // 1. Run Pre-flight Checks (e.g. OpenEBS detection & installation)
       await this.runPreflight(pipeline, baseDir, dryRun);
 
+      // 1.1 Synchronize Global Pipeline Secrets (keys block)
+      if (pipeline.keys?.secrets && pipeline.keys.secrets.length > 0) {
+        const defaultNs = pipeline.settings?.defaultNamespace || 'default';
+        await this.provisionSecrets(pipeline.keys.secrets, defaultNs, Boolean(dryRun));
+      }
+
+      // 1.2 Build Container Images (builds block)
+      if (pipeline.builds?.targets && pipeline.builds.targets.length > 0) {
+        await this.buildImages(pipeline, baseDir, Boolean(dryRun));
+      }
+
       // 2. Execute Stages in Order
       for (const stage of pipeline.stages) {
         if (this.aborted) break;
@@ -813,6 +896,93 @@ export class WaffleRunner extends EventEmitter {
   }
 
   /**
+   * Provision Kubernetes Secrets defined in pipeline.keys or step.keys
+   */
+  private async provisionSecrets(
+    secrets: WaffleSecretKey[],
+    defaultNamespace: string,
+    dryRun?: boolean
+  ): Promise<void> {
+    for (const sec of secrets) {
+      const ns = sec.namespace || defaultNamespace;
+      this.logToRun(`[KEYS] Ensuring Kubernetes Secret "${sec.name}" in namespace "${ns}"...`);
+      if (dryRun) {
+        this.logToRun(`[KEYS] [DRY-RUN] Secret "${sec.name}" creation simulated.`);
+        continue;
+      }
+
+      const literalArgs: string[] = [];
+      if (sec.literals) {
+        for (const [k, v] of Object.entries(sec.literals)) {
+          let val = String(v);
+          const match = val.match(/^\$\{([a-zA-Z0-9_]+)\}$/);
+          if (match && process.env[match[1]] !== undefined) {
+            val = process.env[match[1]]!;
+          }
+          literalArgs.push(`--from-literal=${k}=${JSON.stringify(val)}`);
+        }
+      }
+      if (sec.fromEnv) {
+        for (const envVar of sec.fromEnv) {
+          const val = process.env[envVar] || '';
+          literalArgs.push(`--from-literal=${envVar}=${JSON.stringify(val)}`);
+        }
+      }
+
+      if (literalArgs.length > 0) {
+        try {
+          await execAsync(`kubectl create namespace ${JSON.stringify(ns)} --dry-run=client -o yaml | kubectl apply -f -`);
+          const createCmd = `kubectl create secret generic ${JSON.stringify(sec.name)} --namespace ${JSON.stringify(ns)} ${literalArgs.join(' ')} --dry-run=client -o yaml | kubectl apply -f -`;
+          await execAsync(createCmd);
+          this.logToRun(`[KEYS] Secret "${sec.name}" synchronized in namespace "${ns}".`);
+        } catch (err: any) {
+          this.logToRun(`[KEYS] Notice: Secret sync encountered: ${err.message}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Builds container images defined in pipeline.builds
+   */
+  private async buildImages(
+    pipeline: WafflePipeline,
+    baseDir: string,
+    dryRun?: boolean
+  ): Promise<void> {
+    if (!pipeline.builds?.targets || pipeline.builds.targets.length === 0) {
+      return;
+    }
+    const registry = pipeline.builds.registry || 'localhost:5001';
+    this.logToRun(`[BUILDS] Starting builds for ${pipeline.builds.targets.length} target(s) using registry "${registry}"...`);
+
+    if (dryRun) {
+      for (const target of pipeline.builds.targets) {
+        const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
+        this.logToRun(`[BUILDS] [DRY-RUN] Target "${target.name}" -> ${fullTag} (context: ${target.context}) simulated.`);
+      }
+      return;
+    }
+
+    for (const target of pipeline.builds.targets) {
+      const contextPath = path.resolve(baseDir, target.context);
+      const dockerfilePath = target.dockerfile ? path.resolve(contextPath, target.dockerfile) : path.join(contextPath, 'Dockerfile');
+      const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
+
+      this.logToRun(`[BUILDS] Building target "${target.name}" -> ${fullTag}...`);
+      try {
+        const buildCmd = `docker build -t ${JSON.stringify(fullTag)} ${target.dockerfile ? `-f ${JSON.stringify(dockerfilePath)}` : ''} ${JSON.stringify(contextPath)}`;
+        await execAsync(buildCmd);
+        this.logToRun(`[BUILDS] Pushing image ${fullTag}...`);
+        await execAsync(`docker push ${JSON.stringify(fullTag)}`);
+        this.logToRun(`[BUILDS] Target "${target.name}" successfully built and published.`);
+      } catch (err: any) {
+        this.logToRun(`[BUILDS] Warning: Build for target "${target.name}" failed: ${err.message}`);
+      }
+    }
+  }
+
+  /**
    * Preflight checks: check OpenEBS storage class and cluster readiness
    */
   private async runPreflight(pipeline: WafflePipeline, baseDir: string, dryRun?: boolean): Promise<void> {
@@ -820,8 +990,8 @@ export class WaffleRunner extends EventEmitter {
 
     // Detect if OpenEBS storage class is needed
     const needsOpenEBS =
-      pipeline.preflight?.storage?.requireStorageClass === 'openebs-hostpath' ||
-      pipeline.settings?.defaultStorageClass === 'openebs-hostpath' ||
+      Boolean(pipeline.preflight?.storage?.requireStorageClass?.includes('openebs')) ||
+      Boolean(pipeline.settings?.defaultStorageClass?.includes('openebs')) ||
       pipeline.stages.some((st) =>
         st.steps.some((sp) => {
           const sets = sp.set ? Object.values(sp.set) : [];
@@ -945,6 +1115,18 @@ export class WaffleRunner extends EventEmitter {
           this.emit('progress', runProgress);
           return true;
         }
+      }
+
+      // Step-level secrets synchronization
+      if (step.keys) {
+        const stepSec: WaffleSecretKey = typeof (step.keys as any).name === 'string'
+          ? (step.keys as WaffleSecretKey)
+          : {
+              name: `${step.id}-secrets`,
+              namespace,
+              literals: step.keys as Record<string, string>,
+            };
+        await this.provisionSecrets([stepSec], namespace, dryRun);
       }
 
       log(`Preparing Helm deployment: release="${releaseName}", namespace="${namespace}", chart="${step.chart}"`);
