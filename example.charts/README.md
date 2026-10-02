@@ -131,7 +131,159 @@ helm upgrade --install sample-app ./example.charts/sample-app --namespace defaul
 
 ---
 
-## 7. Included Examples in this Directory
+## 7. Waffle Meta-Packages (`waffle.yaml`) Orchestration
 
-1. **[`sample-app`](file:///home/thoth/vigilant-octo-waffle/example.charts/sample-app)**: A complete, production-ready NGINX microservice with health probes, ingress TLS, custom configmap, and security context.
-2. **[`static-site`](file:///home/thoth/vigilant-octo-waffle/example.charts/static-site)**: A lightweight static HTML / documentation server demonstrating ConfigMap volume mounts.
+While individual Helm charts package isolated microservices, modern datacenter environments require coordinating multiple charts into structured stages (storage engines, databases, queues, tenant apps).
+
+The **Waffle Meta-Package Engine** allows you to place a `waffle.yaml` file directly in your charts directory to declaratively orchestrate multi-chart pipelines.
+
+An example pipeline is included right in this directory: **[`example.charts/waffle.yaml`](./waffle.yaml)**.
+
+### Anatomy of `waffle.yaml`
+
+```yaml
+apiVersion: waffle.dev/v1
+kind: WafflePipeline
+metadata:
+  name: example-ecosystem-pipeline
+  version: 1.0.0
+  description: "Example multi-stage pipeline orchestrating sample-app and static-site charts"
+  authors:
+    - name: "Platform DevOps"
+      email: "devops@example.com"
+  tags:
+    - example
+    - sample-app
+
+# Global settings applied across all steps unless overridden
+settings:
+  defaultNamespace: default
+  defaultStorageClass: local-path
+  defaultClusterIssuer: mkcert-issuer
+  globalTimeout: 15m
+  rollbackOnFailure: true
+
+# Preflight host and cluster requirements
+preflight:
+  storage:
+    requireStorageClass: local-path
+    autoInstallOpenEBS: false
+  ingress:
+    requireController: nginx
+  resources:
+    minCpuCores: 2
+    minMemoryGb: 4
+
+# Kubernetes secrets injected automatically before deployment
+keys:
+  secrets:
+    - name: example-app-secrets
+      namespace: default
+      literals:
+        API_SECRET_KEY: "demo-secret-key-change-in-prod"
+        SESSION_SALT: "randomized-salt-value"
+
+# Container build specifications & GitOps integration
+builds:
+  registry: "localhost:5001"
+  gitops:
+    engine: "waffle" # "waffle", "argocd", or "flux"
+    branch: "main"
+    autoBuildOnPush: false
+    webhookPath: "/api/gitops/webhook"
+  targets:
+    - name: sample-app
+      context: ./sample-app
+      image: sample-app/nginx
+      tag: "1.25.0"
+
+# Ordered deployment stages (sequential or parallel)
+stages:
+  - id: 00-foundation-config
+    name: "Foundation & Secrets Configuration"
+    mode: series      # Steps in this stage run sequentially
+    steps:
+      - id: sample-app-bootstrap
+        name: "Sample App Pre-requisites"
+        chart: ./sample-app
+        namespace: default
+        createNamespace: true
+        wait: true
+        timeout: 3m
+        set:
+          replicaCount: 1
+          ingress.enabled: false
+        healthCheck:
+          type: podReady
+          timeout: 2m
+
+  - id: 10-application-services
+    name: "Application Web Services"
+    mode: parallel    # Steps in this stage run concurrently
+    dependsOn:
+      - 00-foundation-config
+    steps:
+      - id: sample-app-production
+        name: "Production Sample App Service"
+        chart: ./sample-app
+        namespace: default
+        wait: true
+        timeout: 5m
+        set:
+          replicaCount: 2
+          ingress.enabled: true
+          ingress.host: "sample-app.local"
+        healthCheck:
+          type: http
+          url: "http://sample-app.local/healthz"
+          expectedStatus: 200
+          timeout: 2m
+
+      - id: static-docs-site
+        name: "Static Documentation Site"
+        chart: ./static-site
+        namespace: default
+        wait: true
+        timeout: 3m
+        set:
+          replicaCount: 1
+          ingress.enabled: true
+          ingress.host: "docs.local"
+        healthCheck:
+          type: podReady
+          timeout: 2m
+```
+
+### Running and Validating `waffle.yaml`
+
+You can inspect, validate, and execute your `waffle.yaml` pipeline using the CLI, Ink TUI, or Web UI:
+
+1. **Dry-Run / Lint the Pipeline**:
+   ```bash
+   ./up waffle:lint example.charts/waffle.yaml
+   # Or run via orchestrator dry-run:
+   ./up waffle:run example.charts/waffle.yaml --dry-run
+   ```
+
+2. **Execute the Multi-Chart Pipeline**:
+   ```bash
+   ./up waffle:run example.charts/waffle.yaml
+   ```
+
+3. **Interactive Terminal TUI (Ink)**:
+   ```bash
+   ./up ink
+   # Select "Waffle Pipelines" from the main menu to view DAG visualization,
+   # execution stages, and step progress.
+   ```
+
+4. **Web UI Dashboard (`/waffle`)**:
+   Navigate to the **Waffle Meta-Packages** section in the web interface to view the live DAG canvas, inspect step parameters, review run history, and trigger runs with 1-click.
+
+---
+
+## 8. Included Examples in this Directory
+
+1. **[`sample-app`](./sample-app)**: A complete, production-ready NGINX microservice with health probes, ingress TLS, custom configmap, and security context.
+2. **[`static-site`](./static-site)**: A lightweight static HTML / documentation server demonstrating ConfigMap volume mounts.
+3. **[`waffle.yaml`](./waffle.yaml)**: Complete multi-stage pipeline manifest demonstrating dependency DAGs, parallel stages, secrets provisioning, container build specs, and HTTP/Pod health probes.
