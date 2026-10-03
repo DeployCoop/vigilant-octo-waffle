@@ -273,6 +273,15 @@ export default function WaffleStudioPage() {
       } catch {}
     });
 
+    eventSource.addEventListener('pipeline_log', (e: any) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload.line) {
+          setLiveLogs((prev) => [...prev.slice(-300), payload.line]);
+        }
+      } catch {}
+    });
+
     eventSource.addEventListener('finish', (e: any) => {
       try {
         const payload = JSON.parse(e.data) as WaffleRunProgress;

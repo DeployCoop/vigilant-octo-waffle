@@ -34,6 +34,7 @@ export async function GET(req: Request) {
       // Event handlers
       const onProgress = (data: any) => sendEvent('progress', data);
       const onStepLog = (data: any) => sendEvent('step_log', data);
+      const onPipelineLog = (data: any) => sendEvent('pipeline_log', { line: typeof data === 'string' ? data : data.line });
       const onStageStart = (data: any) => sendEvent('stage_start', data);
       const onStepStart = (data: any) => sendEvent('step_start', data);
       const onStepComplete = (data: any) => sendEvent('step_complete', data);
@@ -42,6 +43,7 @@ export async function GET(req: Request) {
 
       runner.on('progress', onProgress);
       runner.on('step_log', onStepLog);
+      runner.on('pipeline_log', onPipelineLog);
       runner.on('stage_start', onStageStart);
       runner.on('step_start', onStepStart);
       runner.on('step_complete', onStepComplete);
@@ -53,6 +55,7 @@ export async function GET(req: Request) {
         clearInterval(heartbeat);
         runner.off('progress', onProgress);
         runner.off('step_log', onStepLog);
+        runner.off('pipeline_log', onPipelineLog);
         runner.off('stage_start', onStageStart);
         runner.off('step_start', onStepStart);
         runner.off('step_complete', onStepComplete);

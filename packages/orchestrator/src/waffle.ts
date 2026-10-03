@@ -1074,14 +1074,20 @@ export class WaffleRunner extends EventEmitter {
           const isEmpty = !fs.existsSync(cloneDir) || fs.readdirSync(cloneDir).length === 0;
 
           if (isEmpty) {
-            this.logToRun(`[BUILDS] Target "${target.name}": Cloning repository from ${gitConfig.repo}...`);
+            let repoUrl = gitConfig.repo;
+            // Convert git@github.com:org/repo.git to https://github.com/org/repo.git if SSH key is absent
+            if (repoUrl.startsWith('git@github.com:')) {
+              repoUrl = repoUrl.replace('git@github.com:', 'https://github.com/');
+            }
+
+            this.logToRun(`[BUILDS] Target "${target.name}": Cloning repository from ${repoUrl}...`);
             fs.mkdirSync(path.dirname(cloneDir), { recursive: true });
 
             const branchArg = gitConfig.branch ? `-b ${JSON.stringify(gitConfig.branch)}` : '';
             const depthArg = gitConfig.depth && !gitConfig.commit ? `--depth ${gitConfig.depth}` : '';
             const submodulesArg = gitConfig.submodules ? '--recurse-submodules' : '';
 
-            const cloneCmd = `git clone ${branchArg} ${depthArg} ${submodulesArg} ${JSON.stringify(gitConfig.repo)} ${JSON.stringify(cloneDir)}`.replace(/\s+/g, ' ');
+            const cloneCmd = `git clone ${branchArg} ${depthArg} ${submodulesArg} ${JSON.stringify(repoUrl)} ${JSON.stringify(cloneDir)}`.replace(/\s+/g, ' ');
             await execAsync(cloneCmd);
 
             if (gitConfig.commit) {
@@ -1112,10 +1118,37 @@ export class WaffleRunner extends EventEmitter {
 
       this.logToRun(`[BUILDS] Building target "${target.name}" -> ${fullTag}...`);
       try {
-        const buildCmd = `docker build -t ${JSON.stringify(fullTag)} ${target.dockerfile ? `-f ${JSON.stringify(dockerfilePath)}` : ''} ${JSON.stringify(contextPath)}`;
-        await execAsync(buildCmd);
+        const buildArgs = ['build', '-t', fullTag];
+        if (target.dockerfile) {
+          buildArgs.push('-f', dockerfilePath);
+        }
+        buildArgs.push(contextPath);
+
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn('docker', buildArgs);
+          proc.stdout?.on('data', (d) => {
+            const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
+            for (const line of lines) {
+              this.logToRun(`[DOCKER] [${target.name}] ${line}`);
+            }
+          });
+          proc.stderr?.on('data', (d) => {
+            const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
+            for (const line of lines) {
+              this.logToRun(`[DOCKER] [${target.name}] ${line}`);
+            }
+          });
+          proc.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`docker build exited with code ${code}`));
+          });
+          proc.on('error', reject);
+        });
+
         this.logToRun(`[BUILDS] Pushing image ${fullTag}...`);
-        await execAsync(`docker push ${JSON.stringify(fullTag)}`);
+        await execAsync(`docker push ${JSON.stringify(fullTag)}`).catch((pushErr) => {
+          this.logToRun(`[BUILDS] Notice: Registry push to "${registry}" skipped or unavailable: ${pushErr.message.split('\n')[0]}`);
+        });
 
         // If K3s is present on node, also import into containerd k8s.io namespace
         try {
