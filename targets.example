@@ -1,0 +1,11 @@
+# ==============================================================================
+# targets - K3s Multi-Node Remote Provisioning Targets File
+# ==============================================================================
+# List one target host IP or user@host per line. Lines starting with # are comments.
+# Used by: ./up k3s:up, ./src/k3s_add_node.sh, ./src/k3s_ping.sh, ./src/k3s_kill.sh
+#
+# Examples:
+# 192.168.1.50
+# 192.168.1.51
+# root@192.168.1.52
+# worker-node-03.local

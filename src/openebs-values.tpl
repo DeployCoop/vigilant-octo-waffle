@@ -26,6 +26,8 @@ lvm-localpv:
     csi:
       volumeSnapshots:
         enabled: false
+  lvmPlugin:
+    allowedTopologies: ${THIS_OPENEBS_LVM_ALLOWED_TOPOLOGIES}
 
 # Refer to https://github.com/openebs/rawfile-localpv/blob/v0.11.0/deploy/helm/rawfile-localpv/values.yaml for complete set of values.
 rawfile-localpv:
@@ -82,6 +84,8 @@ preUpgradeHook:
 
 engines:
   local:
+    hostpath:
+      enabled: ${THIS_OPENEBS_ENGINE_HOSTPATH}
     lvm:
       enabled: ${THIS_OPENEBS_ENGINE_LVM}
     zfs:
@@ -94,7 +98,7 @@ engines:
       enabled: ${THIS_OPENEBS_ENGINE_MAYASTOR}
 
 loki:
-  enabled: true
+  enabled: ${THIS_OPENEBS_ENABLE_LOKI}
   # NOTE: For all possible storage options for loki, check https://github.com/openebs/openebs/blob/HEAD/charts/loki-storage.md
   # Configuration for loki's localpv hostpath storage class.
   localpvScConfig:
@@ -164,11 +168,11 @@ loki:
       size: ${THIS_DEFAULT_STORAGE_SIZE}
 
   minio:
-    replicas: 3
+    replicas: 1
     drivesPerNode: 1
-    mode: distributed
+    mode: standalone
     # Disable this if you want to enabled external s3 bucket, and uncomment the storage section above.
-    enabled: true
+    enabled: ${THIS_OPENEBS_ENABLE_MINIO:-false}
     persistence:
       # -- Enabled persistence for minio
       enabled: true
@@ -224,7 +228,7 @@ loki:
       repository: docker.io/kiwigrid/k8s-sidecar
 
 alloy:
-  enabled: true
+  enabled: ${THIS_OPENEBS_ENABLE_ALLOY}
 
   logging_config:
     # Enable debugging on alloy components.

@@ -5,6 +5,7 @@ import { substituteVariables } from './template.js';
 export interface VowConfig {
   raw: Record<string, string>;
   enablers: Record<string, boolean>;
+  chartsDir: string;
   cluster: {
     k8sPlatform: 'kind' | 'k3d' | 'k3s';
     ingress: 'nginx' | 'traefik' | 'haproxy';
@@ -14,6 +15,9 @@ export interface VowConfig {
     namespace: string;
     adminUser: string;
     fluxNamespace: string;
+    chartsDir: string;
+    appDomains: Record<string, string>;
+    extraDomains: string[];
   };
 }
 
@@ -110,8 +114,29 @@ export function parseEnvFile(content: string): Record<string, string> {
     if (!trimmed || trimmed.startsWith('#')) continue;
     const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
     if (match) {
-      const [, key, val] = match;
-      result[key] = val.replace(/^["']|["']$/g, '').trim();
+      const [, key, rawVal] = match;
+      let val = rawVal.trim();
+      if (val.startsWith('"')) {
+        const closingQuote = val.indexOf('"', 1);
+        if (closingQuote !== -1) {
+          val = val.substring(1, closingQuote);
+        } else {
+          val = val.replace(/^["']|["']$/g, '').trim();
+        }
+      } else if (val.startsWith("'")) {
+        const closingQuote = val.indexOf("'", 1);
+        if (closingQuote !== -1) {
+          val = val.substring(1, closingQuote);
+        } else {
+          val = val.replace(/^["']|["']$/g, '').trim();
+        }
+      } else {
+        const commentIdx = val.indexOf('#');
+        if (commentIdx !== -1) {
+          val = val.substring(0, commentIdx).trim();
+        }
+      }
+      result[key] = val;
     }
   }
   return result;
@@ -135,13 +160,33 @@ export function parseEnablerFile(content: string): Record<string, boolean> {
 }
 
 /**
+ * Traverses upwards to locate the workspace root containing pnpm-workspace.yaml or src/default.env
+ */
+export function findProjectRoot(startDir: string = process.cwd()): string {
+  let curr = path.resolve(startDir);
+  while (curr !== path.dirname(curr)) {
+    if (
+      fs.existsSync(path.join(curr, 'pnpm-workspace.yaml')) ||
+      fs.existsSync(path.join(curr, 'src', 'default.env'))
+    ) {
+      return curr;
+    }
+    curr = path.dirname(curr);
+  }
+  return startDir;
+}
+
+/**
  * Loads entire configuration from project root directory
  */
-export function loadProjectConfig(projectRoot: string): VowConfig {
-  const defaultEnvPath = path.join(projectRoot, 'src', 'default.env');
-  const userEnvPath = path.join(projectRoot, '.env');
-  const enablerPath = path.join(projectRoot, '.env.enabler');
-  const exampleEnablerPath = path.join(projectRoot, 'src', 'example.env.enabler');
+export function loadProjectConfig(projectRoot: string = findProjectRoot()): VowConfig {
+  const resolvedRoot = fs.existsSync(path.join(projectRoot, 'src', 'default.env'))
+    ? projectRoot
+    : findProjectRoot(projectRoot);
+  const defaultEnvPath = path.join(resolvedRoot, 'src', 'default.env');
+  const userEnvPath = path.join(resolvedRoot, '.env');
+  const enablerPath = path.join(resolvedRoot, '.env.enabler');
+  const exampleEnablerPath = path.join(resolvedRoot, 'src', 'example.env.enabler');
 
   let configMap: Record<string, string> = {};
 
@@ -195,10 +240,29 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
       : 'argocd';
   const fluxNamespace = configMap['THIS_FLUX_NAMESPACE'] || 'flux-system';
   const clusterIssuer = configMap['THIS_CLUSTER_ISSUER'] || 'mkcert-issuer';
+  const rawChartsDir = configMap['THIS_CHARTS_DIR'] || configMap['LOCAL_CHARTS_DIR'] || configMap['CHARTS_DIR'] || './charts';
+  const resolvedChartsDir = path.isAbsolute(rawChartsDir) ? rawChartsDir : path.resolve(projectRoot, rawChartsDir);
+
+  const appDomains: Record<string, string> = {};
+  for (const [key, val] of Object.entries(configMap)) {
+    if (key.startsWith('THIS_') && key.endsWith('_DOMAIN') && key !== 'THIS_DOMAIN') {
+      const appId = key.slice(5, -7).toLowerCase();
+      if (val && val.trim()) {
+        appDomains[appId] = val.trim();
+      }
+    }
+  }
+
+  const extraDomainsRaw = configMap['THIS_EXTRA_DOMAINS'] || '';
+  const extraDomains: string[] = extraDomainsRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   return {
     raw: configMap,
     enablers,
+    chartsDir: resolvedChartsDir,
     cluster: {
       k8sPlatform: k8sType,
       ingress,
@@ -208,8 +272,53 @@ export function loadProjectConfig(projectRoot: string): VowConfig {
       namespace,
       adminUser,
       fluxNamespace,
+      chartsDir: resolvedChartsDir,
+      appDomains,
+      extraDomains,
     },
   };
+}
+
+/**
+ * Gets the configured domain for a specific application
+ */
+export function getAppDomain(projectRoot: string, appId: string): string | undefined {
+  const config = loadProjectConfig(projectRoot);
+  const normalized = appId.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return config.cluster.appDomains?.[normalized] || config.cluster.appDomains?.[appId];
+}
+
+/**
+ * Sets the configured domain for a specific application in .env
+ */
+export function setAppDomain(projectRoot: string, appId: string, domain: string): void {
+  const current = loadProjectConfig(projectRoot);
+  const envVar = `THIS_${appId.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_DOMAIN`;
+  const updated = {
+    ...current.raw,
+    [envVar]: domain,
+  };
+  saveEnvFile(projectRoot, updated);
+}
+
+/**
+ * Gets the resolved local Helm charts directory path
+ */
+export function getChartsDirectory(projectRoot: string): string {
+  const config = loadProjectConfig(projectRoot);
+  return config.chartsDir;
+}
+
+/**
+ * Sets the local Helm charts directory path in .env
+ */
+export function setChartsDirectory(projectRoot: string, newPath: string): void {
+  const current = loadProjectConfig(projectRoot);
+  const updated = {
+    ...current.raw,
+    THIS_CHARTS_DIR: newPath,
+  };
+  saveEnvFile(projectRoot, updated);
 }
 
 /**

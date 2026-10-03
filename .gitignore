@@ -12,3 +12,5 @@ dist/
 .kind-config.rendered.yaml
 .k3d-config.rendered.yaml
 *.tsbuildinfo
+.vow_waffles.json
+.vow_waffle_history.json

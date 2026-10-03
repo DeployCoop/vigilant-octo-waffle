@@ -1,0 +1,54 @@
+metadata:
+  name: ollama-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    repoURL: https://otwld.github.io/ollama-helm/
+    chart: ollama
+    targetRevision: 1.14.0
+    helm:
+      releaseName: ollama
+      values: |
+        ollama:
+          gpu:
+            enabled: false
+          models:
+            - llama3.2:1b
+        persistentVolume:
+          enabled: true
+          size: 10Gi
+          storageClass: "${THIS_STORAGECLASS}"
+        service:
+          type: ClusterIP
+          port: 11434
+        ingress:
+          enabled: true
+          className: ${THIS_CLUSTER_INGRESS}
+          hosts:
+            - host: ${THIS_OLLAMA_HOST}.${THIS_DOMAIN}
+              paths:
+                - path: /
+                  pathType: Prefix
+          annotations:
+            cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+          tls:
+            - secretName: ollama-tls
+              hosts:
+                - ${THIS_OLLAMA_HOST}.${THIS_DOMAIN}
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi

@@ -16,6 +16,9 @@ export const ALLOWED_EXECUTABLES = new Set([
   'mkcert',
   'echo',
   'ssh',
+  'scp',
+  'parallel',
+  'git',
 ]);
 
 export interface CommandValidationResult {

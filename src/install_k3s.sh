@@ -9,7 +9,17 @@ if [[ -z "${THIS_IP:-}" ]]; then
 fi
 
 : "${FLANNEL_BACKEND:=wireguard-native}"
-: "${INSTALL_K3S_EXEC_COMMON:=server --tls-san $THIS_IP --flannel-backend=${FLANNEL_BACKEND} --embedded-registry --disable=traefik --secrets-encryption}"
+: "${THIS_K3S_HA_VIP:=}"
+EXTRA_SAN=""
+if [[ -n "${THIS_K3S_HA_VIP}" ]]; then
+  EXTRA_SAN="--tls-san ${THIS_K3S_HA_VIP}"
+fi
+
+: "${ETCD_SNAPSHOT_CRON:=0 */4 * * *}"
+: "${ETCD_SNAPSHOT_RETENTION:=14}"
+ETCD_FLAGS="--etcd-snapshot-schedule-cron=${ETCD_SNAPSHOT_CRON} --etcd-snapshot-retention=${ETCD_SNAPSHOT_RETENTION}"
+
+: "${INSTALL_K3S_EXEC_COMMON:=server --tls-san $THIS_IP ${EXTRA_SAN} --flannel-backend=${FLANNEL_BACKEND} --embedded-registry --disable=traefik --secrets-encryption ${ETCD_FLAGS}}"
 
 # test alpine
 if [[ -f /etc/os-release ]]; then

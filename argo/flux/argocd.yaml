@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flux
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://fluxcd-community.github.io/helm-charts
+    chart: flux2
+    targetRevision: 2.14.0
+    helm:
+      valuesObject:
+        helmController:
+          create: true
+        kustomizeController:
+          create: true
+        notificationController:
+          create: true
+        sourceController:
+          create: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${THIS_FLUX_NAMESPACE}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

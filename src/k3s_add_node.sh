@@ -28,14 +28,21 @@ OUTPUT_FILE=""
 SSH_TARGET=""
 SSH_PORT="22"
 SSH_KEY=""
+TARGETS_FILE=""
+PARALLEL_JOBS=1
+DO_TUNE=false
+COPY_REGISTRIES=false
+REGISTRIES_FILE=""
+COPY_KUBECONFIG=false
 DRY_RUN=false
 PRINT_COMMAND=false
 
 usage() {
   cat << 'EOF'
-Usage: ./src/k3s_add_node.sh [options]
+Usage: ./src/k3s_add_node.sh [options] [target1 target2 ...]
 
 Add and provision worker (agent) or control-plane (server) nodes into K3s.
+Supports single nodes, batch targets files, kernel/sysctl tuning, and registry setup.
 
 Options:
   -r, --role <agent|server>        Node role to join (default: agent)
@@ -47,6 +54,13 @@ Options:
       --taints <k=v:effect,...>    Node taints to assign (e.g. dedicated=gpu:NoSchedule)
   -o, --output <file>              Save standalone join script to file path
       --ssh <user@host>            Remotely provision target machine over SSH
+      --targets <file>             Batch provision multiple nodes listed in targets file
+  -j, --parallel <N>               Run up to N parallel remote join tasks (default: 1)
+      --tune                       Provision kernel modules & system limits before joining
+      --registries, --copy-registries
+                                   Copy registries.yaml to /etc/rancher/k3s/ on target
+      --registries-file <path>     Custom registries.yaml source file
+      --copy-kubeconfig            Copy /etc/rancher/k3s/k3s.yaml to ~/.kube/config
       --ssh-port <port>            SSH port for remote provisioning (default: 22)
       --ssh-key <path>             Path to SSH private key identity file
       --get-token                  Print active cluster join token and exit
@@ -62,11 +76,11 @@ Examples:
   # 2. Save worker join script to .secrets/k3s_join_agent.sh:
   ./src/k3s_add_node.sh --role agent -o ./.secrets/k3s_join_agent.sh
 
-  # 3. Add remote worker node over SSH:
-  ./src/k3s_add_node.sh --role agent --ssh ubuntu@192.168.1.50 --node-name worker-1
+  # 3. Add remote worker node with full tuning and registry mirrors:
+  ./src/k3s_add_node.sh --role agent --ssh root@192.168.1.50 --tune --copy-registries
 
-  # 4. Add additional HA control-plane server node over SSH:
-  ./src/k3s_add_node.sh --role server --ssh root@192.168.1.51 --node-name master-2
+  # 4. Batch join all worker nodes listed in targets file in parallel:
+  ./src/k3s_add_node.sh --role agent --targets targets.txt --tune --copy-registries -j 10
 EOF
 }
 
@@ -138,6 +152,8 @@ resolve_token() {
   echo ""
 }
 
+TARGETS_LIST=()
+
 # Parse command line flags
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -177,6 +193,31 @@ while [[ $# -gt 0 ]]; do
       SSH_TARGET="$2"
       shift 2
       ;;
+    --targets)
+      TARGETS_FILE="$2"
+      shift 2
+      ;;
+    -j|--parallel)
+      PARALLEL_JOBS="$2"
+      shift 2
+      ;;
+    --tune)
+      DO_TUNE=true
+      shift
+      ;;
+    --registries|--copy-registries)
+      COPY_REGISTRIES=true
+      shift
+      ;;
+    --registries-file)
+      COPY_REGISTRIES=true
+      REGISTRIES_FILE="$2"
+      shift 2
+      ;;
+    --copy-kubeconfig)
+      COPY_KUBECONFIG=true
+      shift
+      ;;
     --ssh-port)
       SSH_PORT="$2"
       shift 2
@@ -210,10 +251,14 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    *)
+    -*)
       echo "Unknown option: $1" >&2
       usage
       exit 1
+      ;;
+    *)
+      TARGETS_LIST+=("$1")
+      shift
       ;;
   esac
 done
@@ -328,43 +373,122 @@ if [[ -n "${OUTPUT_FILE}" ]]; then
   exit 0
 fi
 
-# Mode: Remote SSH Provisioning
-if [[ -n "${SSH_TARGET}" ]]; then
+# Ingest targets from file if provided
+if [[ -n "${TARGETS_FILE}" ]]; then
+  if [[ ! -f "${TARGETS_FILE}" ]]; then
+    echo "Error: Targets file '${TARGETS_FILE}' not found." >&2
+    exit 1
+  fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    t=$(echo "${line}" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    [[ -z "${t}" || "${t}" =~ ^# ]] && continue
+    TARGETS_LIST+=("${t}")
+  done < "${TARGETS_FILE}"
+fi
+
+# Provision a single target over SSH
+provision_single_node() {
+  local target_host="$1"
+  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
+  if [[ -n "${SSH_KEY}" ]]; then
+    ssh_opts+=(-i "${SSH_KEY}")
+  fi
+
   echo "============================================================"
-  echo "Provisioning K3s ${ROLE} node on remote host: ${SSH_TARGET}"
+  echo "Provisioning K3s ${ROLE} node on: ${target_host}"
   echo "Server URL  : ${RESOLVED_SERVER_URL}"
   echo "SSH Port    : ${SSH_PORT}"
   if [[ -n "${NODE_NAME}" ]]; then echo "Node Name   : ${NODE_NAME}"; fi
   echo "============================================================"
 
-  SSH_OPTS=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
-  if [[ -n "${SSH_KEY}" ]]; then
-    SSH_OPTS+=(-i "${SSH_KEY}")
-  fi
-
   if [[ "${DRY_RUN}" == "true" ]]; then
-    echo "[DRY RUN] Would execute join script on ${SSH_TARGET} via SSH:"
-    echo "ssh ${SSH_OPTS[*]} ${SSH_TARGET} 'sudo bash -s' << 'EOF'"
+    echo "[DRY RUN] Would tune, copy registries, and join ${target_host} via SSH:"
     generate_script
-    echo "EOF"
-    exit 0
+    return 0
   fi
 
-  echo "==> Testing SSH connection to ${SSH_TARGET}..."
-  if ! ssh "${SSH_OPTS[@]}" "${SSH_TARGET}" "echo 'SSH connection verified'" >/dev/null 2>&1; then
-    echo "Error: Failed to connect to ${SSH_TARGET} over SSH. Please check credentials and host." >&2
-    exit 1
+  echo "==> Testing SSH connection to ${target_host}..."
+  if ! ssh "${ssh_opts[@]}" "${target_host}" "echo 'SSH connection verified'" >/dev/null 2>&1; then
+    echo "Error: Failed to connect to ${target_host} over SSH. Please check credentials and host." >&2
+    return 1
   fi
 
-  echo "==> Executing K3s ${ROLE} join installation on ${SSH_TARGET}..."
-  generate_script | ssh "${SSH_OPTS[@]}" "${SSH_TARGET}" "sudo bash -s"
+  # Step 1: Kernel module and limits tuning
+  if [[ "${DO_TUNE}" == "true" ]]; then
+    echo "==> [${target_host}] Tuning kernel modules (nvme_*) and system limits (nofile/inotify)..."
+    local kmod_cmd=("${SCRIPT_DIR}/k3s_kmod.sh" "--remote" "${target_host}" "--ssh-port" "${SSH_PORT}")
+    if [[ -n "${SSH_KEY}" ]]; then kmod_cmd+=("--ssh-key" "${SSH_KEY}"); fi
+    "${kmod_cmd[@]}" || echo "Warning: [${target_host}] Kernel module provisioning reported non-fatal warning." >&2
+
+    local tune_cmd=("${SCRIPT_DIR}/k3s_tune.sh" "--remote" "${target_host}" "--ssh-port" "${SSH_PORT}")
+    if [[ -n "${SSH_KEY}" ]]; then tune_cmd+=("--ssh-key" "${SSH_KEY}"); fi
+    "${tune_cmd[@]}" || echo "Warning: [${target_host}] System tuning reported non-fatal warning." >&2
+  fi
+
+  # Step 2: Registries mirrors & credentials distribution
+  if [[ "${COPY_REGISTRIES}" == "true" ]]; then
+    echo "==> [${target_host}] Deploying registries.yaml configuration..."
+    local reg_cmd=("${SCRIPT_DIR}/k3s_registries.sh" "--remote" "${target_host}" "--ssh-port" "${SSH_PORT}")
+    if [[ -n "${SSH_KEY}" ]]; then reg_cmd+=("--ssh-key" "${SSH_KEY}"); fi
+    if [[ -n "${REGISTRIES_FILE}" ]]; then reg_cmd+=("--file" "${REGISTRIES_FILE}"); fi
+    if [[ "${COPY_KUBECONFIG}" == "true" ]]; then reg_cmd+=("--copy-kubeconfig"); fi
+    "${reg_cmd[@]}" || echo "Warning: [${target_host}] Registries deployment reported non-fatal warning." >&2
+  fi
+
+  # Step 3: Execute K3s Join
+  echo "==> [${target_host}] Executing K3s ${ROLE} join installation..."
+  generate_script | ssh "${ssh_opts[@]}" "${target_host}" "sudo bash -s"
+
+  echo "==> [${target_host}] Node successfully provisioned and joined to K3s cluster!"
+}
+
+# Mode: Multi-node Batch Provisioning (if targets specified)
+if [[ ${#TARGETS_LIST[@]} -gt 0 ]]; then
+  echo "============================================================"
+  echo "Batch Provisioning ${#TARGETS_LIST[@]} K3s ${ROLE} node(s)"
+  echo "Parallelism : ${PARALLEL_JOBS}"
+  echo "Tuning      : ${DO_TUNE}"
+  echo "Registries  : ${COPY_REGISTRIES}"
+  echo "============================================================"
+
+  # Helper command array builder for parallel / sequential execution
+  run_single_target() {
+    local t="$1"
+    local run_args=("--role" "${ROLE}" "--server" "${RESOLVED_SERVER_URL}" "--token" "${RESOLVED_TOKEN}" "--ssh" "${t}" "--ssh-port" "${SSH_PORT}")
+    if [[ -n "${SSH_KEY}" ]]; then run_args+=("--ssh-key" "${SSH_KEY}"); fi
+    if [[ "${DO_TUNE}" == "true" ]]; then run_args+=("--tune"); fi
+    if [[ "${COPY_REGISTRIES}" == "true" ]]; then run_args+=("--copy-registries"); fi
+    if [[ -n "${REGISTRIES_FILE}" ]]; then run_args+=("--registries-file" "${REGISTRIES_FILE}"); fi
+    if [[ "${COPY_KUBECONFIG}" == "true" ]]; then run_args+=("--copy-kubeconfig"); fi
+    if [[ "${DRY_RUN}" == "true" ]]; then run_args+=("--dry-run"); fi
+    "${SCRIPT_DIR}/k3s_add_node.sh" "${run_args[@]}"
+  }
+  export -f run_single_target
+  export SCRIPT_DIR ROLE RESOLVED_SERVER_URL RESOLVED_TOKEN SSH_PORT SSH_KEY DO_TUNE COPY_REGISTRIES REGISTRIES_FILE COPY_KUBECONFIG DRY_RUN
+
+  if [[ ${PARALLEL_JOBS} -gt 1 ]] && command -v parallel >/dev/null 2>&1; then
+    printf "%s\n" "${TARGETS_LIST[@]}" | parallel -j "${PARALLEL_JOBS}" run_single_target {}
+  else
+    for target in "${TARGETS_LIST[@]}"; do
+      run_single_target "${target}"
+    done
+  fi
 
   echo "==> Checking cluster nodes..."
   if command -v kubectl >/dev/null 2>&1; then
     kubectl get nodes -o wide || true
   fi
+  exit 0
+fi
 
-  echo "==> Node successfully provisioned and joined to K3s cluster!"
+# Mode: Single Remote SSH Provisioning
+if [[ -n "${SSH_TARGET}" ]]; then
+  provision_single_node "${SSH_TARGET}"
+
+  echo "==> Checking cluster nodes..."
+  if command -v kubectl >/dev/null 2>&1; then
+    kubectl get nodes -o wide || true
+  fi
   exit 0
 fi
 
@@ -387,5 +511,8 @@ echo "2. Save to Standalone Script:"
 echo "   ./src/k3s_add_node.sh --role ${ROLE} -o ./.secrets/k3s_join_${ROLE}.sh"
 echo ""
 echo "3. Automated Remote SSH Provisioning:"
-echo "   ./src/k3s_add_node.sh --role ${ROLE} --ssh user@remote-ip"
+echo "   ./src/k3s_add_node.sh --role ${ROLE} --ssh user@remote-ip --tune --copy-registries"
+echo ""
+echo "4. Batch Multi-Node Provisioning:"
+echo "   ./src/k3s_add_node.sh --role ${ROLE} --targets targets.txt --tune --copy-registries -j 10"
 echo "============================================================"

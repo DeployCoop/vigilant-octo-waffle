@@ -21,13 +21,17 @@ export async function GET(req: Request) {
     const ipsParam = url.searchParams.get('ips');
     const ips = ipsParam ? ipsParam.split(',').map((s) => s.trim()) : ['1.2.3.4'];
 
-    const hostsBlock = generateHostsBlock(domain);
-    const bindBlock = generateBindRecords(domain, ips);
-    const cloudflareBlock = generateCloudflareRecords(domain, ips);
+    const appDomains = config.cluster.appDomains || {};
+    const extraDomains = config.cluster.extraDomains || [];
+    const customDomainList = Array.from(new Set([...Object.values(appDomains), ...extraDomains])).filter(Boolean);
+
+    const hostsBlock = generateHostsBlock(domain, '127.0.0.1', customDomainList);
+    const bindBlock = generateBindRecords(domain, ips, customDomainList);
+    const cloudflareBlock = generateCloudflareRecords(domain, ips, customDomainList);
     const coreDnsBlock = generateCoreDnsConfig(domain);
     const sslipDomain = getWildcardDomain('sslip', '127.0.0.1');
     const nipDomain = getWildcardDomain('nip', '127.0.0.1');
-    const status = checkEtcHosts(domain);
+    const status = checkEtcHosts(domain, customDomainList);
 
     const k8s = new K8sClient();
     const [certificates, clusterIssuers] = await Promise.all([
@@ -37,6 +41,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       domain,
+      appDomains,
       sslipDomain,
       nipDomain,
       hostsBlock,

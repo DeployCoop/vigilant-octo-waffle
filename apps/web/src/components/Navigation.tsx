@@ -28,12 +28,21 @@ import {
   Lock,
   DollarSign,
   Smartphone,
+  Bot,
+  Sparkles,
+  BookOpen,
 } from 'lucide-react';
+import { useTerminal } from '@/context/TerminalContext';
+import { AudioToggle } from '@/components/ui/AudioToggle';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Documentation', href: '/docs', icon: BookOpen },
   { name: 'Cluster Control', href: '/cluster', icon: Server },
+  { name: 'Antigravity Copilot', href: '/antigravity', icon: Bot },
   { name: 'App Store', href: '/apps', icon: Layers },
+  { name: 'Waffle Pipelines', href: '/waffle', icon: Sparkles },
+  { name: 'Helm Hub & Releases', href: '/helm', icon: Ship },
   { name: 'Architecture Graph', href: '/topology', icon: Network },
   { name: 'Pod Explorer & Shell', href: '/pods', icon: Boxes },
   { name: 'Chaos Playground', href: '/chaos', icon: Flame },
@@ -48,7 +57,6 @@ const navItems = [
   { name: 'Cloud Exporter', href: '/export', icon: Cloud },
   { name: 'Storage & Volumes', href: '/storage', icon: HardDrive },
   { name: 'Credentials Vault', href: '/vault', icon: Key },
-  { name: 'Helm Releases', href: '/helm', icon: Ship },
   { name: 'Backups & Snapshots', href: '/backups', icon: Archive },
   { name: 'Config Studio', href: '/config', icon: Settings },
   { name: 'TLS & DNS', href: '/certificates', icon: ShieldAlert },
@@ -70,7 +78,7 @@ export function Sidebar() {
           </div>
         </div>
 
-        <nav className="p-3 space-y-1">
+        <nav className="p-3 space-y-1" suppressHydrationWarning>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
@@ -79,13 +87,14 @@ export function Sidebar() {
               <Link
                 key={item.name}
                 href={item.href}
+                suppressHydrationWarning
                 className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                   isActive
                     ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-sky-400' : 'text-slate-400'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-sky-400' : 'text-slate-400'}`} suppressHydrationWarning />
                 <span>{item.name}</span>
               </Link>
             );
@@ -114,6 +123,7 @@ export function Header() {
   const [contexts, setContexts] = useState<string[]>([]);
   const [currentContext, setCurrentContext] = useState<string>('');
   const [switching, setSwitching] = useState(false);
+  const { runningTaskCount, activeTaskId, isMinimized, openTerminal, restoreTerminal } = useTerminal();
 
   useEffect(() => {
     fetch('/api/cluster/contexts')
@@ -173,20 +183,51 @@ export function Header() {
         </div>
       </div>
 
-      <div className="flex items-center space-x-3">
+      <div className="flex items-center space-x-3" suppressHydrationWarning>
+        <AudioToggle />
         <Link
-          href="/terminal"
-          className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"
+          href="/docs"
+          suppressHydrationWarning
+          className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"
+          title="Vigilant Octo Waffle Documentation & Field Guide"
         >
-          <Terminal className="w-3.5 h-3.5 text-sky-400" />
-          <span>Console</span>
+          <BookOpen className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
+          <span>Docs</span>
         </Link>
         <Link
+          href="/antigravity"
+          suppressHydrationWarning
+          className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-sky-400 hover:text-sky-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
+          <span>Antigravity</span>
+        </Link>
+        {runningTaskCount > 0 ? (
+          <button
+            onClick={() => (isMinimized ? restoreTerminal() : openTerminal(activeTaskId || ''))}
+            className="text-xs font-semibold bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-300 px-3 py-1.5 rounded-md border border-emerald-500/50 flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer animate-pulse"
+            title="Open active Terminal execution"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+            <span>Terminal ({runningTaskCount} active)</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => openTerminal(activeTaskId || '')}
+            className="text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-1.5 transition-colors cursor-pointer"
+            title="Open pop-out Terminal console"
+          >
+            <Terminal className="w-3.5 h-3.5 text-sky-400" suppressHydrationWarning />
+            <span>Console</span>
+          </button>
+        )}
+        <Link
           href="/apps"
+          suppressHydrationWarning
           className="text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white px-3.5 py-1.5 rounded-md transition-colors shadow-sm flex items-center space-x-1.5"
         >
           <span>Catalog & Enablers</span>
-          <ExternalLink className="w-3 h-3" />
+          <ExternalLink className="w-3 h-3" suppressHydrationWarning />
         </Link>
       </div>
     </header>

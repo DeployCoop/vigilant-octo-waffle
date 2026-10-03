@@ -76,6 +76,13 @@ export class ClusterOrchestrator {
       );
     } else {
       // k3s
+      const upScript = path.join(this.projectRoot, 'src', 'k3s_up.sh');
+      if (fs.existsSync(upScript)) {
+        return processManager.runCommand('bash', [upScript], {
+          cwd: this.projectRoot,
+          env: config.raw,
+        });
+      }
       return processManager.runCommand('kubectl', ['get', 'nodes'], {
         cwd: this.projectRoot,
         env: config.raw,
@@ -109,7 +116,17 @@ export class ClusterOrchestrator {
         env: config.raw,
       });
     } else {
-      return processManager.runCommand('echo', ['Cannot automatically delete baremetal/k3s cluster'], {
+      // k3s or baremetal
+      const killScript = path.join(this.projectRoot, 'src', 'k3s_kill.sh');
+      if (fs.existsSync(killScript)) {
+        const hasTargets = fs.existsSync(path.join(this.projectRoot, 'targets'));
+        const args = hasTargets ? [killScript, '--all', '-y'] : [killScript, '--local', '-y'];
+        return processManager.runCommand('bash', args, {
+          cwd: this.projectRoot,
+          env: config.raw,
+        });
+      }
+      return processManager.runCommand('echo', ['Cannot automatically delete baremetal/k3s cluster: src/k3s_kill.sh not found'], {
         cwd: this.projectRoot,
       });
     }

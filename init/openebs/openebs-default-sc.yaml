@@ -1,9 +1,22 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: openebs-lvmpv
+  name: ${THIS_LVM_STORAGECLASS}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "${THIS_LVM_IS_DEFAULT_SC}"
+    openebs.io/cas-type: local
+provisioner: ${THIS_OPENEBS_LVM_PROVISIONER}
 parameters:
   storage: "lvm"
   volgroup: "${THIS_LVM_VG}"
-provisioner: local.csi.openebs.io
+  thinProvision: "${THIS_LVM_THIN_PROVISION}"
+  shared: "${THIS_LVM_SHARED}"
+  fsType: "${THIS_LVM_FSTYPE}"
+allowVolumeExpansion: ${THIS_LVM_ALLOW_VOLUME_EXPANSION}
+reclaimPolicy: ${THIS_LVM_RECLAIM_POLICY}
 volumeBindingMode: WaitForFirstConsumer
+allowedTopologies:
+- matchLabelExpressions:
+  - key: ${THIS_OPENEBS_LVM_TOPOLOGY_KEY}
+    values:
+    - "${THIS_OPENEBS_LVM_TOPOLOGY_VALUE}"

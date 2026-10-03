@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Ensure /usr/local/bin and standard system paths are in PATH
+export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:${PATH}"
+
 # load our env file
 if [[ -f .env ]]; then
   set -a && source .env && set +a

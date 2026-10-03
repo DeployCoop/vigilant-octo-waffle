@@ -1,0 +1,47 @@
+metadata:
+  name: vllm-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    repoURL: https://vllm-project.github.io/production-stack
+    chart: vllm-stack
+    targetRevision: 0.1.0
+    helm:
+      releaseName: vllm
+      values: |
+        model:
+          name: meta-llama/Meta-Llama-3-8B-Instruct
+        service:
+          type: ClusterIP
+          port: 8000
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 4Gi
+          limits:
+            cpu: 8000m
+            memory: 16Gi
+        ingress:
+          enabled: true
+          className: ${THIS_CLUSTER_INGRESS}
+          hosts:
+            - host: ${THIS_VLLM_HOST}.${THIS_DOMAIN}
+              paths:
+                - path: /
+                  pathType: Prefix
+          annotations:
+            cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+          tls:
+            - secretName: vllm-tls
+              hosts:
+                - ${THIS_VLLM_HOST}.${THIS_DOMAIN}

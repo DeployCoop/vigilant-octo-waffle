@@ -1,0 +1,14 @@
+apiVersion: v2
+name: static-site
+version: 0.1.0
+appVersion: "1.0.0"
+description: "Lightweight static documentation and marketing website powered by NGINX"
+type: application
+keywords:
+  - web
+  - static
+  - documentation
+icon: "https://raw.githubusercontent.com/kubernetes/community/master/icons/png/resources/labeled/ingress-128.png"
+maintainers:
+  - name: "DevOps Lead"
+    email: "devops@webhosting.coop"

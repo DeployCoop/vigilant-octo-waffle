@@ -23,6 +23,7 @@ main() {
       argocd argo-cd \
       --repo https://argoproj.github.io/argo-helm \
       --wait \
+      --timeout "${THIS_HELM_TIMEOUT:-15m0s}" \
       -f "${TMP}/values.yaml"
   else
     #kubectl delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml

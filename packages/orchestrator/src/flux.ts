@@ -203,4 +203,16 @@ export class FluxManager {
       }
     );
   }
+
+  /**
+   * Bootstraps FluxCD controllers and baseline CRDs using src/flux.sh
+   */
+  public bootstrapFlux(): TaskRun {
+    const config = loadProjectConfig(this.projectRoot);
+    const fluxScript = path.join(this.projectRoot, 'src', 'flux.sh');
+    return processManager.runCommand('bash', [fluxScript], {
+      cwd: this.projectRoot,
+      env: config.raw,
+    });
+  }
 }

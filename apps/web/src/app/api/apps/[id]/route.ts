@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
-import { ArgoManager, FluxManager, APP_CATALOG, loadProjectConfig } from '@vow/orchestrator';
+import {
+  APP_CATALOG,
+  getCombinedAppCatalog,
+  ArgoManager,
+  FluxManager,
+  loadProjectConfig,
+  getLocalChartDetail,
+  installLocalChart,
+  templateLocalChart,
+} from '@vow/orchestrator';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -17,12 +26,37 @@ export async function GET(
     const { searchParams } = new URL(req.url);
     const root = getProjectRoot();
     const config = loadProjectConfig(root);
+    const catalog = getCombinedAppCatalog(root);
     const runner = (searchParams.get('runner') || config.cluster.cdRunner || 'argocd').toLowerCase();
 
-    const appDef = APP_CATALOG.find((a) => a.id === id);
+    const appDef = catalog.find((a) => a.id === id);
 
     if (!appDef) {
       return NextResponse.json({ error: 'App not found in catalog' }, { status: 404 });
+    }
+
+    // Local Helm Chart handling
+    if (appDef.isLocalChart) {
+      const chartDetail = getLocalChartDetail(root, id);
+      const overridePath = path.join(root, '.chart_overrides', id, 'values.yaml');
+      const overrideManifest = fs.existsSync(overridePath) ? fs.readFileSync(overridePath, 'utf-8') : null;
+      let templatedYaml = '';
+      try {
+        templatedYaml = await templateLocalChart(root, id, { valuesYaml: overrideManifest || undefined });
+      } catch (err: any) {
+        templatedYaml = `# Helm template preview error:\n# ${err.message}`;
+      }
+
+      return NextResponse.json({
+        app: appDef,
+        runner: 'helm',
+        chart: chartDetail,
+        baseManifest: chartDetail?.rawValuesYaml || '',
+        overrideManifest,
+        templatedYaml,
+        manifestSource: 'local-helm-chart',
+        hasOverride: Boolean(overrideManifest),
+      });
     }
 
     if (runner === 'flux') {
@@ -100,14 +134,44 @@ export async function POST(
 
     const root = getProjectRoot();
     const config = loadProjectConfig(root);
-    const appDef = APP_CATALOG.find((a) => a.id === id);
+    const catalog = getCombinedAppCatalog(root);
+    const appDef = catalog.find((a) => a.id === id);
 
     if (!appDef) {
       return NextResponse.json({ error: 'App not found in catalog' }, { status: 404 });
     }
 
     const body = await req.json().catch(() => ({}));
-    const runner = (body.runner || config.cluster.cdRunner || 'argocd').toLowerCase();
+    const runner = (body.runner || (appDef.isLocalChart ? 'helm' : config.cluster.cdRunner || 'argocd')).toLowerCase();
+
+    // Local Helm Chart deployment
+    if (appDef.isLocalChart && body.action === 'deploy') {
+      const overridePath = path.join(root, '.chart_overrides', id, 'values.yaml');
+      const valuesYaml = body.overrideYaml || (fs.existsSync(overridePath) ? fs.readFileSync(overridePath, 'utf-8') : undefined);
+      const task = installLocalChart(root, id, { valuesYaml });
+      return NextResponse.json({
+        success: true,
+        runner: 'helm',
+        taskId: task.id,
+      });
+    }
+
+    // Local Helm Chart save override
+    if (appDef.isLocalChart && body.action === 'saveOverride') {
+      if (typeof body.overrideYaml !== 'string') {
+        return NextResponse.json({ error: 'overrideYaml string is required' }, { status: 400 });
+      }
+      const overridesBase = path.resolve(root, '.chart_overrides');
+      const overrideDir = path.resolve(overridesBase, id);
+      if (!overrideDir.startsWith(overridesBase + path.sep)) {
+        return NextResponse.json({ error: 'Invalid override destination path' }, { status: 400 });
+      }
+      if (!fs.existsSync(overrideDir)) {
+        fs.mkdirSync(overrideDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(overrideDir, 'values.yaml'), body.overrideYaml, 'utf-8');
+      return NextResponse.json({ success: true, runner: 'helm' });
+    }
 
     if (body.action === 'deploy') {
       if (runner === 'flux') {

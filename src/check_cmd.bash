@@ -29,12 +29,27 @@ do_cmd_checks () {
   check_cmd tr
   check_cmd yq
   if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    check_cmd kind
-    check_cmd docker
+    if ! command -v kind >/dev/null 2>&1 && (command -v k3s >/dev/null 2>&1 || (command -v kubectl >/dev/null 2>&1 && kubectl get nodes 2>/dev/null | grep -qi "k3s")); then
+      THIS_K8S_TYPE="k3s"
+      export THIS_K8S_TYPE
+    else
+      check_cmd kind
+      check_cmd docker
+    fi
   elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
     check_cmd k3d
     check_cmd docker
-  elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
-    check_cmd k3s
+  fi
+  if [[ $THIS_K8S_TYPE == "k3s" ]]; then
+    if command -v k3s >/dev/null 2>&1 || [[ -x /usr/local/bin/k3s ]]; then
+      # k3s is installed
+      :
+    elif command -v kubectl >/dev/null 2>&1 && kubectl get nodes >/dev/null 2>&1; then
+      # Remote K3s/Kubernetes cluster already connected
+      :
+    else
+      echo "==> Note: k3s was not detected in PATH. K3s cluster bring-up will install/bootstrap it."
+      export K3S_AUTO_INSTALL_REQUIRED=true
+    fi
   fi
 }
