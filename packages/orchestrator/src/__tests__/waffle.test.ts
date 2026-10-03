@@ -302,4 +302,23 @@ stages:
       assert.equal(target2.git.submodules, true);
     }
   });
+
+  it('refuses to provision secrets from unset env vars or placeholder values', async () => {
+    const runner = new WaffleRunner(process.cwd()) as any;
+    const saved = { ...process.env };
+    try {
+      delete process.env.WAFFLE_TEST_UNSET_PW;
+      await assert.rejects(
+        runner.provisionSecrets([{ name: 's', literals: { PW: 'x:${WAFFLE_TEST_UNSET_PW}@h' } }], 'default', false),
+        /WAFFLE_TEST_UNSET_PW/
+      );
+      process.env.WAFFLE_TEST_PH = 'supabase_datacenter_master_password_change_me';
+      await assert.rejects(
+        runner.provisionSecrets([{ name: 's', literals: { PW: '${WAFFLE_TEST_PH}' } }], 'default', false),
+        /change_me/
+      );
+    } finally {
+      process.env = saved;
+    }
+  });
 });

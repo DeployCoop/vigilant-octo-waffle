@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { createHmac } from 'node:crypto';
 import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import YAML from 'yaml';
@@ -948,6 +949,21 @@ export class WaffleRunner extends EventEmitter {
   }
 
   /**
+   * Derives Supabase ANON_KEY / SERVICE_ROLE_KEY as HS256 JWTs signed with SUPABASE_JWT_SECRET.
+   * Returns undefined for any other variable or when the signing secret is not set.
+   */
+  private deriveSupabaseJwt(envVar: string): string | undefined {
+    const role = envVar === 'SUPABASE_ANON_KEY' ? 'anon' : envVar === 'SUPABASE_SERVICE_ROLE_KEY' ? 'service_role' : undefined;
+    const secret = process.env.SUPABASE_JWT_SECRET;
+    if (!role || !secret) return undefined;
+    const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const now = Math.floor(Date.now() / 1000);
+    const unsigned = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ role, iss: 'supabase', iat: now, exp: now + 10 * 365 * 24 * 3600 })}`;
+    const sig = createHmac('sha256', secret).update(unsigned).digest('base64url');
+    return `${unsigned}.${sig}`;
+  }
+
+  /**
    * Provision Kubernetes Secrets defined in pipeline.keys or step.keys
    */
   private async provisionSecrets(
@@ -965,39 +981,30 @@ export class WaffleRunner extends EventEmitter {
 
       const secretData: Record<string, string> = {};
       if (sec.literals) {
+        const missing = new Set<string>();
         for (const [k, v] of Object.entries(sec.literals)) {
-          let val = String(v);
-          const match = val.match(/^\$\{([a-zA-Z0-9_]+)\}$/);
-          if (match) {
-            const envVar = match[1];
-            if (process.env[envVar] !== undefined && process.env[envVar] !== '') {
-              val = process.env[envVar]!;
-            } else {
-              if (envVar.includes('SUPABASE_DB_PASSWORD') || envVar.includes('POSTGRES_PASSWORD')) {
-                val = 'supabase_datacenter_master_password_change_me';
-              } else if (envVar.includes('JWT_SECRET')) {
-                val = 'super-secret-jwt-token-with-at-least-32-characters-long';
-              } else if (envVar.includes('FREEIPA_ADMIN_PASSWORD') || envVar.includes('ADMIN_PASSWORD')) {
-                val = 'AdminPassword123!';
-              } else if (envVar.includes('FREEIPA_DM_PASSWORD') || envVar.includes('DM_PASSWORD')) {
-                val = 'DirectoryManagerPassword123!';
-              } else if (envVar.includes('SEAWEEDFS_ACCESS_KEY')) {
-                val = 'billama_s3_admin_access_key';
-              } else if (envVar.includes('SEAWEEDFS_SECRET_KEY')) {
-                val = 'billama_s3_admin_secret_key_change_in_production';
-              } else if (envVar.includes('REDIS_PASSWORD')) {
-                val = 'billama_redis_master_password_change_me';
-              } else if (envVar.includes('ANON_KEY')) {
-                val = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWZlcmVuY2UiOiJkZWZhdWx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MTkwMDAwMDAwMH0.signature';
-              } else if (envVar.includes('SERVICE_ROLE_KEY')) {
-                val = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWZlcmVuY2UiOiJkZWZhdWx0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.signature';
-              } else {
-                val = 'bllm_sec_' + Math.random().toString(36).substring(2, 14);
-              }
-              process.env[envVar] = val;
-            }
+          // Interpolate every ${VAR} occurrence (whole-value or embedded in a URL).
+          // Never fall back to a built-in default: published placeholder secrets
+          // (e.g. *_change_me) must not reach a cluster.
+          secretData[k] = String(v).replace(/\$\{([a-zA-Z0-9_]+)\}/g, (_m, envVar: string) => {
+            const fromEnv = process.env[envVar];
+            if (fromEnv !== undefined && fromEnv !== '') return fromEnv;
+            const derived = this.deriveSupabaseJwt(envVar);
+            if (derived) return derived;
+            missing.add(envVar);
+            return '';
+          });
+        }
+        if (missing.size > 0) {
+          throw new Error(
+            `Secret "${sec.name}" requires unset environment variable(s): ${[...missing].sort().join(', ')}. ` +
+              `Export them (see charts/production-prep.md) before running the pipeline.`
+          );
+        }
+        for (const [k, val] of Object.entries(secretData)) {
+          if (/change_?me/i.test(val)) {
+            throw new Error(`Secret "${sec.name}" key "${k}" still contains a "change_me" placeholder; refusing to apply.`);
           }
-          secretData[k] = val;
         }
       }
       if (sec.fromEnv) {
@@ -1010,7 +1017,6 @@ export class WaffleRunner extends EventEmitter {
       if (Object.keys(secretData).length > 0) {
         try {
           await execAsync(`kubectl create namespace ${JSON.stringify(ns)} --dry-run=client -o yaml | kubectl apply -f -`, { env: getWaffleExecutionEnv() });
-          const releaseName = sec.name.replace(/-secrets?$/, '');
           const manifestObj = {
             apiVersion: 'v1',
             kind: 'Secret',
@@ -1018,11 +1024,11 @@ export class WaffleRunner extends EventEmitter {
               name: sec.name,
               namespace: ns,
               labels: {
-                'app.kubernetes.io/managed-by': 'Helm',
+                'app.kubernetes.io/managed-by': 'waffle',
               },
               annotations: {
-                'meta.helm.sh/release-name': releaseName,
-                'meta.helm.sh/release-namespace': ns,
+                // Keep Helm from deleting this secret if a previous release rendered one with the same name.
+                'helm.sh/resource-policy': 'keep',
               },
             },
             type: 'Opaque',
