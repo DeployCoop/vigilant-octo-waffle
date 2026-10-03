@@ -29,6 +29,7 @@ import {
   Check,
   X,
   FileCode,
+  Hammer,
 } from 'lucide-react';
 
 interface WafflePipelineMetadata {
@@ -36,6 +37,20 @@ interface WafflePipelineMetadata {
   version?: string;
   description?: string;
   tags?: string[];
+}
+
+interface WaffleBuildTarget {
+  name: string;
+  context: string;
+  git?: string | { repo: string; branch?: string };
+  dockerfile?: string;
+  image: string;
+  tag?: string;
+}
+
+interface WaffleBuildsConfig {
+  registry?: string;
+  targets?: WaffleBuildTarget[];
 }
 
 interface WaffleStep {
@@ -66,6 +81,7 @@ interface WafflePipeline {
   apiVersion?: string;
   kind?: string;
   metadata: WafflePipelineMetadata;
+  builds?: WaffleBuildsConfig;
   stages: WaffleStage[];
 }
 
@@ -388,6 +404,39 @@ export default function WaffleStudioPage() {
     }
   };
 
+  // Rebuild Container Images Action
+  const handleBuildImages = async (dryRun: boolean = false) => {
+    try {
+      setExecuting(true);
+      setLiveLogs([`[STUDIO] Triggering automated rebuild of container images (${dryRun ? 'DRY-RUN' : 'LIVE'})...`]);
+      setTerminalOpen(true);
+
+      const body: any = { dryRun, buildOnly: true };
+      if (selectedSourceId) {
+        body.sourceId = selectedSourceId;
+      } else if (selectedBlueprintId) {
+        body.blueprintId = selectedBlueprintId;
+      }
+
+      const res = await fetch('/api/waffle/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setLiveLogs((prev) => [...prev, `[ERROR] ${data.error}`]);
+        setExecuting(false);
+      } else {
+        setActiveRun(data.run);
+      }
+    } catch (err: any) {
+      setLiveLogs((prev) => [...prev, `[FATAL] ${err.message}`]);
+      setExecuting(false);
+    }
+  };
+
   // Abort Pipeline Action
   const handleAbort = async () => {
     try {
@@ -540,6 +589,26 @@ export default function WaffleStudioPage() {
             >
               <Cpu className="w-3.5 h-3.5" />
               <span>Simulate (Dry-Run)</span>
+            </button>
+
+            <button
+              onClick={() => handleBuildImages(false)}
+              disabled={executing || !currentPipeline?.builds?.targets?.length}
+              title={
+                !currentPipeline?.builds?.targets?.length
+                  ? 'No build targets configured in this pipeline'
+                  : `Rebuild all ${currentPipeline.builds.targets.length} container images`
+              }
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                !currentPipeline?.builds?.targets?.length || executing
+                  ? 'border-slate-800 bg-slate-900 text-slate-600 cursor-not-allowed'
+                  : 'border-amber-500/40 bg-amber-950/30 hover:bg-amber-900/40 text-amber-300'
+              }`}
+            >
+              <Hammer className="w-3.5 h-3.5" />
+              <span>
+                Rebuild Images{currentPipeline?.builds?.targets?.length ? ` (${currentPipeline.builds.targets.length})` : ''}
+              </span>
             </button>
 
             {executing && (

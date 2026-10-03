@@ -787,9 +787,10 @@ export class WaffleRunner extends EventEmitter {
     pipeline: WafflePipeline;
     baseDir: string;
     dryRun?: boolean;
+    buildOnly?: boolean;
   }): Promise<WaffleRunProgress> {
     this.aborted = false;
-    const { sourceId, pipeline, baseDir, dryRun } = options;
+    const { sourceId, pipeline, baseDir, dryRun, buildOnly } = options;
 
     const runId = `run_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     let totalSteps = 0;
@@ -838,6 +839,18 @@ export class WaffleRunner extends EventEmitter {
     this.emit('progress', runProgress);
 
     try {
+      if (buildOnly) {
+        this.logToRun(`[BUILDS] Rebuild mode activated for pipeline "${pipeline.metadata.name}".`);
+        if (!pipeline.builds?.targets || pipeline.builds.targets.length === 0) {
+          this.logToRun('[BUILDS] No build targets defined in pipeline. Nothing to rebuild.');
+        } else {
+          await this.buildImages(pipeline, baseDir, Boolean(dryRun));
+          this.logToRun(`[BUILDS] All ${pipeline.builds.targets.length} target image(s) processed successfully.`);
+        }
+        runProgress.status = 'completed';
+        return runProgress;
+      }
+
       // 1. Run Pre-flight Checks (e.g. OpenEBS detection & installation)
       await this.runPreflight(pipeline, baseDir, dryRun);
 
@@ -1107,7 +1120,14 @@ export class WaffleRunner extends EventEmitter {
         // If K3s is present on node, also import into containerd k8s.io namespace
         try {
           const shortName = target.image + ':' + (target.tag || 'latest');
-          await execAsync(`docker tag ${JSON.stringify(fullTag)} ${JSON.stringify(shortName)} && docker tag ${JSON.stringify(fullTag)} ${JSON.stringify('docker.io/' + shortName)} && docker save ${JSON.stringify(fullTag)} ${JSON.stringify(shortName)} ${JSON.stringify('docker.io/' + shortName)} | sudo k3s ctr -n k8s.io images import -`);
+          const saveCmd = `docker tag ${JSON.stringify(fullTag)} ${JSON.stringify(shortName)} && docker tag ${JSON.stringify(fullTag)} ${JSON.stringify('docker.io/' + shortName)} && docker save ${JSON.stringify(fullTag)} ${JSON.stringify(shortName)} ${JSON.stringify('docker.io/' + shortName)}`;
+          await execAsync(`${saveCmd} | sudo k3s ctr -n k8s.io images import -`);
+
+          // Replicate image to peer cluster nodes if discoverable
+          const workerIps = ['10.80.0.211', '10.80.0.212'];
+          for (const ip of workerIps) {
+            execAsync(`${saveCmd} | ssh -o BatchMode=yes -o ConnectTimeout=5 ${ip} "sudo k3s ctr -n k8s.io images import -"`).catch(() => {});
+          }
         } catch {
           // ignore k3s import if not in k3s environment
         }

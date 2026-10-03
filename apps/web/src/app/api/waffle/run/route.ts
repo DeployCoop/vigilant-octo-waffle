@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const runner = getWaffleRunner(root);
     const body = await req.json();
 
-    const { sourceId, blueprintId, customPath, dryRun } = body;
+    const { sourceId, blueprintId, customPath, dryRun, buildOnly } = body;
 
     let targetPipeline: WafflePipeline | null = null;
     let targetBaseDir: string = root;
@@ -62,6 +62,7 @@ export async function POST(req: Request) {
       pipeline: targetPipeline,
       baseDir: targetBaseDir,
       dryRun: Boolean(dryRun),
+      buildOnly: Boolean(buildOnly),
     }).catch((err) => {
       console.error('[WaffleRunner] Pipeline execution error:', err);
     });
@@ -72,7 +73,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Started ${dryRun ? 'dry-run of ' : ''}pipeline "${targetPipeline.metadata.name}"`,
+      message: buildOnly
+        ? `Started image rebuild for pipeline "${targetPipeline.metadata.name}"`
+        : `Started ${dryRun ? 'dry-run of ' : ''}pipeline "${targetPipeline.metadata.name}"`,
       run: activeRun,
     });
   } catch (err: any) {
