@@ -10,7 +10,7 @@ w8_native_wait() {
     kubectl wait \
       --namespace $TARGET_NAMESPACE \
       --for=condition=ready pod $TARGET_POD \
-      --timeout=120s
+      --timeout=${THIS_WAIT_TIMEOUT:-900s}
   else
     echo 'ERROR: wrong number of arguments!'
     echo "$0 NAMESPACE POD"
@@ -21,7 +21,7 @@ w8_native_wait() {
 w8_all_namespace() {
   if [[ $# -eq 1 ]]; then
     TARGET_NAMESPACE=$1
-    TARGET_TIMEOUT=600s
+    TARGET_TIMEOUT=${THIS_WAIT_TIMEOUT:-900s}
   elif [[ $# -eq 2 ]]; then
     TARGET_NAMESPACE=$1
     TARGET_TIMEOUT=$2

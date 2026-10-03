@@ -1,92 +1,80 @@
 #!/usr/bin/env bash
-if [[ "${1:-}" == "k3s:add-node" || "${1:-}" == "k3s:join" || "${1:-}" == "add-node" ]]; then
-  shift
-  exec ./src/k3s_add_node.sh "$@"
+set -e
+
+# ==============================================================================
+# up - Unified Entrypoint for Vigilant Octo Waffle Orchestrator & Ink TUI
+# ==============================================================================
+# All legacy shell scripting has been migrated to TypeScript domain libraries
+# in packages/orchestrator and the interactive/headless CLI in apps/ink.
+# ==============================================================================
+
+# Ensure Node & pnpm are on PATH
+export PATH="/root/.nvm/versions/node/v24.21.0/bin:${PATH}"
+
+if [[ $# -eq 0 ]]; then
+  if [[ -t 1 && -z "${CI:-}" ]]; then
+    exec ./bin/vow
+  else
+    exec ./bin/vow up
+  fi
 fi
 
-: "${BIG_LIST:=./src/big_list}"
-source ./src/sourceror.bash
-export this_cwd=$(pwd)
-
-main() {
-  set -e
-  src/secrets.sh
-  if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    src/kindDown.sh
-    sleep 1
-    if [[ ${THIS_REG_ENABLE} == "true" ]]; then
-      src/localregistry_start.sh
-    fi
-    src/kindUp.sh
-    if [[ ${THIS_REG_ENABLE} == "true" ]]; then
-      #src/registry-proxy.sh
-      src/localregistry_setupnodes.sh
-    fi
-  elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
-    src/k3dDown.sh
-    sleep 1
-    src/k3dUp.sh
-  elif [[ $THIS_K8S_TYPE == "k3s" ]]; then
-    kubectl get nodes
-    if [[ $? == 0 ]]; then
-      echo "kube cluster is installed, proceeding"
+case "$1" in
+  ink|tui|ui|-i|--interactive)
+    shift || true
+    exec ./bin/vow -i "$@"
+    ;;
+  vow)
+    shift
+    exec ./bin/vow "$@"
+    ;;
+  up)
+    shift
+    exec ./bin/vow up "$@"
+    ;;
+  doctor|config:doctor|config:check|config:fix)
+    shift
+    exec ./bin/vow doctor "$@"
+    ;;
+  namespaces|namespaces:sync|ns:sync)
+    shift
+    exec ./bin/vow namespaces "$@"
+    ;;
+  secrets|secrets:sync|sync:secrets)
+    shift
+    exec ./bin/vow secrets "$@"
+    ;;
+  ingress|ingress:*|certmanager)
+    shift
+    exec ./bin/vow ingress "$@"
+    ;;
+  storage|storage:*|k3s:storage)
+    shift
+    exec ./bin/vow storage "$@"
+    ;;
+  app|apps)
+    shift
+    exec ./bin/vow app "$@"
+    ;;
+  k3s|k3s:*)
+    sub="${1#k3s:}"
+    shift
+    if [[ "$sub" == "k3s" ]]; then
+      exec ./bin/vow k3s "$@"
     else
-      echo "kube cluster is not installed, exiting"
-      exit 1
+      exec ./bin/vow k3s "$sub" "$@"
     fi
-  else
-    echo "THIS_K8S_TYPE is not set, aborting!"
-    exit 1
-  fi
-  set -eu
-  set -x
-  src/namespacer.sh monitoring
-  src/namespacer.sh nfs-server
-  initializer "$this_cwd/init/cluster"
-
-  if [[ ${THIS_EARLY_END} == 'true' ]]; then
-    exit 0
-  fi
-
-  # certmanager
-  src/certmanager.sh
-  w8_all_namespace cert-manager
-
-  kubectl apply -f .secrets/${THIS_SECRETS}.yaml
-  if [[ ${THIS_CLUSTER_INGRESS} == "traefik" ]]; then
-    src/traefik.sh
-  elif [[ ${THIS_CLUSTER_INGRESS} == "nginx" ]]; then
-    src/nginx.sh
-    w8_all_namespace ingress-nginx
-  elif [[ ${THIS_CLUSTER_INGRESS} == "haproxy" ]]; then
-    src/haproxy.sh
-  else
-    echo 'unrecognized ingress'
-    exit 1
-  fi
-  if [[ $THIS_K8S_TYPE == "kind" ]]; then
-    echo 'kind'
-  elif [[ $THIS_K8S_TYPE == "k3d" ]]; then
-    echo 'k3d'
-  else
-    echo 'k3s'
-  fi
-  # CD Runners: ArgoCD and/or FluxCD (https://fluxcd.io)
-  if [[ "${THIS_CD_RUNNER:-argocd}" == "argocd" || "${THIS_CD_RUNNER:-argocd}" == "both" ]]; then
-    src/argocd.sh
-  fi
-  if [[ "${THIS_CD_RUNNER:-argocd}" == "flux" || "${THIS_CD_RUNNER:-argocd}" == "fluxcd" || "${THIS_CD_RUNNER:-argocd}" == "both" ]]; then
-    src/flux.sh
-  fi
-  #openEBS
-  src/openebs.sh
-  src/rook-ceph-operator.sh
-  src/csi-driver-nfs.sh
-  # kubegres
-  src/kubegres.sh
-  src/keycloak.sh
-  src/dockerCreds.sh
-  para_runner "${BIG_LIST}"
-}
-
-time main
+    ;;
+  waffle|waffle:*)
+    sub="${1#waffle:}"
+    shift
+    if [[ "$sub" == "waffle" ]]; then
+      exec ./bin/vow waffle "$@"
+    else
+      exec ./bin/vow waffle "$sub" "$@"
+    fi
+    ;;
+  *)
+    exec ./bin/vow "$@"
+    ;;
+esac

@@ -1,0 +1,15 @@
+Thank you for deploying {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release:
+  helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+{{- if .Values.ingress.enabled }}
+Access your application via Ingress:
+  https://{{ .Values.ingress.host }}
+{{- else }}
+Access your application via port-forward:
+  kubectl port-forward svc/{{ include "sample-app.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  Visit: http://localhost:8080
+{{- end }}

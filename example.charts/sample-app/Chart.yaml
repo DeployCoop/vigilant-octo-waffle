@@ -1,0 +1,18 @@
+apiVersion: v2
+name: sample-app
+version: 1.0.0
+appVersion: "1.25.0"
+description: "Production-ready sample microservice with NGINX, health probes, metrics, and Vigilant-octo-waffle TLS ingress"
+type: application
+keywords:
+  - web
+  - microservice
+  - api
+  - demo
+icon: "https://raw.githubusercontent.com/kubernetes/community/master/icons/png/resources/labeled/pod-128.png"
+home: "https://github.com/DeployCoop/vigilant-octo-waffle"
+sources:
+  - "https://github.com/DeployCoop/vigilant-octo-waffle/tree/main/example.charts/sample-app"
+maintainers:
+  - name: "Vigilant Octo Waffle Team"
+    email: "team@webhosting.coop"

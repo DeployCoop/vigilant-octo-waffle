@@ -2,6 +2,7 @@
 helm upgrade --install ingress-nginx-mqtt ingress-nginx \
   --repo https://kubernetes.github.io/ingress-nginx \
   --wait \
+  --timeout "${THIS_HELM_TIMEOUT:-15m0s}" \
   --namespace ingress-nginx-mqtt --create-namespace \
   -f src/ingress-nginx-mqtt-values.yaml
 

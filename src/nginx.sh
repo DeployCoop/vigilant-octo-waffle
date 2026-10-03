@@ -12,6 +12,7 @@ kubectl apply -f init/raymii-mosquitto_nginx/configmap.yaml
 helm upgrade --install ingress-nginx ingress-nginx \
   --repo https://kubernetes.github.io/ingress-nginx \
   --wait \
+  --timeout "${THIS_HELM_TIMEOUT:-15m0s}" \
   --namespace ingress-nginx --create-namespace \
   -f ${NGINX_INSTALL_TMP}
 

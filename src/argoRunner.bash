@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source src/util.bash
 source src/merge2yaml.bash
-: ${ARGOCD_CREATE_APP_EXTRA_ARGS:=' '}
+: ${ARGOCD_CREATE_APP_EXTRA_ARGS:='--insecure'}
 : "${DEBUG:=false}"
 
 argoRunner () {

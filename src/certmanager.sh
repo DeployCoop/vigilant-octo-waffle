@@ -8,6 +8,7 @@ helm upgrade --install \
   --repo https://charts.jetstack.io \
   --namespace cert-manager --create-namespace \
   --wait \
+  --timeout "${THIS_HELM_TIMEOUT:-15m0s}" \
   --version v1.16.3 \
   --set prometheus.enabled=true \
   --set crds.enabled=true

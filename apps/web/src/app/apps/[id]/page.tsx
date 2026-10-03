@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Columns,
 } from 'lucide-react';
+import { useTerminal } from '@/context/TerminalContext';
 
 export default function AppDetailPage() {
   const params = useParams();
@@ -27,6 +28,7 @@ export default function AppDetailPage() {
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const { openTerminal } = useTerminal();
 
   const fetchAppDetail = async (selectedRunner = runner) => {
     try {
@@ -87,6 +89,9 @@ export default function AppDetailPage() {
       const resData = await res.json();
       if (resData.success) {
         setMessage(`Dispatched ${runner.toUpperCase()} deployment for ${id} (Task ID: ${resData.taskId})`);
+        if (resData.taskId) {
+          openTerminal(resData.taskId, `Deploying ${id} (${runner.toUpperCase()})`);
+        }
       }
     } catch (err: any) {
       setMessage(`Deploy failed: ${err.message}`);

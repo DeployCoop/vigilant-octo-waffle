@@ -1,0 +1,24 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-repo
+  namespace: ${THIS_FLUX_NAMESPACE}
+spec:
+  interval: ${THIS_FLUX_INTERVAL}
+  url: https://github.com/fluxcd/flux2.git
+  ref:
+    tag: ${THIS_FLUX_VERSION}
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: flux-system
+  namespace: ${THIS_FLUX_NAMESPACE}
+spec:
+  interval: ${THIS_FLUX_INTERVAL}
+  targetNamespace: ${THIS_FLUX_NAMESPACE}
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-repo
+  path: ./manifests/install

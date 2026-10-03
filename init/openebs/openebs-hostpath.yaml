@@ -10,5 +10,6 @@ metadata:
       - name: BasePath
         value: ${THIS_STORAGE_PATH}
 provisioner: openebs.io/local
+allowVolumeExpansion: true
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer

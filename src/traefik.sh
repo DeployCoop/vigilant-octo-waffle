@@ -21,6 +21,7 @@ install_traefik_w_helm () {
     --repo https://traefik.github.io/charts \
     --namespace traefik --create-namespace \
     --wait \
+    --timeout "${THIS_HELM_TIMEOUT:-15m0s}" \
     --debug \
     -f "${TMP}/values.yaml"
 }

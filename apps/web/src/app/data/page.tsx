@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Shield,
   HardDrive,
+  Wrench,
 } from 'lucide-react';
 
 interface S3Bucket {
@@ -54,6 +55,28 @@ export default function DataStudioPage() {
   const [sqlResult, setSqlResult] = useState<QueryResult | null>(null);
   const [sqlLoading, setSqlLoading] = useState(false);
   const [sqlError, setSqlError] = useState<string | null>(null);
+  const [repairLoading, setRepairLoading] = useState(false);
+  const [repairSuccess, setRepairSuccess] = useState<string | null>(null);
+
+  const handleRepairGoTrue = async () => {
+    setRepairLoading(true);
+    setRepairSuccess(null);
+    setSqlError(null);
+    try {
+      const res = await fetch('/api/cluster/k3s', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'repair-gotrue' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Failed to trigger GoTrue repair');
+      setRepairSuccess(data.message || 'GoTrue PostgreSQL 16+ compatibility repair triggered successfully!');
+    } catch (err: any) {
+      setSqlError(err.message || 'GoTrue repair execution failed');
+    } finally {
+      setRepairLoading(false);
+    }
+  };
 
   // Fetch S3 buckets
   const loadS3Buckets = async () => {
@@ -145,6 +168,14 @@ export default function DataStudioPage() {
       title: 'Server Version',
       sql: 'SELECT version();',
     },
+    {
+      title: 'GoTrue Migrations',
+      sql: 'SELECT version FROM auth.schema_migrations ORDER BY version DESC LIMIT 15;',
+    },
+    {
+      title: 'UUID=Text Operator',
+      sql: "SELECT oprname, oprleft::regtype, oprright::regtype, oprcode FROM pg_operator WHERE oprname = '=' AND oprleft = 'uuid'::regtype AND oprright = 'text'::regtype;",
+    },
   ];
 
   return (
@@ -235,20 +266,48 @@ export default function DataStudioPage() {
                 <span>Safe Execution Guard: DDL / Destructive DML (DROP/TRUNCATE) blocked</span>
               </div>
 
-              <button
-                onClick={handleExecuteSql}
-                disabled={sqlLoading || !sqlQuery.trim()}
-                className="flex items-center space-x-2 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600 text-white px-4 py-2 rounded-lg font-medium text-xs transition shadow-sm cursor-pointer"
-              >
-                {sqlLoading ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Play className="w-3.5 h-3.5" />
-                )}
-                <span>{sqlLoading ? 'Executing...' : 'Run Query'}</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleRepairGoTrue}
+                  disabled={repairLoading}
+                  className="flex items-center space-x-1.5 bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/60 disabled:opacity-50 px-3 py-2 rounded-lg font-medium text-xs transition cursor-pointer shadow-sm"
+                  title="Inject uuid=text operators into pg_catalog and sync auth.schema_migrations"
+                >
+                  {repairLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Wrench className="w-3.5 h-3.5 text-emerald-400" />
+                  )}
+                  <span>{repairLoading ? 'Repairing...' : 'Repair GoTrue Auth'}</span>
+                </button>
+
+                <button
+                  onClick={handleExecuteSql}
+                  disabled={sqlLoading || !sqlQuery.trim()}
+                  className="flex items-center space-x-2 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600 text-white px-4 py-2 rounded-lg font-medium text-xs transition shadow-sm cursor-pointer"
+                >
+                  {sqlLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5" />
+                  )}
+                  <span>{sqlLoading ? 'Executing...' : 'Run Query'}</span>
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Repair Success Notice */}
+          {repairSuccess && (
+            <div className="bg-emerald-950/30 border border-emerald-800/40 rounded-xl p-4 flex items-start space-x-3 text-xs text-emerald-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold">Compatibility Repair Initiated:</span>
+                <p className="mt-1 font-mono">{repairSuccess}</p>
+              </div>
+            </div>
+          )}
 
           {/* Error Notice */}
           {sqlError && (

@@ -1,3 +1,6 @@
+import { listCustomApps } from './scaffold.js';
+import { listLocalCharts } from './helm.js';
+
 export type AppCategory =
   | 'DevOps & GitOps'
   | 'Security & Identity'
@@ -6,7 +9,8 @@ export type AppCategory =
   | 'Observability & Monitoring'
   | 'Collaboration & Business'
   | 'Messaging & IoT'
-  | 'Networking & Ingress';
+  | 'Networking & Ingress'
+  | 'Custom & Local Charts';
 
 export interface AppDefinition {
   id: string;
@@ -22,6 +26,10 @@ export interface AppDefinition {
   icon?: string; // lucide icon name
   estimatedMemoryMb?: number;
   dependencies?: string[];
+  isLocalChart?: boolean;
+  chartPath?: string;
+  chartVersion?: string;
+  appVersion?: string;
 }
 
 export interface DeploymentPreset {
@@ -44,6 +52,19 @@ export const APP_CATALOG: AppDefinition[] = [
     subdomain: 'argocd',
     port: 443,
     docsUrl: 'https://argo-cd.readthedocs.io/',
+    icon: 'GitBranch',
+    estimatedMemoryMb: 512,
+  },
+  {
+    id: 'flux',
+    name: 'FluxCD',
+    category: 'DevOps & GitOps',
+    description: 'Open and extensible GitOps continuous delivery solution for Kubernetes (Toolkit v2)',
+    enablerVar: 'FLUX_ENABLED',
+    argoPath: 'argo/flux',
+    subdomain: 'flux',
+    port: 443,
+    docsUrl: 'https://fluxcd.io/',
     icon: 'GitBranch',
     estimatedMemoryMb: 512,
   },
@@ -494,6 +515,32 @@ export const APP_CATALOG: AppDefinition[] = [
     icon: 'Microchip',
     estimatedMemoryMb: 128,
   },
+  {
+    id: 'ollama',
+    name: 'Ollama (In-Cluster LLM)',
+    category: 'AI, ML & GPU',
+    description: 'Get up and running with large language models locally inside your Kubernetes cluster',
+    enablerVar: 'OLLAMA_ENABLED',
+    argoPath: 'argo/ollama',
+    subdomain: 'ollama',
+    port: 11434,
+    docsUrl: 'https://ollama.com/',
+    icon: 'Bot',
+    estimatedMemoryMb: 2048,
+  },
+  {
+    id: 'vllm',
+    name: 'vLLM Inference Server',
+    category: 'AI, ML & GPU',
+    description: 'High-throughput and memory-efficient LLM serving engine for Kubernetes clusters',
+    enablerVar: 'VLLM_ENABLED',
+    argoPath: 'argo/vllm',
+    subdomain: 'vllm',
+    port: 8000,
+    docsUrl: 'https://docs.vllm.ai/',
+    icon: 'Cpu',
+    estimatedMemoryMb: 4096,
+  },
 
   // Messaging & IoT
   {
@@ -561,9 +608,9 @@ export const DEPLOYMENT_PRESETS: DeploymentPreset[] = [
   {
     id: 'ai',
     name: 'AI & Machine Learning',
-    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery',
-    estimatedMemoryMb: 9216,
-    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery'],
+    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery, Ollama, vLLM',
+    estimatedMemoryMb: 12288,
+    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery', 'ollama', 'vllm'],
   },
   {
     id: 'collaboration',
@@ -580,3 +627,70 @@ export const DEPLOYMENT_PRESETS: DeploymentPreset[] = [
     apps: APP_CATALOG.map((a) => a.id),
   },
 ];
+
+/**
+ * Returns the combined catalog of built-in applications, custom scaffolded apps,
+ * and automatically discovered local Helm charts from the configured charts directory.
+ */
+export function getCombinedAppCatalog(
+  projectRoot: string,
+  customChartsDir?: string
+): AppDefinition[] {
+  // Dynamically import or lazily load to preserve fast startup
+  const combined = [...APP_CATALOG];
+  const seenIds = new Set(APP_CATALOG.map((a) => a.id));
+
+  // 1. Merge custom apps (.custom_apps.json)
+  try {
+    const customApps = listCustomApps(projectRoot);
+    for (const ca of customApps) {
+      if (!seenIds.has(ca.id)) {
+        seenIds.add(ca.id);
+        combined.push({
+          id: ca.id,
+          name: ca.name,
+          category: ca.category,
+          description: ca.description,
+          enablerVar: ca.enablerVar,
+          subdomain: ca.subdomain,
+          port: ca.port,
+          icon: 'Layers',
+          estimatedMemoryMb: ca.estimatedMemoryMb || 256,
+          dependencies: ca.dependencies,
+        });
+      }
+    }
+  } catch {
+    // Scaffold module not available or empty
+  }
+
+  // 2. Merge discovered local Helm charts
+  try {
+    const localCharts = listLocalCharts(projectRoot, customChartsDir);
+    for (const lc of localCharts) {
+      if (!seenIds.has(lc.id)) {
+        seenIds.add(lc.id);
+        combined.push({
+          id: lc.id,
+          name: lc.name,
+          category: 'Custom & Local Charts',
+          description: lc.description,
+          enablerVar: lc.enablerVar,
+          subdomain: lc.id,
+          port: 80,
+          docsUrl: lc.home,
+          icon: lc.icon && lc.icon !== 'Ship' ? lc.icon : 'Ship',
+          estimatedMemoryMb: 256,
+          isLocalChart: true,
+          chartPath: lc.chartPath,
+          chartVersion: lc.version,
+          appVersion: lc.appVersion,
+        });
+      }
+    }
+  } catch {
+    // Helm module not available or directory empty
+  }
+
+  return combined;
+}

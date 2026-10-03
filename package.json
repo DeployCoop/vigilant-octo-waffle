@@ -5,8 +5,10 @@
   "packageManager": "pnpm@11.24.0",
   "scripts": {
     "dev": "pnpm --filter @vow/orchestrator build && pnpm --filter @vow/web dev",
-    "build": "pnpm --filter @vow/orchestrator build && pnpm --filter @vow/web build",
+    "build": "pnpm --filter @vow/orchestrator build && pnpm --filter @vow/ink build && pnpm --filter @vow/web build",
     "start": "pnpm --filter @vow/web start",
+    "ink": "pnpm --filter @vow/ink build && ./bin/vow",
+    "vow": "./bin/vow",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"

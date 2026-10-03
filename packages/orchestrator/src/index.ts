@@ -32,5 +32,15 @@ export * from './builder.js';
 export * from './remote.js';
 export * from './flux.js';
 export * from './k3s.js';
-
-
+export * from './antigravity.js';
+export * from './waffle.js';
+export * from './waffle-blueprints.js';
+export * from './config-doctor.js';
+export * from './secrets-sync.js';
+export * from './namespaces.js';
+export * from './bringup.js';
+export * from './initializer.js';
+export * from './ingress.js';
+export * from './storage.js';
+export * from './app-deployer.js';
+export * from './k3s-admin.js';

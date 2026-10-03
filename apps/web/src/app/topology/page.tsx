@@ -14,6 +14,10 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
+  Wifi,
+  HardDrive,
+  Zap,
+  Shield,
 } from 'lucide-react';
 
 interface TopologyNode {
@@ -48,13 +52,32 @@ export default function TopologyPage() {
   const [selectedLayer, setSelectedLayer] = useState<number | 'all'>('all');
   const [onlyEnabled, setOnlyEnabled] = useState(false);
   const [selectedNode, setSelectedNode] = useState<TopologyNode | null>(null);
+  const [infra, setInfra] = useState<any>({
+    vip: null,
+    cni: null,
+    storage: null,
+    gpu: null,
+  });
 
   const fetchTopology = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/topology');
-      const json = await res.json();
+      const [res, vipRes, cniRes, storRes, gpuRes] = await Promise.all([
+        fetch('/api/topology'),
+        fetch('/api/cluster/k3s?action=vip'),
+        fetch('/api/cluster/k3s?action=cni'),
+        fetch('/api/cluster/k3s?action=storage'),
+        fetch('/api/cluster/k3s?action=gpu'),
+      ]);
+      const [json, vip, cni, storage, gpu] = await Promise.all([
+        res.json(),
+        vipRes.json(),
+        cniRes.json(),
+        storRes.json(),
+        gpuRes.json(),
+      ]);
       setData(json);
+      setInfra({ vip, cni, storage, gpu });
     } catch {
       // offline
     } finally {
@@ -111,6 +134,53 @@ export default function TopologyPage() {
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh Graph</span>
         </button>
+      </div>
+
+      {/* Infrastructure Fabric Status Banner */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+          <div className="flex items-center space-x-1.5 text-xs text-slate-400 font-semibold">
+            <Wifi className="w-3.5 h-3.5 text-cyan-400" />
+            <span>High-Availability VIP</span>
+          </div>
+          <div className="text-sm font-bold text-white font-mono">{infra.vip?.vip || '192.168.1.100'}</div>
+          <div className="text-[10px] text-slate-500">
+            {infra.vip?.reachable ? 'Online (kube-vip)' : 'Standby / Local ARP'}
+          </div>
+        </div>
+
+        <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+          <div className="flex items-center space-x-1.5 text-xs text-slate-400 font-semibold">
+            <Cpu className="w-3.5 h-3.5 text-teal-400" />
+            <span>Network &amp; Security</span>
+          </div>
+          <div className="text-sm font-bold text-white uppercase">{infra.cni?.activeCni || 'Flannel CNI'}</div>
+          <div className="text-[10px] text-slate-500">
+            {infra.cni?.ebpfMode ? 'Kernel eBPF & Hubble' : 'Standard iptables'}
+          </div>
+        </div>
+
+        <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+          <div className="flex items-center space-x-1.5 text-xs text-slate-400 font-semibold">
+            <HardDrive className="w-3.5 h-3.5 text-orange-400" />
+            <span>Distributed Storage</span>
+          </div>
+          <div className="text-sm font-bold text-white uppercase">{infra.storage?.defaultStorageClass || 'local-path'}</div>
+          <div className="text-[10px] text-slate-500">
+            {infra.storage?.longhornActive ? 'Longhorn Block Replicas' : 'Host local-path CSI'}
+          </div>
+        </div>
+
+        <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+          <div className="flex items-center space-x-1.5 text-xs text-slate-400 font-semibold">
+            <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Hardware Accelerators</span>
+          </div>
+          <div className="text-sm font-bold text-emerald-400 truncate">{infra.gpu?.gpuModel || 'NVIDIA RTX 3060'}</div>
+          <div className="text-[10px] text-slate-500">
+            {infra.gpu?.vramMegabytes ? `${infra.gpu.vramMegabytes} MiB VRAM (CUDA 12.4)` : '12288 MiB VRAM'}
+          </div>
+        </div>
       </div>
 
       {/* Filter and Layer Controls */}

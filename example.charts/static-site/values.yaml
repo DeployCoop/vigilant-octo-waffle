@@ -1,0 +1,24 @@
+replicaCount: 1
+
+image:
+  repository: nginx
+  tag: "alpine"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: "nginx"
+  host: "docs.example.com"
+  annotations:
+    cert-manager.io/cluster-issuer: "mkcert-issuer"
+  tls:
+    enabled: true
+    secretName: "docs-site-tls"
+
+site:
+  heading: "Project Documentation & Portal"
+  bodyText: "Welcome to the cluster portal. This site was packaged and deployed from a local Helm chart."

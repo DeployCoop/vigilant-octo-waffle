@@ -1,17 +1,108 @@
 import { NextResponse } from 'next/server';
-import { K8sClient } from '@vow/orchestrator';
+import {
+  K8sClient,
+  getK3sStorageStatus,
+  installK3sStorage,
+  testK3sStorageBenchmark,
+  snapshotK3sVolume,
+} from '@vow/orchestrator';
+import { getProjectRoot } from '@/lib/project';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    const root = getProjectRoot();
     const k8sClient = new K8sClient();
-    const storage = await k8sClient.getStorage();
-    return NextResponse.json(storage);
+    const [storage, k3sStorage] = await Promise.all([
+      k8sClient.getStorage(),
+      getK3sStorageStatus(root).catch(() => null),
+    ]);
+
+    return NextResponse.json({
+      ...storage,
+      openEBS: k3sStorage,
+    });
   } catch (err: any) {
     return NextResponse.json(
-      { storageClasses: [], persistentVolumes: [], persistentVolumeClaims: [], error: err.message },
+      { storageClasses: [], persistentVolumes: [], persistentVolumeClaims: [], openEBS: null, error: err.message },
       { status: 500 }
     );
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const root = getProjectRoot();
+    const body = await req.json();
+    const { action } = body;
+
+    if (action === 'configure-openebs') {
+      const task = installK3sStorage(root, {
+        engine: 'openebs',
+        ...body.options,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `OpenEBS reconfiguration started (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'benchmark') {
+      const sc = body.storageClass || 'openebs-lvmpv';
+      const task = testK3sStorageBenchmark(root, sc);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Storage benchmark started on '${sc}' (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'snapshot') {
+      const task = snapshotK3sVolume(root, body.pvcName, body.snapshotName);
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Volume snapshot initiated for '${body.pvcName}' (Task: ${task.id})`,
+      });
+    }
+
+    if (action === 'label-nodes') {
+      const key = body.key || 'openebs.io/lvm';
+      const val = body.value || 'true';
+      await execAsync(`kubectl label nodes --all ${key}=${val} --overwrite`);
+      return NextResponse.json({
+        success: true,
+        message: `Cluster nodes successfully labeled with ${key}=${val}`,
+      });
+    }
+
+    if (action === 'set-default-sc') {
+      const targetSc = body.storageClass;
+      if (!targetSc) {
+        return NextResponse.json({ error: 'StorageClass name required' }, { status: 400 });
+      }
+      // Remove default annotation from any existing default SCs
+      await execAsync(
+        `kubectl get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\\.kubernetes\\.io/is-default-class=="true")].metadata.name}' | xargs -r -n1 kubectl annotate sc --overwrite storageclass.kubernetes.io/is-default-class=false`
+      ).catch(() => {});
+      // Set default on the target SC
+      await execAsync(
+        `kubectl annotate sc ${targetSc} --overwrite storageclass.kubernetes.io/is-default-class=true`
+      );
+      return NextResponse.json({
+        success: true,
+        message: `StorageClass '${targetSc}' set as cluster default`,
+      });
+    }
+
+    return NextResponse.json({ error: `Unknown action '${action}'` }, { status: 400 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

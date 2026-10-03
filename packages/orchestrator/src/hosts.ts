@@ -57,6 +57,8 @@ export const DEFAULT_SUBDOMAINS = [
   'vigil',
 ];
 
+export const DEFAULT_EXTRA_DOMAINS: string[] = [];
+
 export type DnsMode = 'sslip' | 'nip' | 'hosts' | 'custom';
 
 /**
@@ -82,28 +84,53 @@ export function formatIngressHostname(
   return subdomain ? `${subdomain}.${domain}` : domain;
 }
 
-export function getFullHostnames(domain: string): string[] {
-  return DEFAULT_SUBDOMAINS.map((sub) => (sub ? `${sub}.${domain}` : domain));
+export function getFullHostnames(
+  domain: string,
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
+): string[] {
+  const standard = DEFAULT_SUBDOMAINS.map((sub) => (sub ? `${sub}.${domain}` : domain));
+  const seen = new Set(standard);
+  const combined = [...standard];
+
+  for (const extra of extraDomains) {
+    if (extra && !seen.has(extra)) {
+      seen.add(extra);
+      combined.push(extra);
+    }
+  }
+
+  return combined;
 }
 
 /**
- * Generates /etc/hosts formatted string
+ * Generates /etc/hosts formatted string including cluster domain and ecosystem portals
  */
-export function generateHostsBlock(domain: string, ip = '127.0.0.1'): string {
-  const lines = getFullHostnames(domain).map((host) => `${ip} ${host}`);
+export function generateHostsBlock(
+  domain: string,
+  ip = '127.0.0.1',
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
+): string {
+  const lines = getFullHostnames(domain, extraDomains).map((host) => `${ip} ${host}`);
   return lines.join('\n');
 }
 
 /**
  * Generates BIND DNS zone records (A records)
  */
-export function generateBindRecords(domain: string, targetIps: string[]): string {
+export function generateBindRecords(
+  domain: string,
+  targetIps: string[],
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
+): string {
   const blocks: string[] = [];
   const subdomains = DEFAULT_SUBDOMAINS.filter((s) => s.length > 0);
 
   for (const ip of targetIps) {
     for (const sub of subdomains) {
       blocks.push(`${sub.padEnd(28)} 14400   IN      A       ${ip}`);
+    }
+    for (const extra of extraDomains) {
+      blocks.push(`${extra.padEnd(28)} 14400   IN      A       ${ip}`);
     }
   }
 
@@ -113,13 +140,20 @@ export function generateBindRecords(domain: string, targetIps: string[]): string
 /**
  * Generates Cloudflare DNS zone records (A records with proxied flag)
  */
-export function generateCloudflareRecords(domain: string, targetIps: string[]): string {
+export function generateCloudflareRecords(
+  domain: string,
+  targetIps: string[],
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
+): string {
   const blocks: string[] = [];
   const subdomains = DEFAULT_SUBDOMAINS.filter((s) => s.length > 0);
 
   for (const ip of targetIps) {
     for (const sub of subdomains) {
       blocks.push(`${sub.padEnd(28)} 1       IN      A       ${ip} ; cf_tags=cf-proxied:false`);
+    }
+    for (const extra of extraDomains) {
+      blocks.push(`${extra.padEnd(28)} 1       IN      A       ${ip} ; cf_tags=cf-proxied:false`);
     }
   }
 
@@ -145,17 +179,20 @@ export function generateCoreDnsConfig(domain = 'example.com', ip = '127.0.0.1'):
 /**
  * Checks if the current local /etc/hosts file includes the domain
  */
-export function checkEtcHosts(domain: string): {
+export function checkEtcHosts(
+  domain: string,
+  extraDomains: string[] = DEFAULT_EXTRA_DOMAINS
+): {
   isConfigured: boolean;
   missingCount: number;
   totalCount: number;
 } {
+  const allHosts = getFullHostnames(domain, extraDomains);
   try {
     if (!fs.existsSync('/etc/hosts')) {
-      return { isConfigured: false, missingCount: DEFAULT_SUBDOMAINS.length, totalCount: DEFAULT_SUBDOMAINS.length };
+      return { isConfigured: false, missingCount: allHosts.length, totalCount: allHosts.length };
     }
     const content = fs.readFileSync('/etc/hosts', 'utf-8');
-    const allHosts = getFullHostnames(domain);
     let missing = 0;
 
     for (const h of allHosts) {
@@ -170,6 +207,6 @@ export function checkEtcHosts(domain: string): {
       totalCount: allHosts.length,
     };
   } catch {
-    return { isConfigured: false, missingCount: DEFAULT_SUBDOMAINS.length, totalCount: DEFAULT_SUBDOMAINS.length };
+    return { isConfigured: false, missingCount: allHosts.length, totalCount: allHosts.length };
   }
 }

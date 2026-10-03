@@ -15,6 +15,7 @@ import {
   Download,
   Upload,
   FileCode,
+  Network,
 } from 'lucide-react';
 
 export default function ConfigPage() {
@@ -298,6 +299,42 @@ export default function ConfigPage() {
                 onChange={(e) => handleChange('THIS_ADMIN_USER', e.target.value)}
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500"
               />
+            </div>
+          </div>
+        </div>
+
+        {/* Custom Ingress & Domain Routing */}
+        <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center space-x-2">
+              <Network className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
+                Custom Ingress Domains & DNS Routing
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-500">External FQDNs for Ingress & DNS</span>
+          </div>
+
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Configure external domain names and Ingress TLS hosts for cluster applications.
+            These domain names are dynamically registered into /etc/hosts and DNS zone record generators.
+          </p>
+
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">
+                Custom Extra Domains (THIS_EXTRA_DOMAINS)
+              </label>
+              <input
+                type="text"
+                value={config['THIS_EXTRA_DOMAINS'] || ''}
+                onChange={(e) => handleChange('THIS_EXTRA_DOMAINS', e.target.value)}
+                placeholder="app1.example.com, api.example.org, custom.domain.io"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                Comma-separated list of custom FQDNs to include in DNS and /etc/hosts generation
+              </span>
             </div>
           </div>
         </div>
