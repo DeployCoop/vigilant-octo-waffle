@@ -157,6 +157,7 @@ case "${ACTION}" in
         }
       });
 
+      runner.on('pipeline_log', (m) => { if (String(m).includes('FATAL')) console.error(m); });
       runner.on('progress', (progress) => {
         if (progress.currentStep) {
           console.log('  ▶ [' + progress.completedSteps + '/' + progress.totalSteps + '] Step: ' + progress.currentStep + ' (' + progress.status + ')');
@@ -173,6 +174,12 @@ case "${ACTION}" in
         console.log('  Waffle Execution Summary: ' + record.pipelineName);
         console.log('  Status  : ' + record.status.toUpperCase());
         console.log('  Steps   : ' + record.completedSteps + ' / ' + record.totalSteps + ' completed');
+        if (record.error) console.log('  Error   : ' + record.error);
+        for (const st of Object.values(record.stages || {})) {
+          for (const sp of Object.values(st.steps || {})) {
+            if (sp.error) console.log('  ✖ ' + sp.stepId + ': ' + sp.error);
+          }
+        }
         if (record.deployedDomains && record.deployedDomains.length > 0) {
           console.log('  Endpoints:');
           for (const ep of record.deployedDomains) {
