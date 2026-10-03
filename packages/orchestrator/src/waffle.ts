@@ -987,7 +987,7 @@ export class WaffleRunner extends EventEmitter {
           // Never fall back to a built-in default: published placeholder secrets
           // (e.g. *_change_me) must not reach a cluster.
           secretData[k] = String(v).replace(/\$\{([a-zA-Z0-9_]+)\}/g, (_m, envVar: string) => {
-            const fromEnv = process.env[envVar];
+            const fromEnv = process.env[envVar] ?? this.loadProjectEnvFiles()[envVar];
             if (fromEnv !== undefined && fromEnv !== '') return fromEnv;
             const derived = this.deriveSupabaseJwt(envVar);
             if (derived) return derived;
@@ -1009,7 +1009,7 @@ export class WaffleRunner extends EventEmitter {
       }
       if (sec.fromEnv) {
         for (const envVar of sec.fromEnv) {
-          const val = process.env[envVar] || '';
+          const val = process.env[envVar] || this.loadProjectEnvFiles()[envVar] || '';
           secretData[envVar] = val;
         }
       }
@@ -1042,6 +1042,30 @@ export class WaffleRunner extends EventEmitter {
         }
       }
     }
+  }
+
+  /**
+   * Reads KEY=VALUE pairs from <projectRoot>/.env.production then .env (earlier file wins).
+   * The Studio (Next.js) server does not load these itself, unlike the waffle CLI, so secrets
+   * such as BILLAMA_MASTER_API_KEY would otherwise look unset when a run starts from the UI.
+   * Process env always takes precedence (callers check it first).
+   */
+  private loadProjectEnvFiles(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const name of ['.env.production', '.env']) {
+      const file = path.join(this.projectRoot, name);
+      if (!fs.existsSync(file)) continue;
+      for (const raw of fs.readFileSync(file, 'utf-8').split('\n')) {
+        const line = raw.trim();
+        if (!line || line.startsWith('#')) continue;
+        const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+        if (!m || m[1] in out) continue;
+        let v = m[2].trim();
+        if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) v = v.slice(1, -1);
+        out[m[1]] = v;
+      }
+    }
+    return out;
   }
 
   /**
