@@ -14,6 +14,7 @@ ACTION="${1:-help}"
 shift || true
 
 PIPELINE_FILE=""
+ENV_FILE=""
 DRY_RUN=false
 VERBOSE=false
 
@@ -26,6 +27,10 @@ while [[ $# -gt 0 ]]; do
     --verbose|-v)
       VERBOSE=true
       shift
+      ;;
+    --env-file)
+      ENV_FILE="${2:-}"
+      shift 2 || { echo "Error: --env-file requires a path" >&2; exit 1; }
       ;;
     -h|--help)
       ACTION="help"
@@ -52,6 +57,8 @@ if [[ "${ACTION}" == "help" || -z "${ACTION}" ]]; then
   echo ""
   echo "Options:"
   echo "  --dry-run                 Simulate step execution without modifying cluster"
+  echo "  --env-file <path>         Load secrets from a dotenv file (default: .env.production,"
+  echo "                            then .env, in the pipeline dir or current dir)"
   echo "  --verbose, -v             Display verbose step logs"
   echo "  -h, --help                Show this help message"
   exit 0
@@ -82,6 +89,31 @@ if [[ ! -f "${PIPELINE_FILE}" ]]; then
     echo "Error: file not found: ${PIPELINE_FILE}" >&2
     exit 1
   fi
+fi
+
+# Load secrets for ${VAR} interpolation. Variables already exported win over the file.
+if [[ -z "${ENV_FILE}" ]]; then
+  for d in "$(dirname "${PIPELINE_FILE}")" "$(pwd)"; do
+    for f in .env.production .env; do
+      if [[ -f "${d}/${f}" ]]; then ENV_FILE="${d}/${f}"; break 2; fi
+    done
+  done
+fi
+if [[ -n "${ENV_FILE}" ]]; then
+  if [[ ! -f "${ENV_FILE}" ]]; then echo "Error: env file not found: ${ENV_FILE}" >&2; exit 1; fi
+  echo "==> Loading environment from ${ENV_FILE}"
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+    line="${line#export }"
+    [[ "${line}" == *=* ]] || continue
+    key="${line%%=*}"; val="${line#*=}"
+    [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    if [[ -z "${!key:-}" ]]; then
+      if [[ "${val}" =~ ^\"(.*)\"$ || "${val}" =~ ^\'(.*)\'$ ]]; then val="${BASH_REMATCH[1]}"; fi
+      export "${key}=${val}"
+    fi
+  done < "${ENV_FILE}"
 fi
 
 case "${ACTION}" in
