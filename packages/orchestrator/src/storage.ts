@@ -211,9 +211,11 @@ export async function checkOpenEbsStatus(projectRoot?: string): Promise<OpenEbsS
   // OpenEBS is considered ready if:
   // - Any OpenEBS storage class exists AND at least one OpenEBS deployment is ready or pods are running
   // - OR an OpenEBS localpv-provisioner deployment is ready
+  // A StorageClass alone is NOT sufficient: init/openebs can apply StorageClasses without
+  // the Helm release ever being installed, leaving no provisioner/CSI pods running.
   const hasStorageClass = storageClasses.length > 0;
   const hasProvisioner = readyDeployments.some((d) => d.toLowerCase().includes('provisioner')) || runningPods > 0;
-  const isReady = hasStorageClass || (hasStorageClass && hasProvisioner) || readyDeployments.some((d) => d.includes('openebs-localpv-provisioner'));
+  const isReady = hasStorageClass && hasProvisioner;
 
   const message = isReady
     ? `OpenEBS is active and ready: StorageClasses=[${storageClasses.join(', ')}], Deployments=[${readyDeployments.join(', ')}], RunningPods=${runningPods}`
