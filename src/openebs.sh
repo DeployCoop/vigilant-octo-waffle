@@ -40,6 +40,11 @@ main() {
     else
       echo "  * Installing openebs-hostpath chart..."
       if [[ -d "/root/charts/openebs" ]]; then
+        # Adopt pre-existing StorageClasses (e.g. applied via init/openebs) so Helm can take ownership
+        for sc in $(kubectl get sc -o name 2>/dev/null | grep -i openebs || true); do
+          kubectl label "${sc}" app.kubernetes.io/managed-by=Helm --overwrite >/dev/null 2>&1 || true
+          kubectl annotate "${sc}" meta.helm.sh/release-name=openebs meta.helm.sh/release-namespace="${ns}" --overwrite >/dev/null 2>&1 || true
+        done
         helm upgrade --install openebs /root/charts/openebs \
           --namespace "${ns}" \
           --create-namespace \
@@ -78,7 +83,14 @@ main() {
       lvm_chart="/tmp/openebs-chart/openebs/charts/lvm-localpv"
     fi
 
-    if [[ -d "${lvm_chart}" ]]; then
+    if [[ ! -d "${lvm_chart}" ]]; then
+      echo "--> No local lvm-localpv chart found; using upstream chart openebs-lvm/lvm-localpv..."
+      helm repo add openebs-lvm https://openebs.github.io/lvm-localpv >/dev/null 2>&1 || true
+      helm repo update openebs-lvm >/dev/null 2>&1 || true
+      lvm_chart="openebs-lvm/lvm-localpv"
+    fi
+
+    if [[ -d "${lvm_chart}" || "${lvm_chart}" == "openebs-lvm/lvm-localpv" ]]; then
       echo "--> Deploying/Upgrading OpenEBS LVM CSI Driver from ${lvm_chart}..."
       helm upgrade --install openebs-lvm "${lvm_chart}" \
         --namespace "${ns}" \
