@@ -248,4 +248,58 @@ stages: []
     assert.equal(runResult.completedSteps, 1);
     assert.equal(runResult.failedSteps, 0);
   });
+
+  it('parses and validates git source configuration in builds.targets', () => {
+    const yamlWithGit = `
+apiVersion: waffle.dev/v1
+kind: WafflePipeline
+metadata:
+  name: git-build-test
+preflight:
+  storage:
+    requireStorageClass: local-path
+builds:
+  registry: "localhost:5001"
+  targets:
+    - name: simple-git
+      context: ../simple
+      git: "https://github.com/example/simple.git"
+      image: test/simple
+      tag: "1.0.0"
+    - name: detailed-git
+      context: ../detailed/app
+      git:
+        repo: "git@github.com:example/detailed.git"
+        branch: "develop"
+        tag: "v1.2.3"
+        dir: "../detailed"
+        depth: 1
+        submodules: true
+      image: test/detailed
+      tag: latest
+stages:
+  - id: 00-base
+    name: "Base"
+    steps:
+      - id: app
+        name: "App"
+        chart: ./app
+`;
+    const pipeline = parseWaffleYaml(yamlWithGit);
+    assert.equal(pipeline.builds?.targets?.length, 2);
+    
+    const target1 = pipeline.builds?.targets?.[0];
+    assert.equal(target1?.name, 'simple-git');
+    assert.equal(target1?.git, 'https://github.com/example/simple.git');
+
+    const target2 = pipeline.builds?.targets?.[1];
+    assert.equal(target2?.name, 'detailed-git');
+    assert.equal(typeof target2?.git, 'object');
+    if (typeof target2?.git === 'object') {
+      assert.equal(target2.git.repo, 'git@github.com:example/detailed.git');
+      assert.equal(target2.git.branch, 'develop');
+      assert.equal(target2.git.depth, 1);
+      assert.equal(target2.git.submodules, true);
+    }
+  });
 });

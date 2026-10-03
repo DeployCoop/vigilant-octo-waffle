@@ -82,9 +82,20 @@ export interface WaffleKeysConfig {
   envFile?: string;
 }
 
+export interface WaffleGitSource {
+  repo: string;
+  branch?: string;
+  tag?: string;
+  commit?: string;
+  dir?: string;
+  depth?: number;
+  submodules?: boolean;
+}
+
 export interface WaffleBuildTarget {
   name: string;
   context: string;
+  git?: string | WaffleGitSource;
   dockerfile?: string;
   image: string;
   tag?: string;
@@ -194,9 +205,20 @@ export const WaffleKeysConfigSchema = z.object({
   envFile: z.string().optional(),
 });
 
+export const WaffleGitSourceSchema = z.object({
+  repo: z.string().min(1, 'Git repository URL is required'),
+  branch: z.string().optional(),
+  tag: z.string().optional(),
+  commit: z.string().optional(),
+  dir: z.string().optional(),
+  depth: z.number().int().positive().optional(),
+  submodules: z.boolean().optional(),
+});
+
 export const WaffleBuildTargetSchema = z.object({
   name: z.string(),
   context: z.string(),
+  git: z.union([z.string(), WaffleGitSourceSchema]).optional(),
   dockerfile: z.string().optional(),
   image: z.string(),
   tag: z.string().optional().default('latest'),
@@ -1019,13 +1041,59 @@ export class WaffleRunner extends EventEmitter {
     if (dryRun) {
       for (const target of pipeline.builds.targets) {
         const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
-        this.logToRun(`[BUILDS] [DRY-RUN] Target "${target.name}" -> ${fullTag} (context: ${target.context}) simulated.`);
+        const gitInfo = target.git ? ` (git: ${typeof target.git === 'string' ? target.git : target.git.repo})` : '';
+        this.logToRun(`[BUILDS] [DRY-RUN] Target "${target.name}" -> ${fullTag} (context: ${target.context})${gitInfo} simulated.`);
       }
       return;
     }
 
     for (const target of pipeline.builds.targets) {
       const contextPath = path.resolve(baseDir, target.context);
+
+      // 1. Auto-clone or pull from Git if target.git is defined
+      if (target.git) {
+        const gitConfig: WaffleGitSource =
+          typeof target.git === 'string' ? { repo: target.git } : target.git;
+        const cloneDir = gitConfig.dir ? path.resolve(baseDir, gitConfig.dir) : contextPath;
+
+        try {
+          const hasGit = fs.existsSync(path.join(cloneDir, '.git'));
+          const isEmpty = !fs.existsSync(cloneDir) || fs.readdirSync(cloneDir).length === 0;
+
+          if (isEmpty) {
+            this.logToRun(`[BUILDS] Target "${target.name}": Cloning repository from ${gitConfig.repo}...`);
+            fs.mkdirSync(path.dirname(cloneDir), { recursive: true });
+
+            const branchArg = gitConfig.branch ? `-b ${JSON.stringify(gitConfig.branch)}` : '';
+            const depthArg = gitConfig.depth && !gitConfig.commit ? `--depth ${gitConfig.depth}` : '';
+            const submodulesArg = gitConfig.submodules ? '--recurse-submodules' : '';
+
+            const cloneCmd = `git clone ${branchArg} ${depthArg} ${submodulesArg} ${JSON.stringify(gitConfig.repo)} ${JSON.stringify(cloneDir)}`.replace(/\s+/g, ' ');
+            await execAsync(cloneCmd);
+
+            if (gitConfig.commit) {
+              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.commit)}`);
+            } else if (gitConfig.tag) {
+              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout tags/${JSON.stringify(gitConfig.tag)}`);
+            }
+            this.logToRun(`[BUILDS] Target "${target.name}": Repository successfully cloned into ${cloneDir}.`);
+          } else if (hasGit) {
+            this.logToRun(`[BUILDS] Target "${target.name}": Existing repository detected at ${cloneDir}; fetching updates...`);
+            await execAsync(`git -C ${JSON.stringify(cloneDir)} fetch --tags`).catch(() => {});
+            if (gitConfig.branch) {
+              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.branch)}`).catch(() => {});
+              await execAsync(`git -C ${JSON.stringify(cloneDir)} pull origin ${JSON.stringify(gitConfig.branch)}`).catch(() => {});
+            } else if (gitConfig.commit) {
+              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.commit)}`).catch(() => {});
+            } else if (gitConfig.tag) {
+              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout tags/${JSON.stringify(gitConfig.tag)}`).catch(() => {});
+            }
+          }
+        } catch (gitErr: any) {
+          this.logToRun(`[BUILDS] Warning: Git operation for target "${target.name}" failed: ${gitErr.message}`);
+        }
+      }
+
       const dockerfilePath = target.dockerfile ? path.resolve(contextPath, target.dockerfile) : path.join(contextPath, 'Dockerfile');
       const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
 
@@ -1035,6 +1103,15 @@ export class WaffleRunner extends EventEmitter {
         await execAsync(buildCmd);
         this.logToRun(`[BUILDS] Pushing image ${fullTag}...`);
         await execAsync(`docker push ${JSON.stringify(fullTag)}`);
+
+        // If K3s is present on node, also import into containerd k8s.io namespace
+        try {
+          const shortName = target.image + ':' + (target.tag || 'latest');
+          await execAsync(`docker tag ${JSON.stringify(fullTag)} ${JSON.stringify(shortName)} && docker tag ${JSON.stringify(fullTag)} ${JSON.stringify('docker.io/' + shortName)} && docker save ${JSON.stringify(fullTag)} ${JSON.stringify(shortName)} ${JSON.stringify('docker.io/' + shortName)} | sudo k3s ctr -n k8s.io images import -`);
+        } catch {
+          // ignore k3s import if not in k3s environment
+        }
+
         this.logToRun(`[BUILDS] Target "${target.name}" successfully built and published.`);
       } catch (err: any) {
         this.logToRun(`[BUILDS] Warning: Build for target "${target.name}" failed: ${err.message}`);

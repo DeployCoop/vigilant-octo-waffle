@@ -89,10 +89,12 @@ case "${ACTION}" in
     echo "==> Validating Waffle pipeline '${PIPELINE_FILE}'..."
     node -e "
       const fs = require('fs');
+      const path = require('path');
       const { parseWaffleYaml, validateWafflePipeline } = require('${WORKSPACE_ROOT}/packages/orchestrator/dist/index.js');
       const yamlContent = fs.readFileSync('${PIPELINE_FILE}', 'utf8');
       const pipeline = parseWaffleYaml(yamlContent);
-      const validation = validateWafflePipeline(pipeline, '${WORKSPACE_ROOT}');
+      const pipelineDir = path.dirname(path.resolve('${PIPELINE_FILE}'));
+      const validation = validateWafflePipeline(pipeline, pipelineDir);
       if (validation.valid) {
         console.log('✔ Pipeline valid: ' + pipeline.metadata.name + ' (version: ' + (pipeline.metadata.version || '1.0.0') + ')');
         console.log('  Stages: ' + pipeline.stages.length + ', Total Steps: ' + pipeline.stages.reduce((acc, s) => acc + s.steps.length, 0));
@@ -110,10 +112,12 @@ case "${ACTION}" in
     echo "==> Executing Waffle pipeline '${PIPELINE_FILE}' (dry-run: ${DRY_RUN})..."
     node -e "
       const fs = require('fs');
+      const path = require('path');
       const { parseWaffleYaml, WaffleRunner } = require('${WORKSPACE_ROOT}/packages/orchestrator/dist/index.js');
       const yamlContent = fs.readFileSync('${PIPELINE_FILE}', 'utf8');
       const pipeline = parseWaffleYaml(yamlContent);
-      const runner = new WaffleRunner('${WORKSPACE_ROOT}');
+      const pipelineDir = path.dirname(path.resolve('${PIPELINE_FILE}'));
+      const runner = new WaffleRunner(pipelineDir);
 
       runner.on('log', (ev) => {
         if ('${VERBOSE}' === 'true' || ev.level === 'error' || ev.level === 'warn') {
@@ -130,7 +134,7 @@ case "${ACTION}" in
       runner.executePipeline({
         sourceId: pipeline.metadata.name,
         pipeline,
-        baseDir: '${WORKSPACE_ROOT}',
+        baseDir: pipelineDir,
         dryRun: ${DRY_RUN}
       }).then(record => {
         console.log('\n==================================================================');
