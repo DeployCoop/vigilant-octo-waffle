@@ -96,8 +96,17 @@ export function readStoredToken(): string | null {
 
 export function storeToken(token: string | null): void {
   try {
-    if (token) window.localStorage.setItem(PRINCIPAL_TOKEN_KEY, token);
-    else window.localStorage.removeItem(PRINCIPAL_TOKEN_KEY);
+    if (token) {
+      window.localStorage.setItem(PRINCIPAL_TOKEN_KEY, token);
+      if (typeof document !== 'undefined') {
+        document.cookie = `vow_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+      }
+    } else {
+      window.localStorage.removeItem(PRINCIPAL_TOKEN_KEY);
+      if (typeof document !== 'undefined') {
+        document.cookie = `vow_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+      }
+    }
   } catch {
     // Storage unavailable (private mode); the session simply won't persist.
   }

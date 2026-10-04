@@ -67,6 +67,7 @@ export default function PodsPage() {
   const { can } = useAbilityContext();
   const [pods, setPods] = useState<PodInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedNamespace, setSelectedNamespace] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -98,13 +99,17 @@ export default function PodsPage() {
 
   const fetchPods = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const url =
         selectedNamespace === 'all'
           ? '/api/k8s/pods'
           : `/api/k8s/pods?namespace=${encodeURIComponent(selectedNamespace)}`;
       const res = await fetch(url);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}: Failed to fetch pods`);
+      }
       setPods(data.pods || []);
 
       // Fetch live metrics
@@ -114,17 +119,20 @@ export default function PodsPage() {
           if (m.pods) {
             const map: Record<string, { cpu: string; memory: string }> = {};
             m.pods.forEach((p: any) => {
-              map[`${p.namespace}/${p.podName}`] = {
-                cpu: p.cpuFormatted,
-                memory: p.memoryFormatted,
-              };
+              const podName = p.name || p.podName;
+              if (podName) {
+                map[`${p.namespace}/${podName}`] = {
+                  cpu: p.cpuFormatted || (p.cpuMillicores !== undefined ? `${p.cpuMillicores}m` : '--'),
+                  memory: p.memoryFormatted || (p.memoryMb !== undefined ? `${p.memoryMb}Mi` : '--'),
+                };
+              }
             });
             setMetricsMap(map);
           }
         })
         .catch(() => {});
-    } catch {
-      // offline
+    } catch (err: any) {
+      setFetchError(err.message || 'Failed connecting to cluster API');
     } finally {
       setLoading(false);
     }
@@ -395,7 +403,34 @@ export default function PodsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
-              {filteredPods.length === 0 ? (
+              {fetchError ? (
+                <tr>
+                  <td colSpan={8} className="px-5 py-8 text-center text-rose-400">
+                    <div className="flex flex-col items-center justify-center space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <AlertTriangle className="w-4 h-4 text-rose-500" />
+                        <span className="font-semibold">Unable to load pods:</span>
+                      </div>
+                      <span className="text-xs text-rose-300 font-mono">{fetchError}</span>
+                      <button
+                        onClick={fetchPods}
+                        className="mt-2 text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded cursor-pointer"
+                      >
+                        Try Again
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : loading && pods.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-5 py-8 text-center text-slate-400">
+                    <div className="flex items-center justify-center space-x-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-sky-400" />
+                      <span>Loading pods from Kubernetes cluster...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredPods.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-5 py-8 text-center text-slate-500">
                     No pods found matching query.

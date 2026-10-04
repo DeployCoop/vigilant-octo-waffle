@@ -299,6 +299,17 @@ export function saveAuthzStore(projectRoot: string, store: AuthzStore): void {
   storeCache.delete(file);
 }
 
+/**
+ * Returns true when authorization is active (either store exists or VOW_AUTHZ=on).
+ */
+export function isAuthzEnabled(
+  projectRoot: string,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  const load = loadAuthzStore(projectRoot, env);
+  return load.status === 'ready' || load.status === 'invalid';
+}
+
 // ---------------------------------------------------------------------------
 // CASL ability construction
 // ---------------------------------------------------------------------------

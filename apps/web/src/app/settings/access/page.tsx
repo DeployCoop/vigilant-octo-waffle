@@ -68,6 +68,7 @@ export default function AccessPage() {
 
   // Enable form
   const [ownerName, setOwnerName] = useState('Owner');
+  const [ownerPassword, setOwnerPassword] = useState('');
   const [enabling, setEnabling] = useState(false);
 
   // Create form
@@ -130,14 +131,23 @@ export default function AccessPage() {
       const res = await fetch('/api/authz/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: ownerName }),
+        body: JSON.stringify({
+          name: ownerName,
+          ...(ownerPassword.trim() ? { password: ownerPassword.trim() } : {}),
+        }),
       });
       if (!res.ok) return await fail(res);
       const data = await res.json();
       setReveal({
-        title: `Owner token for ${data.principal.name} — shown once`,
+        title: data.isCustomPassword
+          ? `Initial owner password configured for ${data.principal.name}`
+          : `Owner token for ${data.principal.name} — shown once`,
         token: data.token,
       });
+      setMessage(
+        'Authorization enabled! Stored credential in .vow/authz.yaml. The control plane will host TLS secured via mkcert.'
+      );
+      setOwnerPassword('');
       await load();
     } finally {
       setEnabling(false);
@@ -356,8 +366,8 @@ export default function AccessPage() {
             <code>.vow/authz.yaml</code> and a first owner principal — keep the owner token
             safe, it is the key to this page afterwards.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-            <label className="flex-1 space-y-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="space-y-1">
               <span className="text-xs font-medium text-slate-400">Owner name</span>
               <input
                 value={ownerName}
@@ -365,9 +375,23 @@ export default function AccessPage() {
                 className={inputCls}
               />
             </label>
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-slate-400">
+                Initial admin password <span className="text-slate-500 font-normal">(optional, or auto-generates token)</span>
+              </span>
+              <input
+                type="password"
+                placeholder="Leave blank to auto-generate token"
+                value={ownerPassword}
+                onChange={(e) => setOwnerPassword(e.target.value)}
+                className={inputCls}
+              />
+            </label>
+          </div>
+          <div className="flex justify-end pt-1">
             <button onClick={() => void handleEnable()} disabled={enabling} className={primaryBtnCls}>
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>{enabling ? 'Enabling…' : 'Enable authorization'}</span>
+              <span>{enabling ? 'Enabling…' : 'Enable authorization & TLS'}</span>
             </button>
           </div>
         </div>

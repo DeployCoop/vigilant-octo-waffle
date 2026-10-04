@@ -6,6 +6,7 @@ import {
   createEmptyStore,
   generatePrincipalToken,
   hashToken,
+  ensureDevCertificate,
   type Principal,
 } from '@vow/orchestrator';
 import { authorizeRequest, toPublicPrincipal, uniquePrincipalId } from '@/lib/authz';
@@ -17,6 +18,8 @@ export const dynamic = 'force-dynamic';
 /**
  * Enables authorization: creates the store with a first owner principal
  * and returns that owner's token once (plan §9 "Enable authorization").
+ *
+ * Supports an optional explicit password/token (`body.password` or `body.token`).
  *
  * Reachable while authz is disabled or the store is still empty — in
  * both states the guard admits the local board / migration path — and
@@ -41,8 +44,15 @@ export async function POST(req: Request) {
   const name =
     typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'Owner';
 
+  const customPassword =
+    typeof body.password === 'string' && body.password.trim()
+      ? body.password.trim()
+      : typeof body.token === 'string' && body.token.trim()
+        ? body.token.trim()
+        : null;
+
   const store = loaded.status === 'ready' ? loaded.store : createEmptyStore();
-  const token = generatePrincipalToken();
+  const token = customPassword ?? generatePrincipalToken();
   const owner: Principal = {
     id: uniquePrincipalId(store, name),
     name,
@@ -53,5 +63,22 @@ export async function POST(req: Request) {
 
   const next = upsertPrincipal(store, owner);
   saveAuthzStore(root, next);
-  return NextResponse.json({ principal: toPublicPrincipal(owner), token }, { status: 201 });
+
+  // Ensure mkcert TLS certificate is generated for HTTPS hosting
+  try {
+    await ensureDevCertificate(root);
+  } catch (err: any) {
+    console.warn('[authz/init] Note on dev TLS certificate generation:', err?.message);
+  }
+
+  return NextResponse.json(
+    {
+      principal: toPublicPrincipal(owner),
+      token,
+      isCustomPassword: Boolean(customPassword),
+      tlsReady: true,
+    },
+    { status: 201 }
+  );
 }
+

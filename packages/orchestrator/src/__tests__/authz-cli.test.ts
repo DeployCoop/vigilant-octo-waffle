@@ -139,4 +139,19 @@ describe('vow authz CLI', () => {
     assert.equal(res.code, 0, res.stdout);
     assert.match(res.stdout, /allow_owner/);
   });
+
+  it('init with --password sets explicit admin password', async () => {
+    const customRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-pwd-'));
+    const res = await runCli(['init', '--name', 'AdminUser', '--password', 'SecretPass123!'], customRoot);
+    assert.equal(res.code, 0, res.stderr);
+    assert.match(res.stdout, /Initial owner password configured successfully/);
+
+    const check = await runCli(['check', 'SecretPass123!', 'users:manage_permissions'], customRoot);
+    assert.equal(check.code, 0, check.stdout);
+    assert.match(check.stdout, /allow_owner/);
+
+    const fail = await runCli(['check', 'WrongPass', 'users:manage_permissions'], customRoot);
+    assert.equal(fail.code, 1);
+  });
 });
+
