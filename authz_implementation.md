@@ -4,6 +4,7 @@
 **Scope:** Web control plane (`apps/web`) + orchestrator (`packages/orchestrator`)
 **Goal:** Replace the single shared `VOW_API_TOKEN` gate with a Paperclip-style authorization system — named principals, roles, scoped permission grants, and a central `decide()` that returns explainable allow/deny reasons — using [CASL](https://casl.js.org/) (`@casl/ability`) as the evaluation engine.
 **Based on:** `main` @ `a2ee4b2`
+**Decisions:** §16 questions answered 2026-10-03 (see inline answers). Key outcomes folded into the plan: YAML store (§4.1), app/namespace scoping only (§4.4), **OIDC is a v1 requirement** (§6.4), redactions in scope (§4.2/Q5), reads authenticated when authz is on, vitest for `apps/web`, and **PR 0 (webhook service token) ships first** (§12).
 
 > **Reviewers:** please read through and answer the questions in the final section (§16) inline, directly in this document.
 
@@ -31,7 +32,7 @@ Gaps this plan closes:
 1. **One central decision point.** Every authorization question goes through a single `decide()` (Paperclip: `authorizationService.decide`). No ad-hoc `if (role === ...)` scattered in routes.
 2. **Actors are explicit.** Each request resolves to a *principal* (human or service) before any check runs.
 3. **Permission keys, not roles, at the check site.** Routes ask for `apps:deploy`, never "is admin". Roles are just bundles of keys, assigned to principals.
-4. **Grants can be scoped.** A grant is global by default; it can be narrowed by app, namespace, or cluster context (Paperclip's `tasks:assign_scope` is the model).
+4. **Grants can be scoped.** A grant is global by default; it can be narrowed by app or namespace (Paperclip's `tasks:assign_scope` is the model).
 5. **Decisions return reasons.** `allow_explicit_grant`, `deny_scope`, etc. — returned in API errors and written to the audit log. Debugging authz should never require reading source.
 6. **Fail closed, degrade never.** Unrecognized scope/policy data denies. A broken grants store denies (when authz is enabled).
 7. **Opt-in activation, zero-config default preserved.** Today's local UX (no token, localhost, everything works) stays the default. Authz activates when configured — mirroring how `VOW_API_TOKEN` already activates the token gate.
@@ -49,7 +50,7 @@ Request
   │     requirePermission(req, key, scope?) → Decision   (throws 401/403 with reason)
   │
   ├─ packages/orchestrator/src/authz.ts NEW — the engine (pure, unit-testable, no Next.js deps)
-  │     loadAuthzStore(root)            reads + zod-validates .vow/authz.json
+  │     loadAuthzStore(root)            reads + zod-validates .vow/authz.yaml
   │     buildAbility(principal)         CASL AbilityBuilder → MongoAbility from role defaults + grants
   │     decide(store, principal, key, target) → { allowed, reason }
   │     hashToken / verifyToken         sha256 + timingSafeEqual
@@ -58,7 +59,7 @@ Request
          apps/web AbilityContext gates buttons/pages with the same rules the API enforces.
 ```
 
-**Why the guard lives in route handlers, not middleware:** Next.js middleware runs in the Edge runtime and cannot read the filesystem store (`.vow/authz.json`). The current middleware only reads `process.env`. Authorization therefore happens in a small helper called at the top of each route handler (Node runtime), before `req.json()`. Middleware keeps its existing origin/CSRF role.
+**Why the guard lives in route handlers, not middleware:** Next.js middleware runs in the Edge runtime and cannot read the filesystem store (`.vow/authz.yaml`). The current middleware only reads `process.env`. Authorization therefore happens in a small helper called at the top of each route handler (Node runtime), before `req.json()`. Middleware keeps its existing origin/CSRF role.
 
 **Why CASL:** abilities are built from data (role defaults + grant rows) at request time, so the grants file is the source of truth and CASL is just the evaluator — the same split as Paperclip's service. CASL conditions express scoped grants natively, and packed rules serialize to the browser so the UI enforces the identical rule set.
 
@@ -66,7 +67,7 @@ Request
 
 ### 4.1 Store location and format
 
-- Path: `<projectRoot>/.vow/authz.json` (new `.vow/` state dir; add to `.gitignore`, create with mode `0600`).
+- Path: `<projectRoot>/.vow/authz.yaml` (new `.vow/` state dir; add to `.gitignore`, create with mode `0600`). **YAML** per Q3 — hand-editable and diff-friendly; parsed with the `yaml` package (already an orchestrator dependency).
 - Validated with **zod** (already an orchestrator dependency) on every load; invalid file → authz enabled + fail closed, with a loud server log.
 - Tokens are **never stored in plaintext**: only `sha256` hashes. A token is shown exactly once, at creation time (CLI, §8).
 
@@ -79,7 +80,8 @@ Request
       "name": "Josh",
       "kind": "human",              // "human" | "service"
       "role": "admin",              // role = bundle of default keys (§4.3)
-      "tokenHash": "sha256:9f2c…",  // omitted for principals that authenticate another way later (OIDC)
+      "tokenHash": "sha256:9f2c…",  // optional — a principal may instead authenticate via OIDC (§6.4)
+      "oidcSubject": "auth0|…",     // optional — OIDC `sub` (and/or verified email) this principal maps from
       "disabled": false,
       "grants": [                   // explicit grants, on top of role defaults
         { "permission": "apps:deploy", "scope": { "appId": "harbor" } },
@@ -163,11 +165,11 @@ A grant without `scope` is global (Paperclip: company-wide). Scope fields (all o
 interface GrantScope {
   appId?: string;        // APP_CATALOG id, e.g. "harbor"
   namespace?: string;    // k8s namespace
-  context?: string;      // kubeconfig context name (the VOW analogue of Paperclip's company boundary)
+  // NOTE: kubeconfig `context` scoping was cut for v1 (Q2) — app/namespace only.
 }
 ```
 
-CASL encoding: each grant becomes a rule `can(permission, subject, conditions)` where scope fields become Mongo-style conditions matched against a target object the route supplies, e.g. `decide(..., 'apps:deploy', { kind: 'App', appId: 'harbor', namespace: 'harbor', context: 'kind-vow' })`. A scoped grant used with an unscoped check (route supplies no target) **denies with `deny_scope`** — routes for scoped keys must always pass a target. This mirrors Paperclip's rule that `tasks:assign_scope` requires a structured constraint.
+CASL encoding: each grant becomes a rule `can(permission, subject, conditions)` where scope fields become Mongo-style conditions matched against a target object the route supplies, e.g. `decide(..., 'apps:deploy', { kind: 'App', appId: 'harbor', namespace: 'harbor' })`. A scoped grant used with an unscoped check (route supplies no target) **denies with `deny_scope`** — routes for scoped keys must always pass a target. This mirrors Paperclip's rule that `tasks:assign_scope` requires a structured constraint.
 
 ## 5. The decision engine (`packages/orchestrator/src/authz.ts`)
 
@@ -248,9 +250,18 @@ Rules:
 | `DELETE /api/authz/principals/[id]` | Remove principal (refuses last owner) | `users:manage_permissions` |
 | `POST /api/authz/principals/[id]/rotate` | New token, old hash invalidated | `users:manage_permissions` |
 
+### 6.4 Authentication: tokens + OIDC (v1 requirement, per Q4)
+
+Principals authenticate one of two ways, both resolving to the same `Principal` before `decide()` runs:
+
+1. **Principal tokens** (CLI, scripts, service principals): `vow_…` bearer tokens, hash-matched as in §5. The dashboard stores the human's token in `localStorage` (Q1).
+2. **OIDC ID tokens** (humans, browser + API): when `VOW_OIDC_ISSUER` and `VOW_OIDC_CLIENT_ID` are set, a bearer JWT is verified against the issuer's JWKS (signature, `iss`, `aud`, `exp`) and its `sub` (falling back to verified `email`) is matched to a principal's `oidcSubject`. The catalog's Keycloak app is the reference IdP, but any OIDC issuer works. Verification lives in the orchestrator (`authz.ts` alongside token verification) using `jose` — no hand-rolled JWT code. OIDC discovery/JWKS responses are cached; verification failure → `deny_unauthenticated`.
+
+An OIDC identity with no matching principal is authenticated-but-unauthorized: every `decide()` returns `deny_missing_membership`-style denial (add reason `deny_unknown_principal`) rather than silently mapping to a default role. Provisioning stays explicit via the store/UI.
+
 ## 7. Activation & migration
 
-Authz is **enabled** when any of: `.vow/authz.json` exists, or `VOW_AUTHZ=on`. Otherwise behavior is byte-for-byte today's.
+Authz is **enabled** when any of: `.vow/authz.yaml` exists, or `VOW_AUTHZ=on`. Otherwise behavior is byte-for-byte today's.
 
 Migration path for existing `VOW_API_TOKEN` users:
 
@@ -272,7 +283,7 @@ Thin wrappers over the store module, run via `pnpm vow authz …` (wire into roo
 
 - `GET /api/authz/me` → client builds a `MongoAbility` from packed rules; `AbilityContext` + a small `useCan(permission, target?)` hook.
 - Gate high-impact controls first: pod **Exec** console, **Remote/SSH**, **SQL/S3 query**, **Chaos**, cluster delete / node-join, secret values, deploy buttons. Hidden vs disabled: hide when the principal could never have the key in this view; disable with a tooltip naming the missing key when context-dependent (scope).
-- New **Settings → Access** page (Config Studio pattern): principal list, role picker, grant editor (permission multi-select + optional app/namespace/context scope), create/rotate/disable flows. All calls go to §6.3 routes.
+- New **Settings → Access** page (Config Studio pattern): principal list, role picker, grant editor (permission multi-select + optional app/namespace scope), create/rotate/disable flows. All calls go to §6.3 routes.
 - When authz is disabled, the page shows a single "Enable authorization" action that runs `init` server-side; the rest of the UI renders ungated (`allow_authz_disabled`).
 
 ## 10. Audit logging
@@ -305,22 +316,23 @@ Web:
 
 | PR | Scope | Behavior change |
 |---|---|---|
-| **PR 1 — Engine** | `@casl/ability` dep in orchestrator; `authz.ts` (types, catalog, roles, store load/validate, `decide()`, token utils); exports in `index.ts`; full unit tests (§11). | None. |
-| **PR 2 — Guard + critical routes** | `apps/web/src/lib/authz.ts` (`requirePermission`/`withAuthz`), `/api/authz/me`; guards on critical keys only: `k8s:exec`, `remote:exec`, `data:query`, `secrets:read`, `cluster:manage`, `cluster:nodes:join`, `chaos:run`, webhook service token. CLI `init`/`add`/`list`. | Only when authz enabled. |
-| **PR 3 — Full route coverage** | Guard every route per §4.2 mapping; `VOW_API_TOKEN` bootstrap-owner semantics + deprecation log; audit logging. | Only when authz enabled. |
+| **PR 0 — Webhook service token (first, per Q9)** | `POST /api/argo/webhook` gets its own credential: `VOW_WEBHOOK_TOKEN` env var, verified in the route via a timing-safe orchestrator helper; middleware exempts the path from the shared-token/origin gates when the webhook token is configured so external automation can call it. Dashboard callers attach the token from `localStorage` via a shared client helper. Orchestrator unit tests + `apps/web` route tests (introduces vitest, per Q7). | Only when `VOW_WEBHOOK_TOKEN` is set. |
+| **PR 1 — Engine** | `@casl/ability` dep in orchestrator; `authz.ts` (types, catalog, roles, YAML store load/validate, `decide()`, token utils); exports in `index.ts`; full unit tests (§11). | None. |
+| **PR 2 — Guard + critical routes + OIDC** | `apps/web/src/lib/authz.ts` (`requirePermission`/`withAuthz`), `/api/authz/me`; OIDC verification + principal resolution (§6.4); guards on critical keys only: `k8s:exec`, `remote:exec`, `data:query`, `secrets:read`, `cluster:manage`, `cluster:nodes:join`, `chaos:run`. CLI `init`/`add`/`list`. | Only when authz enabled. |
+| **PR 3 — Full route coverage** | Guard every route per §4.2 mapping (reads included, per Q6); secret redaction split (§4.2/Q5); `VOW_API_TOKEN` bootstrap-owner semantics + deprecation log; audit logging. | Only when authz enabled. |
 | **PR 4 — UI** | Ability context + gating of high-impact controls; Settings → Access page (principals/grants editor, audit view) + `/api/authz/*` admin routes. | UI only; APIs from PR 3 already enforce. |
 | **PR 5 — Docs & polish** | README security section rewrite, `ARCHITECTURE.md` authz section, `.env.example` notes, `.gitignore` for `.vow/`, ROADMAP entry. | None. |
 
-Estimated effort: PR 1 ≈ 1 day, PR 2 ≈ 1 day, PR 3 ≈ 1–2 days (48 route files, mostly mechanical), PR 4 ≈ 2 days, PR 5 ≈ 0.5 day.
+Estimated effort: PR 0 ≈ 0.5 day, PR 1 ≈ 1 day, PR 2 ≈ 1.5 days (OIDC included), PR 3 ≈ 1–2 days (48 route files, mostly mechanical), PR 4 ≈ 2 days, PR 5 ≈ 0.5 day.
 
 ## 13. Security considerations
 
-- **Hash-only token storage**, `0600` on `authz.json` and `audit.log`; `.vow/` gitignored and excluded from export bundles (`/api/export` must not ship it — add an explicit exclusion + test).
+- **Hash-only token storage**, `0600` on `authz.yaml` and `audit.log`; `.vow/` gitignored and excluded from export bundles (`/api/export` must not ship it — add an explicit exclusion + test).
 - **Fail closed** on any store error when enabled; fail *loud* in logs so a broken store is visible rather than silently open.
 - The executor allowlist and `shell: false` stay untouched — authz decides *who may ask*, the allowlist decides *what may run*. Both must pass.
 - GET routes becoming authenticated (when authz is on) is a **breaking change** for script users; mitigate with service principals + the `authz check` CLI, and call it out in release notes.
 - Timing attacks: constant-time token compare; identical 401 body for unknown vs malformed tokens.
-- Scope values (`appId`, `namespace`, `context`) are validated against live catalogs where cheap (APP_CATALOG for `appId`) at grant-write time, so a typo'd scope fails at creation, not silently at check time (`deny_scope` forever).
+- Scope values (`appId`, `namespace`) are validated against live catalogs where cheap (APP_CATALOG for `appId`) at grant-write time, so a typo'd scope fails at creation, not silently at check time (`deny_scope` forever).
 
 ## 14. Alternatives considered
 
@@ -332,12 +344,12 @@ Estimated effort: PR 1 ≈ 1 day, PR 2 ≈ 1 day, PR 3 ≈ 1–2 days (48 route 
 
 | Paperclip | VOW equivalent |
 |---|---|
-| Company (tenant boundary) | Kubeconfig `context` scope on grants |
+| Company (tenant boundary) | The install itself; grants scope by app/namespace (context scoping cut for v1, Q2) |
 | Board user | Human principal |
 | Agent JWT | Service principal (e.g. webhook, CI) |
 | Instance admin | `owner` role |
 | Local implicit board (`allow_local_board`) | Bootstrap mode (§7) |
-| `principalPermissionGrants` rows | `grants[]` entries in `.vow/authz.json` |
+| `principalPermissionGrants` rows | `grants[]` entries in `.vow/authz.yaml` |
 | Permission keys (`tasks:assign`, …) | §4.2 catalog |
 | `tasks:assign_scope` (scoped grant) | `scope` on any grant (§4.4) |
 | `authorizationService.decide` + reason codes | `decide()` + `DecisionReason` (§5) |
@@ -363,7 +375,7 @@ VOW typically manages one cluster per install, so scoping grants by kubeconfig c
 app/namespace only
 
 ### Q3. Store format: JSON or YAML?
-The plan uses `.vow/authz.json` (easy zod validation, machine-written). This repo is YAML-native and humans may want to hand-edit grants. **JSON (machine-managed via UI/CLI only) or YAML (hand-editable, diff-friendly)?**
+The plan uses `.vow/authz.yaml` (easy zod validation, machine-written). This repo is YAML-native and humans may want to hand-edit grants. **JSON (machine-managed via UI/CLI only) or YAML (hand-editable, diff-friendly)?**
 
 **Answer:**
 yaml
