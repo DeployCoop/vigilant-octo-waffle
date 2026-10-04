@@ -38,6 +38,7 @@ import {
   PlayCircle,
 } from 'lucide-react';
 import { copyToClipboard as copyText } from '@/lib/clipboard';
+import { apiErrorMessage } from '@/lib/envelope';
 import { useTerminal } from '@/context/TerminalContext';
 import { useCan } from '@/lib/ability';
 
@@ -246,7 +247,7 @@ export default function ClusterPage() {
         setMessage(data.message || `Scaled cluster nodes by ${delta}`);
         fetchCluster();
       } else {
-        setMessage(`Scaling notice: ${data.message || data.error}`);
+        setMessage(`Scaling notice: ${data.message || apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Scale error: ${err.message}`);
@@ -295,7 +296,7 @@ export default function ClusterPage() {
       if (data.success) {
         setMessage(`K3s ${k3sRole} join script saved to ${data.relativePath}`);
       } else {
-        setMessage(`Script generation error: ${data.error}`);
+        setMessage(`Script generation error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -333,7 +334,7 @@ export default function ClusterPage() {
         }
         setShowK3sModal(false);
       } else {
-        setMessage(`SSH provision error: ${data.error}`);
+        setMessage(`SSH provision error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -377,7 +378,7 @@ export default function ClusterPage() {
         }
         setShowK3sModal(false);
       } else {
-        setMessage(`Batch join error: ${data.error}`);
+        setMessage(`Batch join error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -420,7 +421,7 @@ export default function ClusterPage() {
         }
         setShowK3sModal(false);
       } else {
-        setMessage(`Operation error: ${data.error}`);
+        setMessage(`Operation error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -446,7 +447,7 @@ export default function ClusterPage() {
         }
         fetchCluster();
       } else {
-        setMessage(`Drain error: ${data.error}`);
+        setMessage(`Drain error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -468,7 +469,7 @@ export default function ClusterPage() {
         setMessage(`Node ${nodeName} cordoned.`);
         fetchCluster();
       } else {
-        setMessage(`Cordon error: ${data.error}`);
+        setMessage(`Cordon error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -490,7 +491,7 @@ export default function ClusterPage() {
         setMessage(`Node ${nodeName} uncordoned (schedulable).`);
         fetchCluster();
       } else {
-        setMessage(`Uncordon error: ${data.error}`);
+        setMessage(`Uncordon error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -518,7 +519,7 @@ export default function ClusterPage() {
         if (operation === 'save') setSnapshotName('');
         setTimeout(fetchK3sProductionData, 2000);
       } else {
-        setMessage(`Snapshot error: ${data.error}`);
+        setMessage(`Snapshot error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -546,7 +547,7 @@ export default function ClusterPage() {
         }
         setTimeout(fetchK3sProductionData, 3000);
       } else {
-        setMessage(`Rotation error: ${data.error}`);
+        setMessage(`Rotation error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -578,7 +579,7 @@ export default function ClusterPage() {
         }
         setShowK3sModal(false);
       } else {
-        setMessage(`Upgrade error: ${data.error}`);
+        setMessage(`Upgrade error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);
@@ -856,7 +857,7 @@ export default function ClusterPage() {
           openTerminal(data.taskId, `Cluster Action: ${action}`);
         }
       } else {
-        setMessage(`Error: ${data.error}`);
+        setMessage(`Error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed: ${err.message}`);

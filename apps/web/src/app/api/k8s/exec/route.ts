@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { execSessionManager } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
 
     if (action === 'start') {
       if (!namespace || !podName) {
-        return NextResponse.json({ error: 'namespace and podName are required' }, { status: 400 });
+        return apiError(400, 'namespace and podName are required');
       }
 
       const session = execSessionManager.createSession({
@@ -35,12 +36,12 @@ export async function POST(req: Request) {
 
     if (action === 'input') {
       if (!sessionId || typeof data !== 'string') {
-        return NextResponse.json({ error: 'sessionId and data required' }, { status: 400 });
+        return apiError(400, 'sessionId and data required');
       }
 
       const session = execSessionManager.getSession(sessionId);
       if (!session) {
-        return NextResponse.json({ error: 'Session expired or not found' }, { status: 404 });
+        return apiError(404, 'Session expired or not found');
       }
 
       session.write(data);
@@ -54,9 +55,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return apiError(400, 'Unknown action');
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/k8s/exec' });
   }
 }
 

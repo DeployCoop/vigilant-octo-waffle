@@ -7,6 +7,7 @@ import {
   listCustomApps,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,6 @@ export async function GET(req: Request) {
     const graph = buildTopologyGraph(enabledAppIds, domain);
     return NextResponse.json(graph);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message, nodes: [], edges: [], layers: [] }, { status: 500 });
+    return routeError(err, { route: 'GET /api/topology' });
   }
 }
