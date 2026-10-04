@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { postArgoWebhook } from '@/lib/webhook';
 import {
   Smartphone,
   QrCode,
@@ -78,11 +79,7 @@ export default function RemotePairingPage() {
 
     try {
       if (action === 'sync') {
-        const res = await fetch('/api/argo/webhook', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'webhook' }),
-        });
+        const res = await postArgoWebhook({ action: 'webhook' });
         const data = await res.json();
         setActionNotice(data.message || 'Hard refresh initiated via mobile!');
       } else if (action === 'battery') {
