@@ -24,11 +24,11 @@
   },
   "dependencies": {
     "@casl/ability": "^6.8.1",
-    "@kubernetes/client-node": "^1.1.0",
-    "dotenv": "^16.4.7",
+    "@kubernetes/client-node": "^2.0.0",
+    "dotenv": "^18.0.5",
     "jose": "^6.2.12",
     "yaml": "^2.7.0",
-    "zod": "^3.24.2"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
