@@ -12,6 +12,32 @@ interface ProgressBarProps {
 
 const SUB_BLOCKS = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
 
+/** Pure progress math (WS7): filled/empty segments for a percent. */
+export function progressBarFill(
+  percent: number,
+  width: number
+): { filledBar: string; emptyBar: string; clamped: number } {
+  const clamped = Math.max(0, Math.min(100, percent));
+  const fullWidthValue = (clamped / 100) * width;
+  const fullChars = Math.floor(fullWidthValue);
+  const remainder = fullWidthValue - fullChars;
+  const subIndex = Math.floor(remainder * 8);
+
+  let filledBar = '█'.repeat(fullChars);
+  if (fullChars < width && subIndex > 0) {
+    filledBar += SUB_BLOCKS[subIndex];
+  }
+  const emptyBar = '░'.repeat(Math.max(0, width - filledBar.length));
+  return { filledBar, emptyBar, clamped };
+}
+
+/** Pure elapsed-time formatting (WS7): seconds -> "MM:SS". */
+export function formatElapsed(sec: number): string {
+  const mins = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${mins.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
 export const ProgressBar: React.FC<ProgressBarProps> = ({
   percent,
   width = 24,
@@ -31,23 +57,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     return () => clearInterval(timer);
   }, [showElapsed, startTime]);
 
-  const clamped = Math.max(0, Math.min(100, percent));
-  const fullWidthValue = (clamped / 100) * width;
-  const fullChars = Math.floor(fullWidthValue);
-  const remainder = fullWidthValue - fullChars;
-  const subIndex = Math.floor(remainder * 8);
-
-  let filledBar = '█'.repeat(fullChars);
-  if (fullChars < width && subIndex > 0) {
-    filledBar += SUB_BLOCKS[subIndex];
-  }
-  const emptyBar = '░'.repeat(Math.max(0, width - filledBar.length));
-
-  const formatTime = (sec: number) => {
-    const mins = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${mins.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
+  const { filledBar, emptyBar, clamped } = progressBarFill(percent, width);
 
   return (
     <Box flexDirection="row" alignItems="center">
@@ -65,7 +75,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       </Box>
       {showElapsed && (
         <Box marginLeft={1}>
-          <Text color="gray">[{formatTime(elapsedSec)}]</Text>
+          <Text color="gray">[{formatElapsed(elapsedSec)}]</Text>
         </Box>
       )}
     </Box>

@@ -14,7 +14,8 @@
     "lint": "eslint src",
     "dev": "tsc --watch",
     "start": "node ./dist/cli.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test dist/__tests__/*.test.js"
   },
   "dependencies": {
     "@vow/orchestrator": "workspace:*",
