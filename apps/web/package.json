@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@casl/ability": "^6.8.1",
     "@vow/orchestrator": "workspace:*",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",

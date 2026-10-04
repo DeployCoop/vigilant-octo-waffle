@@ -59,6 +59,7 @@ const navItems = [
   { name: 'Credentials Vault', href: '/vault', icon: Key },
   { name: 'Backups & Snapshots', href: '/backups', icon: Archive },
   { name: 'Config Studio', href: '/config', icon: Settings },
+  { name: 'Access & Audit', href: '/settings/access', icon: Key },
   { name: 'TLS & DNS', href: '/certificates', icon: ShieldAlert },
   { name: 'Live Terminal', href: '/terminal', icon: Terminal },
 ];

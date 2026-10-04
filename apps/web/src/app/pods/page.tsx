@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useAbilityContext } from '@/lib/ability';
 import {
   Boxes,
   RefreshCw,
@@ -62,6 +63,7 @@ interface PodInfo {
 
 
 export default function PodsPage() {
+  const { can } = useAbilityContext();
   const [pods, setPods] = useState<PodInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNamespace, setSelectedNamespace] = useState('all');
@@ -401,6 +403,8 @@ export default function PodsPage() {
               ) : (
                 filteredPods.map((pod) => {
                   const isRunning = pod.status === 'Running';
+                  const canExecPod = can('k8s:exec', { namespace: pod.namespace });
+                  const canLogsPod = can('k8s:logs:read', { namespace: pod.namespace });
                   const isCompleted = pod.status === 'Completed';
                   const metric = metricsMap[`${pod.namespace}/${pod.name}`];
 
@@ -456,17 +460,24 @@ export default function PodsPage() {
                           </button>
                           <button
                             onClick={() => openLogViewer(pod)}
-                            className="px-2 py-1 bg-slate-800 hover:bg-sky-600 hover:text-white text-slate-300 border border-slate-700 rounded transition-colors text-xs inline-flex items-center space-x-1"
-                            title="View Pod Stdout/Stderr Logs"
+                            disabled={!canLogsPod}
+                            className="px-2 py-1 bg-slate-800 hover:bg-sky-600 hover:text-white text-slate-300 border border-slate-700 rounded transition-colors text-xs inline-flex items-center space-x-1 disabled:opacity-40"
+                            title={canLogsPod ? 'View Pod Stdout/Stderr Logs' : 'Requires the k8s:logs:read permission'}
                           >
                             <Terminal className="w-3 h-3" />
                             <span>Logs</span>
                           </button>
                           <button
                             onClick={() => openExecShell(pod)}
-                            disabled={!isRunning}
+                            disabled={!isRunning || !canExecPod}
                             className="px-2 py-1 bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-300 border border-slate-700 rounded transition-colors text-xs inline-flex items-center space-x-1 disabled:opacity-40"
-                            title={isRunning ? 'Open Interactive Shell in Container' : 'Pod must be Running to exec'}
+                            title={
+                              !canExecPod
+                                ? 'Requires the k8s:exec permission'
+                                : isRunning
+                                  ? 'Open Interactive Shell in Container'
+                                  : 'Pod must be Running to exec'
+                            }
                           >
                             <Code className="w-3 h-3" />
                             <span>Exec</span>

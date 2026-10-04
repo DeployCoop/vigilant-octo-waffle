@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useCan } from '@/lib/ability';
 import {
   Database,
   Folder,
@@ -40,6 +41,7 @@ interface QueryResult {
 }
 
 export default function DataStudioPage() {
+  const canQuery = useCan('data:query');
   const [activeTab, setActiveTab] = useState<'sql' | 's3'>('sql');
 
   // S3 state
@@ -270,9 +272,9 @@ export default function DataStudioPage() {
                 <button
                   type="button"
                   onClick={handleRepairGoTrue}
-                  disabled={repairLoading}
+                  disabled={repairLoading || !canQuery}
                   className="flex items-center space-x-1.5 bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/60 disabled:opacity-50 px-3 py-2 rounded-lg font-medium text-xs transition cursor-pointer shadow-sm"
-                  title="Inject uuid=text operators into pg_catalog and sync auth.schema_migrations"
+                  title={canQuery ? 'Inject uuid=text operators into pg_catalog and sync auth.schema_migrations' : 'Requires the data:query permission'}
                 >
                   {repairLoading ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -284,7 +286,8 @@ export default function DataStudioPage() {
 
                 <button
                   onClick={handleExecuteSql}
-                  disabled={sqlLoading || !sqlQuery.trim()}
+                  disabled={sqlLoading || !sqlQuery.trim() || !canQuery}
+                  title={canQuery ? undefined : 'Requires the data:query permission'}
                   className="flex items-center space-x-2 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600 text-white px-4 py-2 rounded-lg font-medium text-xs transition shadow-sm cursor-pointer"
                 >
                   {sqlLoading ? (

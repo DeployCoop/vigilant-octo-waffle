@@ -48,6 +48,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@casl/ability':
+        specifier: ^6.8.1
+        version: 6.8.1
       '@vow/orchestrator':
         specifier: workspace:*
         version: link:../../packages/orchestrator
