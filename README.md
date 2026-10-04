@@ -66,12 +66,35 @@ Visit **`http://127.0.0.1:3000`** to access the web control plane.
 > - Anyone able to reach port 3000 without network isolation could potentially control container lifecycles on the host.
 
 - **Localhost & CSRF Origin Protection**: Mutating API endpoints (`POST`, `PUT`, `DELETE`, `PATCH` on `/api/*`) are protected by [`apps/web/src/middleware.ts`](file:///home/thoth/vigilant-octo-waffle/apps/web/src/middleware.ts). Non-local origins or mismatched `Host`/`Origin` headers are blocked with HTTP 403.
-- **Optional API Token Guard**: Setting `VOW_API_TOKEN` in `.env` activates mandatory Bearer authentication (`Authorization: Bearer <token>` or `x-vow-token: <token>`) on all mutating routes (HTTP 401 on missing/invalid token).
+- **Optional API Token Guard (legacy)**: Setting `VOW_API_TOKEN` in `.env` activates mandatory Bearer authentication (`Authorization: Bearer <token>` or `x-vow-token: <token>`) on all mutating routes (HTTP 401 on missing/invalid token). Once authorization is enabled (below), this token instead acts as a **bootstrap owner** credential — migrate to per-principal tokens and unset it.
 
-- **Webhook Service Token**: Setting `VOW_WEBHOOK_TOKEN` in `.env` gives `POST /api/argo/webhook` (the ArgoCD sync accelerator) its own least-privilege credential (`Authorization: Bearer <token>` or `x-vow-webhook-token: <token>`, HTTP 401 on missing/invalid token). When set, the middleware defers that one path to the webhook token so external automation (CI, git hooks) can trigger syncs without the full control-plane token. Dashboard Instant Sync callers are prompted for the token once and remember it in the browser's local storage. When unset, the webhook route behaves as before.
+- **Webhook Service Token**: Setting `VOW_WEBHOOK_TOKEN` in `.env` gives `POST /api/argo/webhook` (the ArgoCD sync accelerator) its own least-privilege credential (`Authorization: Bearer <token>` or `x-vow-webhook-token: <token>`, HTTP 401 on missing/invalid token). When set, the middleware defers that one path to the webhook token so external automation (CI, git hooks) can trigger syncs without the full control-plane token. Dashboard Instant Sync callers are prompted for the token once and remember it in the browser's local storage. When unset, the webhook route behaves as before. Principals holding the `webhook:argo` permission (see below) can also call this route with their principal token.
 - **Strict Command Allowlist & `shell: false`**: Arbitrary shell commands and subshell spawns (`shell: true`) are completely disabled in [`packages/orchestrator/src/executor.ts`](file:///home/thoth/vigilant-octo-waffle/packages/orchestrator/src/executor.ts). Only pre-approved binaries (`kubectl`, `helm`, `kind`, `k3d`, `k3s`, `argocd`, `flux`, `velero`, `docker`, `mkcert`, `echo`, `ssh`) and approved repository scripts (`./up`, `src/*.sh`) can execute. Shell evaluation flags (`-c`, `-s`) and directory traversal are blocked.
 - **Safe Overrides**: App override mutations (`.argo_overrides/`, `.flux_overrides/`) are strictly validated against `APP_CATALOG` with path traversal guards.
 - **In-Memory Process Management**: Tasks and log streams are tracked in-memory by `processManager`. Multi-instance or serverless runtimes require an external persistence adapter (e.g. Redis/PostgreSQL).
+
+#### 🔑 Authorization: principals, roles & permissions (optional, off by default)
+
+Beyond the shared-token guard, the control plane has a full authorization model (modeled on Paperclip, enforced with [CASL](https://casl.js.org/)). It is **off by default** — a fresh deployment behaves exactly as described above. Enable it when more than one person or service touches the control plane:
+
+- **Enable**: In the dashboard, open **Access & Audit** (Settings) → *Enable authorization*, or run `vow authz init`. This creates `.vow/authz.yaml` (mode `0600`, gitignored) and a first **owner** principal whose token is shown **once** — store it safely. Setting `VOW_AUTHZ=on` also activates authorization; with no store file yet it starts in bootstrap mode (see below).
+- **Principals & tokens**: Each human or service gets a principal with a `vow_…` token. Only the token's SHA-256 hash is stored; plaintext is shown once at creation/rotation. The dashboard keeps your token in the browser's `localStorage` and attaches it to API calls. Manage principals in **Access & Audit** or via `vow authz add|list|revoke|rotate|check`.
+- **Roles**: Defaults are bundled per role; per-principal **grants** add permissions (optionally scoped to one app and/or namespace) and **revocations** subtract them.
+
+  | Role | Bundle |
+  |---|---|
+  | `owner` | Everything, including `users:manage_permissions` (principal management). The store always keeps at least one active owner. |
+  | `admin` | Everything except principal management. |
+  | `operator` | Day-to-day operations: deploys, syncs, tasks, rollouts, helm, backups, and reads incl. pod logs — but no exec, secret reads, config writes, cluster lifecycle, chaos, or data queries by default (grant them scoped, e.g. `k8s:exec` in one namespace). |
+  | `viewer` | Read-only core status (apps, cluster, config, pods, tasks, security). Pod logs are excluded — they routinely leak secrets. |
+  | `webhook` | No defaults; used with an explicit `webhook:argo` grant for sync automation. |
+
+- **Enforcement**: Every API route checks a permission from the 33-key catalog (`apps:deploy`, `k8s:exec`, `cluster:manage`, `data:query`, …) when authz is on — reads included. Config-bearing responses (`/api/config`, profiles, doctor) are **redacted** for callers without `secrets:read`.
+- **OIDC**: Set `VOW_OIDC_ISSUER` and `VOW_OIDC_CLIENT_ID` to accept ID tokens from any OIDC provider (e.g. the catalog's Keycloak). Tokens are verified against the issuer's JWKS and mapped to principals by subject; a verified identity with no principal is denied (`deny_unknown_principal`) until an owner provisions it.
+- **Audit**: Every mutating decision and every denial is appended as a JSON line to `.vow/audit.log`, viewable in **Access & Audit** or via `GET /api/authz/audit` (owners only).
+- **Bootstrap**: While the store is empty, requests from the local machine act as a *local board* (full access) so you can provision the first owner; this ends as soon as a principal exists. A malformed store fails closed.
+
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the decision flow and [`authz_implementation.md`](authz_implementation.md) for the full design.
 
 ### 🔄 Coexistence with Bash Orchestration (`./up`)
 

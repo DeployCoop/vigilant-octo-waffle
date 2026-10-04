@@ -8,6 +8,7 @@ The project provides a local Kubernetes environment with:
 - TLS with mkcert
 - Multi-application support (OpenLDAP, Harbor, Nextcloud, OpenProject, etc.)
 - Configurable via .env and .env.enabler
+- Optional role-based authorization (CASL): named principals with per-principal tokens or OIDC sign-in, scoped grants/revocations, secret redaction, and an audit log — managed in Settings → Access & Audit or via `vow authz` (see ARCHITECTURE.md § Authorization Model)
 
 ## Next Steps
 
@@ -15,6 +16,11 @@ The project provides a local Kubernetes environment with:
 - Implement OpenBAO integration for secret management
 - Update all charts to use secrets instead of values in values files
 - Create PRs upstream to chart repositories for secret support
+
+### Authorization Follow-ups
+- Audit log rotation / size caps for `.vow/audit.log`
+- Kubeconfig-context scoping for grants (deferred from authz v1)
+- Optional session cookies as an alternative to localStorage tokens
 
 ### Architecture Improvements
 - Convert shell scripts to Python where appropriate

@@ -97,3 +97,27 @@ When running K3s (`THIS_K8S_TYPE="k3s"`), Vigilant Octo Waffle provides a compre
     - **Interactive Join Modal**: Select between Worker (Agent) and Control-Plane (Server) roles, configure node labels/taints, and copy curl one-liners.
     - **Remote SSH Node Provisioner**: Directly provision and join remote machines from the web dashboard with streaming logs.
 
+## 🔐 Authorization Model
+
+Modeled on Paperclip's company/role/grant design and enforced with [CASL](https://casl.js.org/) (`@casl/ability`). Off by default; when off, none of the components below engage and the control plane behaves as it always has. Full design record: [`authz_implementation.md`](authz_implementation.md).
+
+### Components
+
+- **Engine — `packages/orchestrator/src/authz.ts`**: Pure and I/O-light by design. Holds the 33-key permission catalog (`PERMISSIONS`), the role bundles (`ROLE_PERMISSIONS`), the YAML store loader/saver, CASL ability construction, the central `decide()` function, token utilities, and the pure store mutations (`upsertPrincipal`/`removePrincipal`) with the **last-active-owner invariant** (`AuthzInvariantError`).
+- **Store — `<projectRoot>/.vow/authz.yaml`**: Zod-validated YAML, written mode `0600`, containing principals (`id`, `name`, `kind`, `role`, `tokenHash` as `sha256:<hex>`, optional `oidcSubject`, `disabled`, scoped `grants`, `revocations`). Loads are mtime-cached; activation is by file presence or `VOW_AUTHZ=on`. A store that fails validation puts the system in an `invalid` state that **fails closed** (every guarded route denies with `deny_store_invalid`).
+- **Web guards — `apps/web/src/lib/authz.ts`**: `resolveAuthzContext` turns a request into a principal; `requirePermission`/`authorizeRequest`/`withAuthz` run `decide()` per route — every API route file is guarded, and a vitest coverage test fails CI if a route ever ships without a guard. `lib/redaction.ts` masks secret values in config-bearing responses for callers without `secrets:read`.
+- **OIDC — `packages/orchestrator/src/authz-oidc.ts`**: Verifies Bearer ID tokens against the issuer's remote JWKS (`jose`), checking `iss`/`aud`/`exp`; the verified `sub` (fallback: email) maps to a principal's `oidcSubject`. Configured via `VOW_OIDC_ISSUER` + `VOW_OIDC_CLIENT_ID`.
+- **Admin surface**: `/api/authz/me` (caller + packed CASL rules), `/api/authz/principals*` and `/api/authz/init` (owner-only management), `/api/authz/audit` (audit read-back), the **Access & Audit** page (`apps/web/src/app/settings/access`), the dashboard ability layer (`apps/web/src/lib/ability*.tsx`), and the `vow authz` CLI (`packages/orchestrator/src/authz-cli.ts`).
+
+### Request decision flow
+
+1. **Middleware** (Edge): origin/CSRF checks, the legacy shared-token gate, and two deferrals it cannot decide itself — the webhook path (own service token) and `vow_`-prefixed principal tokens (verified by route guards, since Edge cannot read the store).
+2. **Principal resolution** (`resolveAuthzContext`): store token → principal by hash; else the legacy `VOW_API_TOKEN` → synthetic *bootstrap owner*; else a JWT → OIDC verification → principal by subject. Loopback requests with no forwarding headers are flagged *local board*.
+3. **`decide()`** returns `{ allowed, reason }`: `allow_authz_disabled` when off; `allow_local_board` only while the store is empty (bootstrap); otherwise the CASL ability built from role defaults → scoped grants (as subject conditions on `{appId, namespace}`) → revocations decides, yielding `allow_role_default` / `allow_explicit_grant` / `allow_owner`, or a denial: `deny_unauthenticated` (401), `deny_unknown_principal` (401), `deny_disabled_principal`, `deny_missing_grant`, `deny_scope`, `deny_revoked`, `deny_store_invalid` (403s). Denials return `{ error, reason }` JSON.
+4. **Audit**: decisions for mutating permissions and all denials append one JSON line to `.vow/audit.log` (`{ ts, principalId, permission, target, allowed, reason, route }`). The web layer owns the I/O; the engine only formats.
+
+### Dashboard gating
+
+`GET /api/authz/me` returns the caller's packed CASL rules; `AbilityProvider` rebuilds a client `MongoAbility` from them and `useCan`/`Can` disable or hide controls (Exec, pairing, SQL, chaos, cluster lifecycle, deploy…). The client ability is a UX mirror only — the API re-decides every request, and a test matrix keeps client and server answers identical across all permissions and targets. While authz is disabled or the local board applies, the client ability is permissive so the zero-config UI is unchanged.
+
+
