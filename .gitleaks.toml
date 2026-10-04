@@ -44,6 +44,16 @@ condition = "AND"
 paths = ['^argo/(argo-cd/values\.yaml|airflow/argocd\.yaml|drupal/argocd\.yaml|drupal/values\.yaml|goharbor/argocd\.yaml|ams/argocd\.yaml)$']
 rules = ["generic-api-key", "private-key", "kubernetes-secret-yaml"]
 
+# Parity fixtures: verbatim copies of the drupal example manifest above
+# (kept byte-identical so the bash/TS engines can be compared on real
+# input), plus their rendered goldens — the same audited demo content,
+# so the same narrow exception applies.
+[[allowlists]]
+description = "Parity fixtures: verbatim drupal example copies and their goldens"
+condition = "AND"
+paths = ['^packages/orchestrator/src/__tests__/fixtures/parity/(argo-drupal|flux-synth-drupal)/(expected\.yaml|project/argo/drupal/argocd\.yaml)$']
+rules = ["generic-api-key"]
+
 # Historical generated Kubeflow install bundle (file deleted; entry kept so
 # full-history scans remain meaningful if the bundle is regenerated).
 [[allowlists]]

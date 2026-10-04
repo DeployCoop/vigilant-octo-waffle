@@ -15,3 +15,10 @@ dist/
 *.tsbuildinfo
 .vow_waffles.json
 .vow_waffle_history.json
+
+# Parity contract-test fixtures are test data, not local config: their
+# .env files and .argo_overrides manifests must be tracked even though
+# the rules above ignore those names in real projects. (Without this,
+# CI checkouts silently lack them and the golden comparisons drift.)
+!packages/orchestrator/src/__tests__/fixtures/parity/
+!packages/orchestrator/src/__tests__/fixtures/parity/**

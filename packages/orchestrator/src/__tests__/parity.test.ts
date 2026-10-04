@@ -109,6 +109,15 @@ function materializeFixture(name: string): string {
   fs.cpSync(path.join(fixturesRoot, name, 'project'), root, {
     recursive: true,
   });
+  // The fixture .env is tracked test data (see the .gitignore note), and
+  // both engines read THIS_NAMESPACE etc. from it. If it ever goes
+  // missing from a checkout again, fail HERE with the reason instead of
+  // surfacing as golden drift in every fixture.
+  assert.ok(
+    fs.existsSync(path.join(root, '.env')),
+    `fixture '${name}': materialized project has no .env — the fixture's ` +
+      `tracked .env file is missing from this checkout`
+  );
   fs.symlinkSync(path.join(repoRoot, 'src'), path.join(root, 'src'), 'dir');
   return root;
 }
