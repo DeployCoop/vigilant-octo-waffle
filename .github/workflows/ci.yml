@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: pnpm
 
       # The orchestrator smoke tests exercise the real `helm lint` /
@@ -62,7 +62,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Install dependencies
@@ -72,6 +72,14 @@ jobs:
       # the orchestrator it bundles).
       - name: Build all packages
         run: pnpm build
+
+      # The Dockerfile is the shipped artifact: prove it builds and that
+      # the runtime inside it is the declared Node version (.nvmrc).
+      - name: Build Docker image and verify its Node version
+        run: |
+          docker build -t vow-web:ci .
+          docker run --rm vow-web:ci node --version | tee /tmp/nodever
+          grep -E '^v24\.' /tmp/nodever
 
 # Deliberately not included yet: a lint job. `pnpm lint` currently resolves
 # to `next lint` in apps/web but the repo has no ESLint/Biome config, so it
