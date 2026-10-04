@@ -78,7 +78,7 @@ describe('POST /api/authz/init', () => {
       req('POST', 'http://localhost:3000/api/authz/init', token, { name: 'Second' })
     );
     expect(res.status).toBe(409);
-    expect((await res.json()).reason).toBe('authz_already_initialized');
+    expect((await res.json()).error.reason).toBe('authz_already_initialized');
   });
 });
 
@@ -166,7 +166,7 @@ describe('POST /api/authz/principals', () => {
       })
     );
     expect(res.status).toBe(409);
-    expect((await res.json()).reason).toBe('authz_not_enabled');
+    expect((await res.json()).error.reason).toBe('authz_not_enabled');
   });
 });
 
@@ -212,7 +212,7 @@ describe('PATCH /api/authz/principals/[id]', () => {
       ctx(owner.id)
     );
     expect(demote.status).toBe(409);
-    expect((await demote.json()).reason).toBe('authz_invariant');
+    expect((await demote.json()).error.reason).toBe('authz_invariant');
 
     const disable = await PATCH(
       req('PATCH', `http://localhost:3000/api/authz/principals/${owner.id}`, ownerToken, {

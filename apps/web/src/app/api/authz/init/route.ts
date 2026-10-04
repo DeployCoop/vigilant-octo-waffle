@@ -10,6 +10,7 @@ import {
 } from '@vow/orchestrator';
 import { authorizeRequest, toPublicPrincipal, uniquePrincipalId } from '@/lib/authz';
 import { getProjectRoot } from '@/lib/project';
+import { apiError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,12 +30,10 @@ export async function POST(req: Request) {
   const root = getProjectRoot();
   const loaded = loadAuthzStore(root);
   if (loaded.status === 'ready' && loaded.store.principals.length > 0) {
-    return NextResponse.json(
-      {
-        error: 'Authorization is already initialized. Use POST /api/authz/principals to add principals.',
-        reason: 'authz_already_initialized',
-      },
-      { status: 409 }
+    return apiError(
+      409,
+      'Authorization is already initialized. Use POST /api/authz/principals to add principals.',
+      { reason: 'authz_already_initialized' }
     );
   }
 

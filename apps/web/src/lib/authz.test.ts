@@ -168,8 +168,9 @@ describe('authorizeRequest', () => {
     const denied = await authorizeRequest(request(viewerToken), 'k8s:exec');
     expect(denied?.status).toBe(403);
     const body = await denied!.json();
-    expect(body.reason).toBe('deny_missing_grant');
-    expect(body.error).toMatch(/permission/i);
+    expect(body.error.code).toBe('forbidden');
+    expect(body.error.reason).toBe('deny_missing_grant');
+    expect(body.error.message).toMatch(/permission/i);
   });
 });
 
