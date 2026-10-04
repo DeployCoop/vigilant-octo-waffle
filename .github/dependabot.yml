@@ -26,6 +26,13 @@ updates:
           - "@vitejs/*"
           - "@types/*"
           - "typescript-eslint"
+    ignore:
+      # TypeScript majors stay out until typescript-eslint supports them
+      # (TS 7 support is tracked in typescript-eslint#10940; the TS 7 bump
+      # in PR #39 left Lint red for a week). Remove this ignore when a
+      # typescript-eslint release widens its peer range past 7.x.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # Keeps the digest-pinned Dockerfile base image (Node 24) fresh.
   - package-ecosystem: "docker"
@@ -33,6 +40,13 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    ignore:
+      # The project standard is Node 24 (plan §16 Q1: .nvmrc, engines,
+      # CI version gate). A node major is a deliberate runtime-alignment
+      # change, not a weekly bump — PR #34's node 26 image broke the
+      # build (no corepack) and had to be reverted in PR #60.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
