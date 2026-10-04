@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { copyToClipboard as copyText } from '@/lib/clipboard';
 import { useTerminal } from '@/context/TerminalContext';
 import { useCan } from '@/lib/ability';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface ClusterData {
   platform: string;
