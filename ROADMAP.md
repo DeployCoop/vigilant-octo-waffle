@@ -18,7 +18,7 @@ The project provides a local Kubernetes environment with:
 - Create PRs upstream to chart repositories for secret support
 
 ### Authorization Follow-ups
-- Audit log rotation / size caps for `.vow/audit.log`
+- ~~Audit log rotation / size caps for `.vow/audit.log`~~ — implemented: size-based rotation (5 MiB default, `VOW_AUDIT_MAX_BYTES`), 3 generations kept, reader spans generations
 - Kubeconfig-context scoping for grants (deferred from authz v1)
 - Optional session cookies as an alternative to localStorage tokens
 
