@@ -78,6 +78,10 @@ The Next.js web application provides parity with the bash orchestration:
 - **API Endpoints**: `/api/flux` exposes controller health, reconciliation, and status checks; `/api/apps/[id]` supports `runner=argocd|flux` queries and deployments.
 - **Visual Runner Switching**: Interactive toggle on application detail pages to switch between ArgoCD and FluxCD views, manifests, overrides, and live sync commands.
 
+### 5b. Background Task State (WS5)
+
+Task *records* (`processManager` in `executor.ts`) persist to SQLite at `.vow/state.db` (`taskStore.ts`, `node:sqlite`, WAL, mode 0600): the manager keeps live tasks in memory and writes through on start/log-flush/completion; reads merge memory with stored history. The store attaches lazily on the first task whose cwd is inside a VOW project (or explicitly via `initTaskPersistence`), and attachment reconciles rows a previous process left marked `running` — dead pids become `interrupted`, live pids stay `running` as read-only history. PTY exec sessions and streams are **deliberately ephemeral**: they hold live OS resources (fds, child processes) that cannot survive a restart, so they are session state, not records.
+
 ### 6. K3s Multi-Node Architecture & Node Join Mechanism
 
 When running K3s (`THIS_K8S_TYPE="k3s"`), Vigilant Octo Waffle provides a comprehensive multi-node expansion system:
