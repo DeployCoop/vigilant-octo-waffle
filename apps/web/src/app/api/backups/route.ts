@@ -7,6 +7,7 @@ import {
   createDockerNodeSnapshot,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,8 +18,8 @@ export async function GET(req: Request) {
   try {
     const backups = await listBackups();
     return NextResponse.json({ backups });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message, backups: [] }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/backups' });
   }
 }
 
@@ -32,27 +33,27 @@ export async function POST(req: Request) {
     const { action, name, namespaces, backupName, containerName, snapshotName } = body;
 
     if (action === 'backup') {
-      if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
+      if (!name) return apiError(400, 'name is required');
       const task = createVeleroBackup(name, namespaces, root);
       return NextResponse.json({ success: true, taskId: task.id, name });
     }
 
     if (action === 'restore') {
-      if (!backupName) return NextResponse.json({ error: 'backupName is required' }, { status: 400 });
+      if (!backupName) return apiError(400, 'backupName is required');
       const task = restoreVeleroBackup(backupName, root);
       return NextResponse.json({ success: true, taskId: task.id, backupName });
     }
 
     if (action === 'docker-snapshot') {
       if (!containerName || !snapshotName) {
-        return NextResponse.json({ error: 'containerName and snapshotName required' }, { status: 400 });
+        return apiError(400, 'containerName and snapshotName required');
       }
       const tag = await createDockerNodeSnapshot(containerName, snapshotName);
       return NextResponse.json({ success: true, imageTag: tag });
     }
 
-    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return apiError(400, 'Unknown action');
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/backups' });
   }
 }

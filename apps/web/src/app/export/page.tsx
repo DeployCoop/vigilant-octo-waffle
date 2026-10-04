@@ -14,6 +14,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { copyToClipboard } from '@/lib/clipboard';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface BlueprintFile {
   filename: string;
@@ -64,7 +65,7 @@ export default function CloudExportPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(apiErrorMessage(data));
       setBlueprint(data.blueprint);
       setSelectedFileIdx(0);
     } catch (err) {

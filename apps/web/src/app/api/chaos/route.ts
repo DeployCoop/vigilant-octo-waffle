@@ -6,6 +6,7 @@ import {
   injectNetworkLatency,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,11 +18,8 @@ export async function GET(req: Request) {
   try {
     const report = await measureResilienceScore();
     return NextResponse.json(report);
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to measure resilience score' },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/chaos', fallbackMessage: 'Failed to measure resilience score' });
   }
 }
 
@@ -35,10 +33,7 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     if (!namespace || !podName) {
-      return NextResponse.json(
-        { error: 'namespace and podName are required' },
-        { status: 400 }
-      );
+      return apiError(400, 'namespace and podName are required');
     }
 
     let experiment;
@@ -49,17 +44,11 @@ export async function POST(req: Request) {
     } else if (type === 'network_latency') {
       experiment = await injectNetworkLatency(namespace, podName, latencyMs, durationSec);
     } else {
-      return NextResponse.json(
-        { error: `Unknown experiment type: ${type}` },
-        { status: 400 }
-      );
+      return apiError(400, `Unknown experiment type: ${type}`);
     }
 
     return NextResponse.json({ success: true, experiment });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Chaos injection failed' },
-      { status: 400 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/chaos', status: 400, fallbackMessage: 'Chaos injection failed' });
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { processManager } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export async function GET(req: Request) {
   const denied = await authorizeRequest(req, 'tasks:read');
@@ -19,8 +20,8 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json({ tasks });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/tasks' });
   }
 }
 
@@ -33,12 +34,12 @@ export async function DELETE(req: Request) {
     if (denied) return denied;
 
     if (!taskId) {
-      return NextResponse.json({ error: 'Missing taskId' }, { status: 400 });
+      return apiError(400, 'Missing taskId');
     }
 
     const cancelled = processManager.cancelTask(taskId);
     return NextResponse.json({ success: cancelled });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'DELETE /api/tasks' });
   }
 }

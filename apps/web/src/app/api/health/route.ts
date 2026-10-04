@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
+import { routeError } from '@/lib/route-error';
 import {
   APP_CATALOG,
   loadProjectConfig,
@@ -34,7 +35,7 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       probes: probeResults,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message, probes: [] }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/health' });
   }
 }

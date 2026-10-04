@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { processManager, loadProjectConfig, validateCommand } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export async function POST(req: Request) {
   // Running arbitrary (allowlisted) commands is the core tasks:run action.
@@ -15,17 +16,14 @@ export async function POST(req: Request) {
     const { command, args } = body;
 
     if (!command || typeof command !== 'string') {
-      return NextResponse.json({ error: 'Valid command string required' }, { status: 400 });
+      return apiError(400, 'Valid command string required');
     }
 
     const cleanArgs = Array.isArray(args) ? args.map(String) : [];
 
     const validation = validateCommand(command, cleanArgs, root);
     if (!validation.allowed) {
-      return NextResponse.json(
-        { error: `Command rejected by orchestrator allowlist: ${validation.reason}` },
-        { status: 400 }
-      );
+      return apiError(400, `Command rejected by orchestrator allowlist: ${validation.reason}`);
     }
 
     const task = processManager.runCommand(command, cleanArgs, {
@@ -38,7 +36,7 @@ export async function POST(req: Request) {
       taskId: task.id,
       command: `${task.command} ${(task.args || []).join(' ')}`,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/tasks/run' });
   }
 }

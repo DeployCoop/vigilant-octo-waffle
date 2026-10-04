@@ -7,6 +7,7 @@ import {
   type AIProvider,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,8 +41,8 @@ export async function GET(req: Request) {
       clusterSnapshot: snapshot,
       samplePrompts,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/antigravity' });
   }
 }
 
@@ -64,17 +65,11 @@ export async function POST(req: Request) {
     } = body;
 
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-      return NextResponse.json(
-        { error: 'A non-empty prompt string is required.' },
-        { status: 400 }
-      );
+      return apiError(400, 'A non-empty prompt string is required.');
     }
 
     if (prompt.length > 8000) {
-      return NextResponse.json(
-        { error: 'Prompt exceeds maximum length of 8000 characters.' },
-        { status: 400 }
-      );
+      return apiError(400, 'Prompt exceeds maximum length of 8000 characters.');
     }
 
     const validProviders: AIProvider[] = ['antigravity', 'ollama', 'vllm'];
@@ -95,10 +90,7 @@ export async function POST(req: Request) {
       success: true,
       ...result,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'AI Copilot execution failed.' },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/antigravity', fallbackMessage: 'AI Copilot execution failed.' });
   }
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useCan } from '@/lib/ability';
+import { apiErrorMessage } from '@/lib/envelope';
 import {
   Database,
   Folder,
@@ -71,7 +72,7 @@ export default function DataStudioPage() {
         body: JSON.stringify({ action: 'repair-gotrue' }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || 'Failed to trigger GoTrue repair');
+      if (!res.ok) throw new Error(data.message || apiErrorMessage(data, 'Failed to trigger GoTrue repair'));
       setRepairSuccess(data.message || 'GoTrue PostgreSQL 16+ compatibility repair triggered successfully!');
     } catch (err: any) {
       setSqlError(err.message || 'GoTrue repair execution failed');
@@ -87,7 +88,7 @@ export default function DataStudioPage() {
     try {
       const res = await fetch('/api/data/s3');
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      if (data.error) throw new Error(apiErrorMessage(data));
       setBuckets(data.buckets || []);
       if (data.buckets?.length > 0 && !selectedBucket) {
         setSelectedBucket(data.buckets[0].name);
@@ -107,7 +108,7 @@ export default function DataStudioPage() {
     try {
       const res = await fetch(`/api/data/s3?bucket=${encodeURIComponent(bucketName)}`);
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      if (data.error) throw new Error(apiErrorMessage(data));
       setObjects(data.objects || []);
     } catch (err: any) {
       setS3Error(err.message || 'Failed to load bucket contents');
@@ -143,7 +144,7 @@ export default function DataStudioPage() {
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        throw new Error(data.error || 'SQL query failed');
+        throw new Error(apiErrorMessage(data, 'SQL query failed'));
       }
       setSqlResult(data);
     } catch (err: any) {

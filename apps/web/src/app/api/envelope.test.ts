@@ -21,28 +21,8 @@ const API_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const RAW_ERROR_PATTERN = /NextResponse\.json\(\s*\{\s*error\s*:/;
 
-/** Route files not yet migrated to the envelope (WS4, PRs 8b–8d). */
-const PENDING_MIGRATION = new Set([
-  'ai/diagnose/route.ts',
-  'antigravity/route.ts',
-  'backups/route.ts',
-  'builder/route.ts',
-  'chaos/route.ts',
-  'config/doctor/route.ts',
-  'config/route.ts',
-  'data/s3/route.ts',
-  'data/sql/route.ts',
-  'export/route.ts',
-  'finops/route.ts',
-  'health/route.ts',
-  'profiles/route.ts',
-  'remote/route.ts',
-  'security/route.ts',
-  'system/route.ts',
-  'tasks/route.ts',
-  'tasks/run/route.ts',
-  'traces/route.ts',
-]);
+/** Route files not yet migrated to the envelope. Empty: WS4 migration complete (PRs 8a–8d). */
+const PENDING_MIGRATION = new Set<string>([]);
 
 function collectRouteFiles(dir: string, prefix = ''): string[] {
   const out: string[] = [];

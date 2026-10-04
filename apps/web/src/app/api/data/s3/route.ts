@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listS3Buckets } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,10 +12,7 @@ export async function GET(req: Request) {
   try {
     const result = await listS3Buckets();
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to query S3 storage', buckets: [] },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/data/s3', fallbackMessage: 'Failed to query S3 storage' });
   }
 }
