@@ -145,7 +145,7 @@ export function detectManifestPatch(markdown: string): DetectedManifest[] {
 
     for (const raw of docs) {
       const hasKind = /(?:^|\n)\s*kind:\s*([A-Za-z0-9_-]+)/.test(raw);
-      const hasApiVersion = /(?:^|\n)\s*apiVersion:\s*([A-Za-z0-9_\/.-]+)/.test(raw);
+      const hasApiVersion = /(?:^|\n)\s*apiVersion:\s*([A-Za-z0-9_/.-]+)/.test(raw);
       const hasMetadata = /(?:^|\n)\s*metadata:\s*/.test(raw);
       const hasSpec = /(?:^|\n)\s*spec:\s*/.test(raw);
 

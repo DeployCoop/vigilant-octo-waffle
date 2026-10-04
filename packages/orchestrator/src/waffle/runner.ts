@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { createHmac } from 'node:crypto';
-import { exec, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { checkOpenEbsStatus } from '../storage.js';
 import { execAsync, getWaffleExecutionEnv } from './shared.js';
 import { type WaffleSecretKey, type WaffleGitSource, type WaffleStep, type WafflePipeline } from './schema.js';

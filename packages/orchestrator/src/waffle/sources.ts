@@ -4,7 +4,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { exec } from 'node:child_process';
+
 import { getChartsDirectory } from '../config.js';
 import { execAsync } from './shared.js';
 import { type WafflePipelineMetadata, type WafflePipeline, loadWafflePipeline, validateWafflePipeline } from './schema.js';

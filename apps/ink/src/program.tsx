@@ -108,7 +108,7 @@ export function createProgram(): Command {
     .command('namespaces [action]')
     .description('Declarative namespace registry and Pod Security Standards')
     .option('--dry-run', 'Print namespace manifests without applying')
-    .action(async (action = 'sync', opts) => {
+    .action(async (_action = 'sync', opts) => {
       if (opts.dryRun) {
         const disc = discoverClusterNamespaces();
         console.log(`Discovered ${disc.total} namespaces:`);
