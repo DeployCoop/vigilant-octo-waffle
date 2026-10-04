@@ -160,7 +160,7 @@ export async function measureResilienceScore(): Promise<ResilienceReport> {
   }
 
   const healthyPercent = totalPods > 0 ? Math.round((healthyPods / totalPods) * 100) : 100;
-  let score = Math.max(20, Math.min(100, healthyPercent - highRestartPods * 5));
+  const score = Math.max(20, Math.min(100, healthyPercent - highRestartPods * 5));
 
   let grade: ResilienceReport['grade'] = 'F';
   if (score >= 95) grade = 'A+';

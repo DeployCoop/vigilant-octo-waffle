@@ -3,12 +3,10 @@ import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { loadProjectConfig, type VowConfig } from './config.js';
+import { loadProjectConfig } from './config.js';
 import { checkConfig } from './config-doctor.js';
 import { generateModularSecretBundles, syncSecretsAcrossNamespaces } from './secrets-sync.js';
-import { generateClusterSecrets } from './secrets.js';
 import { applyClusterNamespaces } from './namespaces.js';
-import { substituteVariables } from './template.js';
 import { checkOpenEbsStatus } from './storage.js';
 
 const execAsync = promisify(exec);

@@ -7,8 +7,8 @@ import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import YAML from 'yaml';
 import { z } from 'zod';
-import { loadProjectConfig, getChartsDirectory } from './config.js';
-import { checkOpenEbsStatus, isOpenEbsInstalledAndReady } from './storage.js';
+import { getChartsDirectory } from './config.js';
+import { checkOpenEbsStatus } from './storage.js';
 
 const execAsync = promisify(exec);
 

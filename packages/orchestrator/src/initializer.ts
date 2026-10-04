@@ -1,12 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { substituteVariables } from './template.js';
 import { mergeYamlStrings } from './yaml.js';
 import { loadProjectConfig, findProjectRoot } from './config.js';
-
-const execAsync = promisify(exec);
 
 export interface InitializerResult {
   directory: string;

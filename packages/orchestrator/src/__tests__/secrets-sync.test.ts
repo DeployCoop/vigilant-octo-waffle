@@ -1,14 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import {
   MODULAR_SECRET_BUNDLES,
   discoverTargetNamespaces,
   generateModularSecretBundles,
   buildSecretManifest,
   syncSecretsAcrossNamespaces,
-  parseSecretYaml,
 } from '../index.js';
 
 describe('Granular Secrets & Cross-Namespace Distribution Engine (Phase 2)', () => {

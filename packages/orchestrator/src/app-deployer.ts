@@ -2,7 +2,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import YAML from 'yaml';
 import { loadProjectConfig, findProjectRoot } from './config.js';
 import { substituteVariables } from './template.js';
 import { mergeYamlStrings } from './yaml.js';

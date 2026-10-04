@@ -5,3 +5,9 @@ packages:
 allowBuilds:
   sharp: true
   esbuild: true
+  # unrs-resolver (via eslint-config-next) ships its native binding as a
+  # prebuilt optional dependency; its build script is a from-source
+  # fallback that is not needed and must not run in CI. Decided as
+  # `false` explicitly so pnpm 11 does not fail the install with
+  # ERR_PNPM_IGNORED_BUILDS.
+  unrs-resolver: false

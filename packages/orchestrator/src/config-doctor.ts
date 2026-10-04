@@ -1,7 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseDefaultEnv, parseEnvFile, saveEnvFile, VowConfig, loadProjectConfig } from './config.js';
-import { substituteVariables } from './template.js';
 
 export type IssueSeverity = 'error' | 'warning' | 'info';
 
@@ -163,7 +162,7 @@ export function checkConfig(projectRoot: string): ConfigDoctorReport {
   // 1. Check for value corruptions (e.g. unescaped quotes or trailing comments stored in values)
   for (const [key, val] of Object.entries(userEnv)) {
     if (typeof val === 'string') {
-      if (val.includes('\\"') || val.includes('\\\\"') || val.includes('\"')) {
+      if (val.includes('\\"') || val.includes('\\\\"') || val.includes('"')) {
         const cleaned = val.replace(/\\+"/g, '').replace(/"+/g, '').trim();
         issues.push({
           key,
@@ -356,7 +355,7 @@ export function reconcileConfig(
   projectRoot: string,
   options: { applyFixes?: boolean } = { applyFixes: true }
 ): ConfigDoctorReport {
-  let preReport = checkConfig(projectRoot);
+  const preReport = checkConfig(projectRoot);
   if (!options.applyFixes || preReport.issues.length === 0) {
     return preReport;
   }
