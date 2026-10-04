@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { K8sClient } from '@vow/orchestrator';
+import { withAuthz } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,8 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+// Critical permission: switching the active cluster context.
+export const POST = withAuthz('cluster:manage', async (req: Request) => {
   try {
     const body = await req.json();
     const { contextName } = body;
@@ -29,4 +31,4 @@ export async function POST(req: Request) {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
+});

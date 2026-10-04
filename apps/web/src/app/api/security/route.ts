@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { scanClusterSecurity } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'security:read');
+  if (denied) return denied;
+
   try {
     const report = await scanClusterSecurity();
     const formattedFindings = report.findings.map((f) => ({

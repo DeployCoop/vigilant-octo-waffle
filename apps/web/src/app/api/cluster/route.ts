@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { ClusterOrchestrator, K8sClient } from '@vow/orchestrator';
+import { withAuthz } from '@/lib/authz';
 
 export async function GET() {
   try {
@@ -33,7 +34,8 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+// Critical permission: starting a cluster.
+export const POST = withAuthz('cluster:manage', async (req: Request) => {
   try {
     const root = getProjectRoot();
     const body = await req.json().catch(() => ({}));
@@ -54,9 +56,10 @@ export async function POST(req: Request) {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
+});
 
-export async function DELETE() {
+// Critical permission: tearing a cluster down.
+export const DELETE = withAuthz('cluster:manage', async () => {
   try {
     const root = getProjectRoot();
     const orchestrator = new ClusterOrchestrator(root);
@@ -78,4 +81,4 @@ export async function DELETE() {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
+});

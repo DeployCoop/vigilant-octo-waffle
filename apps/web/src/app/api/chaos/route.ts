@@ -5,6 +5,7 @@ import {
   injectCpuStress,
   injectNetworkLatency,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,10 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { type, namespace, podName, durationSec = 10, latencyMs = 200 } = body;
+
+    // Critical permission: chaos injection, scoped to the target namespace.
+    const denied = await authorizeRequest(req, 'chaos:run', { namespace });
+    if (denied) return denied;
 
     if (!namespace || !podName) {
       return NextResponse.json(

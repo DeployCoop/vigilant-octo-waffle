@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { execSessionManager } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,15 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { action, sessionId, namespace, podName, containerName, command, data } = body;
+
+    // Critical permission: pod exec. Authorized before any session is
+    // touched; the 'start' action is checked against its namespace scope.
+    const denied = await authorizeRequest(
+      req,
+      'k8s:exec',
+      action === 'start' ? { namespace } : undefined
+    );
+    if (denied) return denied;
 
     if (action === 'start') {
       if (!namespace || !podName) {
@@ -51,6 +61,10 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  // The exec output stream requires the same permission as starting it.
+  const denied = await authorizeRequest(req, 'k8s:exec');
+  if (denied) return denied;
+
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get('sessionId');
 

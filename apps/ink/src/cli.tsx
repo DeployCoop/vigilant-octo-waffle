@@ -307,7 +307,12 @@ program
 
 // Default action: Launch interactive Ink app
 const rawArgs = process.argv.slice(2);
-if (rawArgs.length === 0 || rawArgs.includes('-i') || rawArgs.includes('--interactive')) {
+if (rawArgs[0] === 'authz') {
+  // Authorization management is delegated to the orchestrator's authz CLI
+  // (commander pass-through would mangle its flags).
+  const { runAuthzCommand } = await import('@vow/orchestrator');
+  process.exitCode = await runAuthzCommand(rawArgs.slice(1));
+} else if (rawArgs.length === 0 || rawArgs.includes('-i') || rawArgs.includes('--interactive')) {
   render(<App />);
 } else {
   program.parse(process.argv);

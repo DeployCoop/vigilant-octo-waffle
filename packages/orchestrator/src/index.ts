@@ -24,6 +24,8 @@ export * from './scaler.js';
 export * from './webhook.js';
 export * from './webhook-auth.js';
 export * from './authz.js';
+export * from './authz-oidc.js';
+export { runAuthzCommand, type AuthzCliIo, type RunAuthzCommandOptions } from './authz-cli.js';
 export * from './export.js';
 export * from './chaos.js';
 export * from './rollouts.js';
