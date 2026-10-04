@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useCan } from '@/lib/ability';
 import {
   Flame,
   Shield,
@@ -43,6 +44,7 @@ interface PodOption {
 }
 
 export default function ChaosPlaygroundPage() {
+  const canRunChaos = useCan('chaos:run');
   const [report, setReport] = useState<ResilienceReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [pods, setPods] = useState<PodOption[]>([]);
@@ -305,7 +307,8 @@ export default function ChaosPlaygroundPage() {
           <div className="flex items-end">
             <button
               onClick={handleLaunchExperiment}
-              disabled={injecting || !selectedPod}
+              disabled={injecting || !selectedPod || !canRunChaos}
+              title={canRunChaos ? undefined : 'Requires the chaos:run permission'}
               className="w-full flex items-center justify-center space-x-2 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shadow-sm"
             >
               {injecting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}

@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { copyToClipboard as copyText } from '@/lib/clipboard';
 import { useTerminal } from '@/context/TerminalContext';
+import { useCan } from '@/lib/ability';
 
 interface ClusterData {
   platform: string;
@@ -59,6 +60,8 @@ interface ClusterData {
 }
 
 export default function ClusterPage() {
+  const canManageCluster = useCan('cluster:manage');
+  const canJoinNodes = useCan('cluster:nodes:join');
   const [cluster, setCluster] = useState<ClusterData | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -879,7 +882,8 @@ export default function ClusterPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => handleAction('start')}
-            disabled={actionLoading}
+            disabled={actionLoading || !canManageCluster}
+            title={canManageCluster ? undefined : 'Requires the cluster:manage permission'}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors disabled:opacity-50"
           >
             <Play className="w-3.5 h-3.5 fill-white" />
@@ -887,7 +891,8 @@ export default function ClusterPage() {
           </button>
           <button
             onClick={() => handleAction('stop')}
-            disabled={actionLoading}
+            disabled={actionLoading || !canManageCluster}
+            title={canManageCluster ? undefined : 'Requires the cluster:manage permission'}
             className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors disabled:opacity-50"
           >
             <Square className="w-3.5 h-3.5 fill-white" />
@@ -1086,8 +1091,9 @@ export default function ClusterPage() {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => openK3sModal()}
-              className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg flex items-center space-x-1.5 transition font-semibold cursor-pointer shadow-sm"
-              title="Join an additional worker or control-plane server node to this K3s cluster"
+              disabled={!canJoinNodes}
+              className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg flex items-center space-x-1.5 transition font-semibold cursor-pointer shadow-sm disabled:opacity-50"
+              title={canJoinNodes ? 'Join an additional worker or control-plane server node to this K3s cluster' : 'Requires the cluster:nodes:join permission'}
             >
               <Server className="w-3.5 h-3.5" />
               <span>Join K3s Node</span>

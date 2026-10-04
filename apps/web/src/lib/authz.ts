@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import {
   loadAuthzStore,
   decide,
@@ -357,4 +358,50 @@ export function withAuthz<Ctx = unknown>(
     if (denied) return denied;
     return handler(req, ctx);
   };
+}
+
+// ---------------------------------------------------------------------------
+// Admin API support (plan §6.3)
+// ---------------------------------------------------------------------------
+
+/** A principal as exposed to admin clients — token hashes never leave the server. */
+export interface PublicPrincipal {
+  id: string;
+  name: string;
+  kind: Principal['kind'];
+  role: Principal['role'];
+  oidcSubject?: string;
+  disabled: boolean;
+  grants: NonNullable<Principal['grants']>;
+  revocations: NonNullable<Principal['revocations']>;
+  hasToken: boolean;
+}
+
+export function toPublicPrincipal(principal: Principal): PublicPrincipal {
+  return {
+    id: principal.id,
+    name: principal.name,
+    kind: principal.kind,
+    role: principal.role,
+    ...(principal.oidcSubject ? { oidcSubject: principal.oidcSubject } : {}),
+    disabled: principal.disabled ?? false,
+    grants: principal.grants ?? [],
+    revocations: principal.revocations ?? [],
+    hasToken: Boolean(principal.tokenHash),
+  };
+}
+
+function slugifyPrincipalName(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || 'principal';
+}
+
+/** Mirrors the CLI's id scheme: `p_<slug>`, with a random suffix on collision. */
+export function uniquePrincipalId(
+  store: { principals: Array<{ id: string }> },
+  name: string
+): string {
+  const base = `p_${slugifyPrincipalName(name)}`;
+  if (!store.principals.some((p) => p.id === base)) return base;
+  return `${base}_${randomBytes(2).toString('hex')}`;
 }

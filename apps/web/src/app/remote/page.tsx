@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAbilityContext } from '@/lib/ability';
 import { postArgoWebhook } from '@/lib/webhook';
 import {
   Smartphone,
@@ -30,6 +31,8 @@ interface PairingSession {
 }
 
 export default function RemotePairingPage() {
+  const { can, status: abilityStatus } = useAbilityContext();
+  const canPair = can('remote:exec');
   const [session, setSession] = useState<PairingSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -41,7 +44,8 @@ export default function RemotePairingPage() {
     try {
       const res = await fetch('/api/remote');
       const data = await res.json();
-      setSession(data);
+      // 401/403 when the caller lacks remote:exec — no session to show.
+      setSession(res.ok ? data : null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -190,7 +194,13 @@ export default function RemotePairingPage() {
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 flex flex-col items-center justify-center text-center space-y-4 shadow-xl">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Scan with Phone Camera</span>
 
-            {loading || !session ? (
+            {!canPair && abilityStatus !== 'loading' ? (
+              <div className="w-[220px] h-[220px] bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center p-4">
+                <p className="text-xs text-slate-400">
+                  Pairing is restricted. Requires the <code>remote:exec</code> permission.
+                </p>
+              </div>
+            ) : loading || !session ? (
               <div className="w-[220px] h-[220px] bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-center">
                 <RefreshCw className="w-6 h-6 animate-spin text-sky-400" />
               </div>
@@ -227,11 +237,11 @@ export default function RemotePairingPage() {
 
                 <div className="flex justify-between p-2.5 bg-slate-950 rounded border border-slate-800 text-slate-300">
                   <span className="text-slate-500">Ephemeral Token:</span>
-                  <span className="truncate max-w-[150px] text-purple-400">{session?.token || '...'}</span>
+                  <span className="truncate max-w-[150px] text-purple-400">{canPair ? session?.token || '...' : 'restricted'}</span>
                 </div>
               </div>
 
-              {session && (
+              {session && canPair && (
                 <div className="pt-2">
                   <button
                     onClick={handleCopy}

@@ -27,6 +27,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
+import { useAbilityContext } from '@/lib/ability';
 
 
 interface AppItem {
@@ -88,6 +89,7 @@ const CATEGORIES = [
 
 export default function AppsPage() {
   const { openTerminal } = useTerminal();
+  const { can } = useAbilityContext();
   const [apps, setApps] = useState<AppItem[]>([]);
   const [presets, setPresets] = useState<PresetItem[]>([]);
   const [domain, setDomain] = useState('example.com');
@@ -429,7 +431,7 @@ export default function AppsPage() {
               <button
                 type="button"
                 onClick={() => handleSwitchRunner('argocd')}
-                disabled={switchingRunner}
+                disabled={switchingRunner || !can('config:update')}
                 className={`px-2.5 py-1 rounded font-semibold text-xs transition-all cursor-pointer flex items-center space-x-1 ${
                   cdRunner === 'argocd'
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
@@ -443,7 +445,7 @@ export default function AppsPage() {
               <button
                 type="button"
                 onClick={() => handleSwitchRunner('flux')}
-                disabled={switchingRunner}
+                disabled={switchingRunner || !can('config:update')}
                 className={`px-2.5 py-1 rounded font-semibold text-xs transition-all cursor-pointer flex items-center space-x-1 ${
                   cdRunner === 'flux'
                     ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
@@ -457,7 +459,7 @@ export default function AppsPage() {
               <button
                 type="button"
                 onClick={() => handleSwitchRunner('both')}
-                disabled={switchingRunner}
+                disabled={switchingRunner || !can('config:update')}
                 className={`px-2.5 py-1 rounded font-semibold text-xs transition-all cursor-pointer flex items-center space-x-1 ${
                   cdRunner === 'both'
                     ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
@@ -498,7 +500,7 @@ export default function AppsPage() {
           {(cdRunner === 'flux' || cdRunner === 'both') && (!fluxStatus?.isHealthy || fluxStatus?.activeControllers === 0) && (
             <button
               onClick={() => handleBootstrapFlux()}
-              disabled={bootstrappingFlux}
+              disabled={bootstrappingFlux || !can('flux:sync')}
               className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
               title="Run src/flux.sh to install FluxCD controllers into flux-system"
             >
@@ -509,7 +511,7 @@ export default function AppsPage() {
           {(cdRunner === 'flux' || cdRunner === 'both') && (
             <button
               onClick={() => handleReconcileFlux()}
-              disabled={fluxReconciling}
+              disabled={fluxReconciling || !can('flux:sync')}
               className="px-3 py-1.5 bg-purple-600/90 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
               title="Force Flux GitRepository and Kustomization reconciliation"
             >
@@ -520,7 +522,8 @@ export default function AppsPage() {
           {(cdRunner === 'argocd' || cdRunner === 'both') && (
             <button
               onClick={() => handleInstantSync()}
-              className="px-3 py-1.5 bg-amber-600/90 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+              disabled={!(can('argo:sync') || can('flux:sync'))}
+              className="px-3 py-1.5 bg-amber-600/90 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
               title="Trigger synthetic Git push webhook to accelerate ArgoCD sync"
             >
               <Zap className="w-3.5 h-3.5" />
@@ -529,7 +532,8 @@ export default function AppsPage() {
           )}
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+            disabled={!can('apps:deploy')}
+            className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Custom App</span>
@@ -584,7 +588,7 @@ export default function AppsPage() {
               <button
                 key={preset.id}
                 onClick={() => handleApplyPreset(preset)}
-                disabled={Boolean(updatingId)}
+                disabled={Boolean(updatingId) || !can('apps:deploy')}
                 className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-lg text-xs font-medium text-slate-300 transition-colors flex items-center space-x-1.5 disabled:opacity-50"
                 title={`${preset.description} (~${(preset.estimatedMemoryMb / 1024).toFixed(1)} GB)`}
               >
@@ -703,7 +707,7 @@ export default function AppsPage() {
                   {/* Enable Switch */}
                   <button
                     onClick={() => handleToggle(app)}
-                    disabled={updatingId === app.id}
+                    disabled={updatingId === app.id || !can('apps:deploy', { appId: app.id })}
                     className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                       app.enabled ? 'bg-sky-500' : 'bg-slate-800'
                     }`}
@@ -823,7 +827,7 @@ export default function AppsPage() {
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => handleInstantSync(app.id)}
-                    disabled={updatingId === app.id || !app.enabled}
+                    disabled={updatingId === app.id || !app.enabled || !(can('argo:sync', { appId: app.id }) || can('flux:sync', { appId: app.id }))}
                     className="text-xs px-2.5 py-1.5 bg-amber-950/70 hover:bg-amber-600 hover:text-white text-amber-300 border border-amber-800/60 rounded-md transition-colors flex items-center space-x-1.5 disabled:opacity-40 disabled:hover:bg-amber-950/70 cursor-pointer"
                     title="Sub-Second Hard Refresh & Git Sync"
                   >
@@ -832,7 +836,7 @@ export default function AppsPage() {
                   </button>
                   <button
                     onClick={() => handleDeploy(app)}
-                    disabled={updatingId === app.id || !app.enabled}
+                    disabled={updatingId === app.id || !app.enabled || !can('apps:deploy', { appId: app.id })}
                     className="text-xs px-2.5 py-1.5 bg-slate-800 hover:bg-sky-600 hover:text-white text-slate-300 border border-slate-700 rounded-md transition-colors flex items-center space-x-1.5 disabled:opacity-40 disabled:hover:bg-slate-800 cursor-pointer"
                   >
                     <Play className="w-3 h-3" />
