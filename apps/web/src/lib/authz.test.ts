@@ -1,7 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 const hoisted = vi.hoisted(() => ({
   load: { status: 'disabled' } as import('@vow/orchestrator').AuthzStoreLoad,
+  root: '',
 }));
 
 vi.mock('@vow/orchestrator', async (importOriginal) => {
@@ -9,7 +13,7 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
   return { ...actual, loadAuthzStore: () => hoisted.load };
 });
 
-vi.mock('./project', () => ({ getProjectRoot: () => '/nonexistent-test-root' }));
+vi.mock('./project', () => ({ getProjectRoot: () => hoisted.root }));
 
 import {
   generatePrincipalToken,
@@ -22,7 +26,9 @@ import {
   authorizeRequest,
   extractRequestToken,
   isLocalBoardRequest,
+  readAuditEntries,
   requirePermission,
+  resolveAuthzContext,
 } from './authz';
 
 const viewerToken = generatePrincipalToken();
@@ -71,6 +77,13 @@ async function expectAuthzError(promise: Promise<unknown>, status: number, reaso
 
 beforeEach(() => {
   hoisted.load = { status: 'disabled' };
+  hoisted.root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-lib-'));
+  delete process.env.VOW_API_TOKEN;
+});
+
+afterEach(() => {
+  fs.rmSync(hoisted.root, { recursive: true, force: true });
+  delete process.env.VOW_API_TOKEN;
 });
 
 describe('extractRequestToken', () => {
@@ -157,5 +170,102 @@ describe('authorizeRequest', () => {
     const body = await denied!.json();
     expect(body.reason).toBe('deny_missing_grant');
     expect(body.error).toMatch(/permission/i);
+  });
+});
+
+describe('bootstrap owner token (VOW_API_TOKEN)', () => {
+  const LEGACY = 'legacy-shared-token';
+
+  it('resolves the legacy token to the synthetic bootstrap owner', async () => {
+    process.env.VOW_API_TOKEN = LEGACY;
+    hoisted.load = { status: 'ready', store: store(viewer) };
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const ctx = await resolveAuthzContext(request(LEGACY));
+      expect(ctx.principal?.id).toBe('bootstrap-owner');
+      expect(ctx.principal?.role).toBe('owner');
+
+      // Owner-equivalent: even permission management is allowed.
+      const { decision } = await requirePermission(request(LEGACY), 'users:manage_permissions');
+      expect(decision.allowed).toBe(true);
+      expect(decision.reason).toBe('allow_owner');
+
+      // The deprecation warning fires once, not per request.
+      await resolveAuthzContext(request(LEGACY));
+      expect(warn.mock.calls.flat().join(' ')).toMatch(/VOW_API_TOKEN/);
+      expect(warn.mock.calls.length).toBe(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('does not resolve a non-matching token to the bootstrap owner', async () => {
+    process.env.VOW_API_TOKEN = LEGACY;
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    const ctx = await resolveAuthzContext(request('some-other-token'));
+    expect(ctx.principal).toBeNull();
+  });
+
+  it('store principals take precedence over the bootstrap token path', async () => {
+    process.env.VOW_API_TOKEN = LEGACY;
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    const ctx = await resolveAuthzContext(request(viewerToken));
+    expect(ctx.principal?.id).toBe('p_viewer');
+  });
+});
+
+describe('audit logging', () => {
+  it('records denials with principal, permission, reason, and route', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    await authorizeRequest(request(viewerToken), 'k8s:exec');
+
+    const entries = readAuditEntries(hoisted.root);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      principalId: 'p_viewer',
+      permission: 'k8s:exec',
+      allowed: false,
+      reason: 'deny_missing_grant',
+      route: '/api/test',
+    });
+    expect(typeof entries[0].ts).toBe('string');
+  });
+
+  it('records allowed decisions for mutating permissions', async () => {
+    hoisted.load = { status: 'ready', store: store(scopedOperator) };
+    await authorizeRequest(request(operatorToken), 'k8s:exec', { namespace: 'monitoring' });
+
+    const entries = readAuditEntries(hoisted.root);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      permission: 'k8s:exec',
+      allowed: true,
+      target: { namespace: 'monitoring' },
+    });
+  });
+
+  it('does not record allowed reads or anything while authz is disabled', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    await authorizeRequest(request(viewerToken), 'apps:read');
+    expect(readAuditEntries(hoisted.root)).toEqual([]);
+
+    hoisted.load = { status: 'disabled' };
+    await authorizeRequest(request(), 'cluster:manage');
+    expect(fs.existsSync(path.join(hoisted.root, '.vow', 'audit.log'))).toBe(false);
+  });
+
+  it('returns entries newest-first and honors the limit', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    await authorizeRequest(request(viewerToken), 'k8s:exec');
+    await authorizeRequest(request(viewerToken), 'cluster:manage');
+    await authorizeRequest(request(viewerToken), 'chaos:run');
+
+    const all = readAuditEntries(hoisted.root);
+    expect(all.map((e) => e.permission)).toEqual(['chaos:run', 'cluster:manage', 'k8s:exec']);
+    expect(readAuditEntries(hoisted.root, 2).map((e) => e.permission)).toEqual([
+      'chaos:run',
+      'cluster:manage',
+    ]);
   });
 });

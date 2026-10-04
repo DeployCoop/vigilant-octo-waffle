@@ -64,3 +64,39 @@ describe('middleware — webhook deferral', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('middleware — principal token deferral', () => {
+  const originalApi = process.env.VOW_API_TOKEN;
+
+  beforeEach(() => {
+    delete process.env.VOW_WEBHOOK_TOKEN;
+    process.env.VOW_API_TOKEN = API_TOKEN;
+  });
+
+  afterEach(() => {
+    if (originalApi === undefined) delete process.env.VOW_API_TOKEN;
+    else process.env.VOW_API_TOKEN = originalApi;
+  });
+
+  it('defers vow_-prefixed Bearer tokens to the route guards', () => {
+    const res = middleware(
+      request('/api/apps', { authorization: 'Bearer vow_principal-token' })
+    );
+    expect(isPassThrough(res)).toBe(true);
+  });
+
+  it('defers vow_-prefixed x-vow-token headers to the route guards', () => {
+    const res = middleware(request('/api/apps', { 'x-vow-token': 'vow_principal-token' }));
+    expect(isPassThrough(res)).toBe(true);
+  });
+
+  it('still rejects non-principal tokens that do not match VOW_API_TOKEN', () => {
+    const res = middleware(request('/api/apps', { authorization: 'Bearer not-the-token' }));
+    expect(res.status).toBe(401);
+  });
+
+  it('still accepts the shared token itself', () => {
+    const res = middleware(request('/api/apps', { authorization: `Bearer ${API_TOKEN}` }));
+    expect(isPassThrough(res)).toBe(true);
+  });
+});

@@ -6,10 +6,14 @@ import {
   deleteCustomApp,
   type CustomAppOptions,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'apps:read');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const apps = listCustomApps(root);
@@ -23,6 +27,9 @@ export async function POST(req: Request) {
   try {
     const root = getProjectRoot();
     const options: CustomAppOptions = await req.json();
+
+    const denied = await authorizeRequest(req, 'apps:deploy', { appId: options.id });
+    if (denied) return denied;
 
     if (!options.id || !options.name || !options.repoURL) {
       return NextResponse.json(
@@ -47,6 +54,9 @@ export async function DELETE(req: Request) {
     if (!id) {
       return NextResponse.json({ error: 'id query param required' }, { status: 400 });
     }
+
+    const denied = await authorizeRequest(req, 'apps:deploy', { appId: id });
+    if (denied) return denied;
 
     deleteCustomApp(id, root);
     return NextResponse.json({ success: true, id });

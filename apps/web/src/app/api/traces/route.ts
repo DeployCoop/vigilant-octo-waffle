@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { fetchClusterTraces } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'cluster:read');
+  if (denied) return denied;
+
   try {
     const { searchParams } = new URL(req.url);
     const service = searchParams.get('service') || undefined;

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getProjectRoot } from '@/lib/project';
 import { ArgoManager, loadProjectConfig } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,9 @@ export async function GET(req: Request) {
     if (!app) {
       return NextResponse.json({ error: 'App parameter required' }, { status: 400 });
     }
+
+    const denied = await authorizeRequest(req, 'apps:read', { appId: app });
+    if (denied) return denied;
 
     const argoManager = new ArgoManager(root);
     const basePath = path.join(root, 'argo', app, 'argocd.yaml');
@@ -56,6 +60,10 @@ export async function POST(req: Request) {
     if (!app || typeof overrideYaml !== 'string') {
       return NextResponse.json({ error: 'app and overrideYaml required' }, { status: 400 });
     }
+
+    // This POST writes (or deletes) an Argo override manifest.
+    const denied = await authorizeRequest(req, 'apps:override', { appId: app });
+    if (denied) return denied;
 
     const overrideDir = path.join(root, '.argo_overrides', app);
     const overridePath = path.join(overrideDir, 'argocd.yaml');

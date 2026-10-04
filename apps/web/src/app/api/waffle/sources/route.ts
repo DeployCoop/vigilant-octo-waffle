@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { getWaffleSourceManager } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  // Waffle sources are project configuration.
+  const denied = await authorizeRequest(req, 'config:update');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const sourceManager = getWaffleSourceManager(root);
@@ -33,6 +38,9 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const denied = await authorizeRequest(req, 'config:update');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const sourceManager = getWaffleSourceManager(root);

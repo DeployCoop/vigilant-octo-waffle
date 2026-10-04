@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { listLocalImages, buildLocalContainerImage } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'builder:run');
+  if (denied) return denied;
+
   try {
     const images = await listLocalImages();
     return NextResponse.json({ images });
@@ -16,6 +20,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'builder:run');
+  if (denied) return denied;
+
   try {
     const body = await req.json();
     const { action = 'build', imageName, tag = 'latest', dockerfileContent, pushToLocalRegistry = true } = body;

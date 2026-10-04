@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { discoverClusterNamespaces, generateNamespaceManifests } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'namespaces:manage');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const result = discoverClusterNamespaces(root);

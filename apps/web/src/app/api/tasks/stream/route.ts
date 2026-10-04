@@ -1,8 +1,13 @@
 import { processManager, type TaskLogEntry } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  // Authorize before opening the stream.
+  const denied = await authorizeRequest(req, 'tasks:read');
+  if (denied) return denied;
+
   const url = new URL(req.url);
   const taskId = url.searchParams.get('taskId');
 

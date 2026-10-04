@@ -6,10 +6,14 @@ import {
   restoreVeleroBackup,
   createDockerNodeSnapshot,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'backups:manage');
+  if (denied) return denied;
+
   try {
     const backups = await listBackups();
     return NextResponse.json({ backups });
@@ -19,6 +23,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'backups:manage');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const body = await req.json();

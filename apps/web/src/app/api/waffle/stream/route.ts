@@ -1,9 +1,14 @@
 import { getProjectRoot } from '@/lib/project';
 import { getWaffleRunner } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  // Authorize before opening the stream.
+  const denied = await authorizeRequest(req, 'tasks:read');
+  if (denied) return denied;
+
   const root = getProjectRoot();
   const runner = getWaffleRunner(root);
   const encoder = new TextEncoder();

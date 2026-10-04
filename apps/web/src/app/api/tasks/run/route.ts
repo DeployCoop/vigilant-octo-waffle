@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { processManager, loadProjectConfig, validateCommand } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export async function POST(req: Request) {
+  // Running arbitrary (allowlisted) commands is the core tasks:run action.
+  const denied = await authorizeRequest(req, 'tasks:run');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);

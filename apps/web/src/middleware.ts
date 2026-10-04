@@ -30,6 +30,14 @@ export function middleware(request: NextRequest) {
       const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
 
       if (bearerToken !== requiredToken && customTokenHeader !== requiredToken) {
+        // Principal tokens (vow_-prefixed) are verified by the route guards
+        // against the authz store, which Edge middleware cannot read — defer
+        // to them. Every mutating route is guarded, so an invalid principal
+        // token still ends in a 401/403 from the route itself.
+        const presented = bearerToken ?? customTokenHeader;
+        if (presented && presented.startsWith('vow_')) {
+          return NextResponse.next();
+        }
         return NextResponse.json(
           { error: 'Unauthorized: Missing or invalid API token' },
           { status: 401 }

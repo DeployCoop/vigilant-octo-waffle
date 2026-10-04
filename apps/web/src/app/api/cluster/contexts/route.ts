@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { K8sClient } from '@vow/orchestrator';
-import { withAuthz } from '@/lib/authz';
+import { authorizeRequest, withAuthz } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'cluster:read');
+  if (denied) return denied;
+
   try {
     const k8sClient = new K8sClient();
     const data = k8sClient.getContexts();

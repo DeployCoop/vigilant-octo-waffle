@@ -9,6 +9,7 @@ node_modules/
 .next/
 dist/
 .vow-cache/
+.vow/
 .kind-config.rendered.yaml
 .k3d-config.rendered.yaml
 *.tsbuildinfo

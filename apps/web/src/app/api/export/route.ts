@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { generateProductionBlueprint, BlueprintOptions } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'export:run');
+  if (denied) return denied;
+
   try {
     const body = (await req.json()) as BlueprintOptions;
     if (!body.provider || !['aws', 'gcp', 'azure', 'baremetal'].includes(body.provider)) {

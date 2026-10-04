@@ -1,22 +1,35 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { loadProjectConfig, saveEnvFile } from '@vow/orchestrator';
+import { authorizeRequest, callerCan } from '@/lib/authz';
+import { redactSecrets } from '@/lib/redaction';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'config:read');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);
 
-    return NextResponse.json({
+    const payload = {
       config: config.raw,
       cluster: config.cluster,
-    });
+    };
+
+    // Redaction split (plan Q5): callers without secrets:read get the
+    // config with secret values masked.
+    const canSeeSecrets = await callerCan(req, 'secrets:read');
+    return NextResponse.json(canSeeSecrets ? payload : redactSecrets(payload));
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'config:update');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const { updates } = await req.json();

@@ -1,9 +1,14 @@
 import { getProjectRoot } from '@/lib/project';
 import { streamAntigravity, type AIProvider } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  // Authorize before opening the stream.
+  const denied = await authorizeRequest(req, 'tasks:run');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const body = await req.json().catch(() => ({}));
