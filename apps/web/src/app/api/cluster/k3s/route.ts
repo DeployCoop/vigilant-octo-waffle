@@ -61,6 +61,7 @@ import {
   executeCopilotTool,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -168,6 +169,12 @@ export async function POST(req: Request) {
   try {
     const root = getProjectRoot();
     const body = await req.json();
+
+    // Critical permission: every action here joins, provisions, or kills
+    // cluster nodes (and join-info responses carry the cluster join token).
+    const denied = await authorizeRequest(req, 'cluster:nodes:join');
+    if (denied) return denied;
+
     const { action = 'join-info' } = body;
 
     if (action === 'join-info') {

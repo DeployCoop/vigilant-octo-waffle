@@ -7,6 +7,7 @@ import {
   provisionK3sNodeViaSsh,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,11 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
+    // Critical permission: scaling and node-join/provisioning actions.
+    const denied = await authorizeRequest(req, 'cluster:nodes:join');
+    if (denied) return denied;
+
     const root = getProjectRoot();
     const { action, clusterName = 'vigilant-octo-waffle', targetAgentCount, delta = 1 } = body;
 
