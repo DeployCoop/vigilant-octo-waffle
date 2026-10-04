@@ -1,0 +1,41 @@
+# Dependabot configuration — improvements plan WS1 (§4.2), §16 Q9 decided:
+# grouped weekly PRs, manual merge (CI-gated). Revisit patch-level
+# auto-merge after the first month.
+version: 2
+updates:
+  # pnpm workspace: the npm ecosystem at the root reads the workspace and
+  # updates pnpm-lock.yaml.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      next-react:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@next/*"
+          - "eslint-config-next"
+      tooling:
+        patterns:
+          - "typescript"
+          - "vitest"
+          - "@vitejs/*"
+          - "@types/*"
+          - "typescript-eslint"
+
+  # Keeps the digest-pinned Dockerfile base image (Node 24) fresh.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
