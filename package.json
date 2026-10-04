@@ -2,6 +2,9 @@
   "name": "vigilant-octo-waffle-monorepo",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
   "packageManager": "pnpm@11.24.0",
   "scripts": {
     "dev": "pnpm --filter @vow/orchestrator build && pnpm --filter @vow/web dev",

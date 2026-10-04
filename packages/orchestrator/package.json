@@ -1,6 +1,9 @@
 {
   "name": "@vow/orchestrator",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
