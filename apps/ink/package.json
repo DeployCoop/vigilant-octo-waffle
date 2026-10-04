@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@vow/orchestrator": "workspace:*",
-    "chalk": "^5.4.1",
+    "chalk": "^6.0.1",
     "commander": "^15.0.0",
     "ink": "^6.8.0",
     "ink-select-input": "^6.2.0",
