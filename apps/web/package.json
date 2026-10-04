@@ -29,14 +29,14 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4.0.9",
-    "@types/node": "^22.13.1",
+    "@types/node": "^26.6.3",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.27",
     "postcss": "^8.5.2",
     "tailwindcss": "^4.0.9",
-    "typescript": "^5.7.3",
-    "vitest": "^3.2.7"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   }
 }
