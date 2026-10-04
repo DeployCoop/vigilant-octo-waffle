@@ -47,6 +47,11 @@ jobs:
       - name: Web tests
         run: pnpm --filter @vow/web test
 
+      - name: Ink tests
+        run: |
+          pnpm --filter @vow/ink build
+          pnpm --filter @vow/ink test
+
       - name: Typecheck (web + ink; orchestrator typechecks via its build)
         run: |
           pnpm --filter @vow/web typecheck
