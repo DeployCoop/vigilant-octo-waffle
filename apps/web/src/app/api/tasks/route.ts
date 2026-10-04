@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { processManager } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'tasks:read');
+  if (denied) return denied;
+
   try {
     const tasks = processManager.getAllTasks().map((t) => ({
       id: t.id,
@@ -23,6 +27,11 @@ export async function GET() {
 export async function DELETE(req: Request) {
   try {
     const { taskId } = await req.json();
+
+    // Cancelling a running task is a task action, not a read.
+    const denied = await authorizeRequest(req, 'tasks:run');
+    if (denied) return denied;
+
     if (!taskId) {
       return NextResponse.json({ error: 'Missing taskId' }, { status: 400 });
     }

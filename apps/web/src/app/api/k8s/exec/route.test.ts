@@ -1,8 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 const hoisted = vi.hoisted(() => ({
   load: { status: 'disabled' } as import('@vow/orchestrator').AuthzStoreLoad,
   createSession: vi.fn(() => ({ id: 'session-1' })),
+  root: '',
 }));
 
 vi.mock('@vow/orchestrator', async (importOriginal) => {
@@ -17,6 +21,8 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
     },
   };
 });
+
+vi.mock('@/lib/project', () => ({ getProjectRoot: () => hoisted.root }));
 
 import { generatePrincipalToken, hashToken, type Principal } from '@vow/orchestrator';
 import { POST, GET } from './route';
@@ -47,6 +53,12 @@ const startBody = { action: 'start', namespace: 'monitoring', podName: 'web-0' }
 beforeEach(() => {
   hoisted.load = { status: 'disabled' };
   hoisted.createSession.mockClear();
+  // Audit entries from guard decisions land in a throwaway root.
+  hoisted.root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-exec-route-'));
+});
+
+afterEach(() => {
+  fs.rmSync(hoisted.root, { recursive: true, force: true });
 });
 
 describe('POST /api/k8s/exec guard', () => {

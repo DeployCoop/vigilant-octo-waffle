@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { diagnoseIncident } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,9 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { podName, namespace, containerName } = body;
+
+    const denied = await authorizeRequest(req, 'ai:diagnose', { namespace });
+    if (denied) return denied;
 
     if (!podName || !namespace) {
       return NextResponse.json(

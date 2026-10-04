@@ -6,10 +6,14 @@ import {
   buildClusterContext,
   type AIProvider,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'tasks:read');
+  if (denied) return denied;
+
   try {
     const { searchParams } = new URL(req.url);
     const ollamaEndpoint = searchParams.get('ollamaEndpoint') || undefined;
@@ -42,6 +46,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // Asking the agent runs cluster-aware AI actions on the caller's behalf.
+  const denied = await authorizeRequest(req, 'tasks:run');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const body = await req.json().catch(() => ({}));

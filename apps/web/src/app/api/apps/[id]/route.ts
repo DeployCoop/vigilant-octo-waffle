@@ -12,6 +12,8 @@ import {
 } from '@vow/orchestrator';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { authorizeRequest } from '@/lib/authz';
+import type { Permission } from '@vow/orchestrator';
 
 export async function GET(
   req: Request,
@@ -22,6 +24,9 @@ export async function GET(
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
       return NextResponse.json({ error: 'Invalid application ID format' }, { status: 400 });
     }
+
+    const denied = await authorizeRequest(req, 'apps:read', { appId: id });
+    if (denied) return denied;
 
     const { searchParams } = new URL(req.url);
     const root = getProjectRoot();
@@ -143,6 +148,23 @@ export async function POST(
 
     const body = await req.json().catch(() => ({}));
     const runner = (body.runner || (appDef.isLocalChart ? 'helm' : config.cluster.cdRunner || 'argocd')).toLowerCase();
+
+    // Per-action permissions: deploy → apps:deploy, sync → the runner's
+    // sync key, override writes → apps:override. All scoped to this app.
+    const actionPermission: Permission | null =
+      body.action === 'deploy'
+        ? 'apps:deploy'
+        : body.action === 'sync'
+          ? runner === 'flux'
+            ? 'flux:sync'
+            : 'argo:sync'
+          : body.action === 'saveOverride'
+            ? 'apps:override'
+            : null;
+    if (actionPermission) {
+      const denied = await authorizeRequest(req, actionPermission, { appId: id });
+      if (denied) return denied;
+    }
 
     // Local Helm Chart deployment
     if (appDef.isLocalChart && body.action === 'deploy') {

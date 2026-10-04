@@ -14,10 +14,14 @@ import {
   getChartsDirectory,
   setChartsDirectory,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'helm:manage');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const { searchParams } = new URL(req.url);
@@ -97,6 +101,11 @@ export async function POST(req: Request) {
     const root = getProjectRoot();
     const body = await req.json().catch(() => ({}));
     const action = body.action;
+
+    const denied = await authorizeRequest(req, 'helm:manage', {
+      namespace: body.namespace,
+    });
+    if (denied) return denied;
 
     // Action 1: Change local charts directory
     if (action === 'set-charts-dir') {

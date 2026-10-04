@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { K8sClient } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,12 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const namespace = searchParams.get('namespace');
     const name = searchParams.get('pod');
+
+    // Logs get their own permission: they routinely leak secrets.
+    const denied = await authorizeRequest(req, 'k8s:logs:read', {
+      namespace: namespace ?? undefined,
+    });
+    if (denied) return denied;
     const container = searchParams.get('container') || undefined;
     const tailLinesParam = searchParams.get('tailLines');
     const tailLines = tailLinesParam ? parseInt(tailLinesParam, 10) : 250;

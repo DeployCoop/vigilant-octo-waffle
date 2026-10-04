@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { ProfileManager } from '@vow/orchestrator';
+import { authorizeRequest, callerCan } from '@/lib/authz';
+import { redactSecrets } from '@/lib/redaction';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'config:read');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const { searchParams } = new URL(req.url);
@@ -13,13 +18,18 @@ export async function GET(req: Request) {
     const pm = new ProfileManager(root);
     const bundle = pm.exportProfile(name);
 
-    return NextResponse.json(bundle);
+    // Profile bundles carry configuration (and any embedded secrets).
+    const canSeeSecrets = await callerCan(req, 'secrets:read');
+    return NextResponse.json(canSeeSecrets ? bundle : redactSecrets(bundle));
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'config:update');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const bundle = await req.json();

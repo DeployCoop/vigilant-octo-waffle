@@ -9,7 +9,11 @@ import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  // The resilience score is a security posture metric.
+  const denied = await authorizeRequest(req, 'security:read');
+  if (denied) return denied;
+
   try {
     const report = await measureResilienceScore();
     return NextResponse.json(report);

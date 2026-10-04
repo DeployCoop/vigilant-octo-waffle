@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import * as os from 'node:os';
 import { loadProjectConfig, APP_CATALOG } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'system:manage');
+  if (denied) return denied;
+
   try {
     const totalMemBytes = os.totalmem();
     const freeMemBytes = os.freemem();

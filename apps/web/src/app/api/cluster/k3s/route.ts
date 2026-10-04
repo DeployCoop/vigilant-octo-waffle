@@ -74,6 +74,13 @@ export async function GET(req: Request) {
     const token = searchParams.get('token') || undefined;
 
     const action = searchParams.get('action');
+
+    // Status actions are cluster reads; the default response embeds the
+    // k3s join info (including the node token), so it requires the
+    // node-join permission.
+    const denied = await authorizeRequest(req, action ? 'cluster:read' : 'cluster:nodes:join');
+    if (denied) return denied;
+
     if (action === 'health') {
       const health = await getK3sHealth(root);
       return NextResponse.json(health);

@@ -5,6 +5,7 @@ import {
   promoteRollout,
   abortRollout,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,10 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const namespace = searchParams.get('namespace') || undefined;
+
+    const denied = await authorizeRequest(req, 'rollouts:manage', { namespace });
+    if (denied) return denied;
+
     const rollouts = await listRollouts(namespace);
     return NextResponse.json({ rollouts });
   } catch (err: any) {
@@ -26,6 +31,9 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { action, name, namespace, weight, full } = body;
+
+    const denied = await authorizeRequest(req, 'rollouts:manage', { namespace });
+    if (denied) return denied;
 
     if (!name || !namespace) {
       return NextResponse.json(

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { accelerateArgoSync, authorizeWebhookRequest, decide } from '@vow/orchestrator';
-import { resolveAuthzContext } from '@/lib/authz';
+import { resolveAuthzContext, recordAudit } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +27,7 @@ export async function POST(req: Request) {
       localBoard: ctx.localBoard,
       unknownPrincipal: ctx.unknownPrincipal,
     });
+    recordAudit(req, 'webhook:argo', decision);
     if (!decision.allowed) {
       return NextResponse.json(
         { error: 'Principal lacks the webhook:argo permission', reason: decision.reason },
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
     // from before, but we warn once so the open posture is visible in logs.
     const auth = authorizeWebhookRequest(req.headers);
     if (!auth.authorized) {
+      recordAudit(req, 'webhook:argo', { allowed: false, reason: 'deny_unauthenticated' });
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
     if (auth.mode === 'unconfigured' && !warnedUnconfigured) {

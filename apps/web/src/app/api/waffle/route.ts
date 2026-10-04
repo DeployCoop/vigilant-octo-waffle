@@ -9,10 +9,14 @@ import {
   validateWafflePipeline,
   loadWafflePipeline,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'tasks:read');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const sourceManager = getWaffleSourceManager(root);

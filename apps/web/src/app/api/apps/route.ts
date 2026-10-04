@@ -9,10 +9,14 @@ import {
   validateDependencies,
   getTopologicalOrder,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'apps:read');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);
@@ -55,6 +59,12 @@ export async function POST(req: Request) {
   try {
     const root = getProjectRoot();
     const body = await req.json();
+
+    // Presets, batch toggles, and single-app toggles all rewrite which
+    // apps are enabled for deployment.
+    const denied = await authorizeRequest(req, 'apps:deploy');
+    if (denied) return denied;
+
     const config = loadProjectConfig(root);
 
     // Case 1: Apply a Preset

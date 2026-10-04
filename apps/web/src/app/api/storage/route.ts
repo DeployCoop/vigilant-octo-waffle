@@ -7,6 +7,7 @@ import {
   snapshotK3sVolume,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
+import { authorizeRequest } from '@/lib/authz';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -14,7 +15,10 @@ const execAsync = promisify(exec);
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'storage:manage');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const k8sClient = new K8sClient();
@@ -36,6 +40,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'storage:manage');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const body = await req.json();

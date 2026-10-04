@@ -7,10 +7,14 @@ import {
   loadWafflePipeline,
   type WafflePipeline,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'tasks:run');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const sourceManager = getWaffleSourceManager(root);

@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { loadProjectConfig, saveEnvFile, K8sClient, FluxManager, processManager } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await authorizeRequest(req, 'apps:read');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);
@@ -51,6 +55,14 @@ export async function POST(req: Request) {
     const fluxNs = config.cluster.fluxNamespace || 'flux-system';
     const body = await req.json().catch(() => ({}));
     const { action, name, namespace, cdRunner } = body;
+
+    // set-runner rewrites project config; everything else is a Flux sync action.
+    const denied = await authorizeRequest(
+      req,
+      action === 'set-runner' ? 'config:update' : 'flux:sync',
+      { namespace }
+    );
+    if (denied) return denied;
 
     if (action === 'set-runner' && cdRunner) {
       if (!['argocd', 'flux', 'both'].includes(cdRunner)) {

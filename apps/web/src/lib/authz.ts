@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   loadAuthzStore,
   decide,
@@ -7,6 +9,7 @@ import {
   getOidcConfig,
   verifyOidcToken,
   looksLikeJwt,
+  webhookTokensEqual,
   type AuthzStoreLoad,
   type AuthzTarget,
   type Decision,
@@ -64,6 +67,16 @@ export interface AuthzContext {
   localBoard: boolean;
 }
 
+/** Synthetic principal for the legacy VOW_API_TOKEN bootstrap credential. */
+export const BOOTSTRAP_OWNER_PRINCIPAL: Principal = {
+  id: 'bootstrap-owner',
+  name: 'Bootstrap owner (VOW_API_TOKEN)',
+  kind: 'service',
+  role: 'owner',
+};
+
+let warnedBootstrapToken = false;
+
 /** Tokens are accepted as `Authorization: Bearer <t>` or `x-vow-token: <t>`. */
 export function extractRequestToken(req: Request): string | null {
   const custom = req.headers.get('x-vow-token');
@@ -114,6 +127,20 @@ export async function resolveAuthzContext(req: Request): Promise<AuthzContext> {
   const byToken = findPrincipalByToken(loaded.store, token);
   if (byToken) return { ...base, principal: byToken };
 
+  // Bootstrap owner: the legacy shared VOW_API_TOKEN acts as an
+  // owner-equivalent credential (plan §7) so existing deployments keep a
+  // way in. Using it logs a one-time deprecation warning.
+  const legacyToken = process.env.VOW_API_TOKEN;
+  if (legacyToken && webhookTokensEqual(token, legacyToken)) {
+    if (!warnedBootstrapToken) {
+      warnedBootstrapToken = true;
+      console.warn(
+        '[authz] VOW_API_TOKEN was used as a bootstrap owner credential. Migrate to a store principal (`vow authz add`) and unset VOW_API_TOKEN.'
+      );
+    }
+    return { ...base, principal: BOOTSTRAP_OWNER_PRINCIPAL };
+  }
+
   const oidc = getOidcConfig();
   if (oidc && looksLikeJwt(token)) {
     const identity = await verifyOidcToken(token, oidc);
@@ -128,6 +155,143 @@ export async function resolveAuthzContext(req: Request): Promise<AuthzContext> {
   return base;
 }
 
+// ---------------------------------------------------------------------------
+// Audit logging (plan §10): every decision for a mutating permission, and
+// every denial, is appended as one JSON line to <projectRoot>/.vow/audit.log.
+// ---------------------------------------------------------------------------
+
+export interface AuditEntry {
+  ts: string;
+  principalId: string | null;
+  permission: Permission;
+  target?: AuthzTarget;
+  allowed: boolean;
+  reason: DecisionReason;
+  route: string;
+}
+
+const READ_PERMISSIONS: ReadonlySet<Permission> = new Set([
+  'apps:read',
+  'cluster:read',
+  'config:read',
+  'k8s:read',
+  'k8s:logs:read',
+  'tasks:read',
+  'security:read',
+  'secrets:read',
+]);
+
+export function auditLogPath(root: string): string {
+  return path.join(root, '.vow', 'audit.log');
+}
+
+export function formatAuditEntry(entry: AuditEntry): string {
+  return JSON.stringify(entry);
+}
+
+function shouldAudit(permission: Permission, decision: Decision): boolean {
+  if (decision.reason === 'allow_authz_disabled') return false;
+  return !decision.allowed || !READ_PERMISSIONS.has(permission);
+}
+
+/** Appends one audit entry. Never throws — audit must not break requests. */
+export function recordAudit(
+  req: Request,
+  permission: Permission,
+  decision: Decision,
+  target?: AuthzTarget
+): void {
+  try {
+    const file = auditLogPath(getProjectRoot());
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    let route = '';
+    try {
+      route = new URL(req.url).pathname;
+    } catch {
+      route = '';
+    }
+    const entry: AuditEntry = {
+      ts: new Date().toISOString(),
+      principalId: decision.principalId ?? null,
+      permission,
+      ...(target ? { target } : {}),
+      allowed: decision.allowed,
+      reason: decision.reason,
+      route,
+    };
+    fs.appendFileSync(file, formatAuditEntry(entry) + '\n');
+  } catch (err) {
+    console.error('[authz] failed to write audit entry:', err);
+  }
+}
+
+/** Reads the most recent audit entries (newest first). */
+export function readAuditEntries(root: string, limit = 200): AuditEntry[] {
+  try {
+    const lines = fs.readFileSync(auditLogPath(root), 'utf-8').split('\n').filter(Boolean);
+    const entries: AuditEntry[] = [];
+    for (const line of lines.slice(-limit)) {
+      try {
+        entries.push(JSON.parse(line) as AuditEntry);
+      } catch {
+        // Skip torn/corrupt lines rather than failing the whole read.
+      }
+    }
+    return entries.reverse();
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Permission checks
+// ---------------------------------------------------------------------------
+
+export interface PermissionCheck {
+  allowed: boolean;
+  status: number;
+  reason: DecisionReason;
+  decision: Decision;
+  ctx: AuthzContext;
+}
+
+/**
+ * Resolves the caller and runs the central `decide()` for a permission,
+ * recording the decision to the audit log when required. Does not throw
+ * on denial — see requirePermission/authorizeRequest for guard styles.
+ */
+export async function checkPermission(
+  req: Request,
+  permission: Permission,
+  target?: AuthzTarget
+): Promise<PermissionCheck> {
+  const ctx = await resolveAuthzContext(req);
+  const decision = decide(ctx.loaded, ctx.principal, permission, target, {
+    localBoard: ctx.localBoard,
+    unknownPrincipal: ctx.unknownPrincipal,
+  });
+  if (shouldAudit(permission, decision)) {
+    recordAudit(req, permission, decision, target);
+  }
+  return {
+    allowed: decision.allowed,
+    status: decision.allowed ? 200 : new AuthzError(decision.reason).status,
+    reason: decision.reason,
+    decision,
+    ctx,
+  };
+}
+
+/** Non-throwing boolean check, for secondary decisions like redaction. */
+export async function callerCan(
+  req: Request,
+  permission: Permission,
+  target?: AuthzTarget
+): Promise<boolean> {
+  const check = await checkPermission(req, permission, target);
+  return check.allowed;
+}
+
 /**
  * Authorizes the request for a permission (optionally against a target).
  * Returns the principal and decision on success; throws AuthzError.
@@ -137,13 +301,9 @@ export async function requirePermission(
   permission: Permission,
   target?: AuthzTarget
 ): Promise<{ principal: Principal | null; decision: Decision }> {
-  const ctx = await resolveAuthzContext(req);
-  const decision = decide(ctx.loaded, ctx.principal, permission, target, {
-    localBoard: ctx.localBoard,
-    unknownPrincipal: ctx.unknownPrincipal,
-  });
-  if (!decision.allowed) throw new AuthzError(decision.reason);
-  return { principal: ctx.principal, decision };
+  const check = await checkPermission(req, permission, target);
+  if (!check.allowed) throw new AuthzError(check.reason);
+  return { principal: check.ctx.principal, decision: check.decision };
 }
 
 export function authzErrorResponse(err: unknown): NextResponse | null {
@@ -165,14 +325,9 @@ export async function authorizeRequest(
   permission: Permission,
   target?: AuthzTarget
 ): Promise<NextResponse | null> {
-  try {
-    await requirePermission(req, permission, target);
-    return null;
-  } catch (err) {
-    const response = authzErrorResponse(err);
-    if (response) return response;
-    throw err;
-  }
+  const check = await checkPermission(req, permission, target);
+  if (check.allowed) return null;
+  return authzErrorResponse(new AuthzError(check.reason));
 }
 
 type RouteHandler<Ctx = unknown> = (req: Request, ctx: Ctx) => Promise<Response>;

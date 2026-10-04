@@ -10,8 +10,13 @@ import {
   checkEtcHosts,
   K8sClient,
 } from '@vow/orchestrator';
+import { authorizeRequest } from '@/lib/authz';
 
 export async function GET(req: Request) {
+  // DNS records are generated from config; the only DNS key is dns:update.
+  const denied = await authorizeRequest(req, 'dns:update');
+  if (denied) return denied;
+
   try {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);

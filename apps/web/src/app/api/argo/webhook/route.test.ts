@@ -1,4 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+const hoisted = vi.hoisted(() => ({ root: '' }));
+
+vi.mock('@/lib/project', () => ({ getProjectRoot: () => hoisted.root }));
 
 // Keep the real authorizeWebhookRequest from the orchestrator (that
 // integration is exactly what this suite protects) but stub the actual
@@ -35,9 +42,12 @@ describe('POST /api/argo/webhook service token', () => {
   beforeEach(() => {
     mockedSync.mockClear();
     delete process.env.VOW_WEBHOOK_TOKEN;
+    // Audit entries from webhook auth decisions land in a throwaway root.
+    hoisted.root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-webhook-route-'));
   });
 
   afterEach(() => {
+    fs.rmSync(hoisted.root, { recursive: true, force: true });
     if (originalEnv === undefined) delete process.env.VOW_WEBHOOK_TOKEN;
     else process.env.VOW_WEBHOOK_TOKEN = originalEnv;
   });
