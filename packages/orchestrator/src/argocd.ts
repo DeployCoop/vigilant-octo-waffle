@@ -35,7 +35,9 @@ export class ArgoManager {
     }
 
     // Substitute variables using current configuration
-    const templatedYaml = substituteVariables(yamlContent, config.raw);
+    const templatedYaml = substituteVariables(yamlContent, config.raw, {
+      preserveUnknown: true,
+    });
 
     return {
       appName,

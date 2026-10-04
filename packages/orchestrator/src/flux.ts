@@ -51,8 +51,11 @@ export class FluxManager {
       finalYaml = deepMergeYaml(baseManifest, overrideManifest);
     }
 
-    // Substitute environment variables (${THIS_...})
-    const templatedYaml = substituteVariables(finalYaml, config.raw);
+    // Substitute environment variables (${THIS_...}); unknown
+    // references are preserved, matching fluxRunner's envsubst usage.
+    const templatedYaml = substituteVariables(finalYaml, config.raw, {
+      preserveUnknown: true,
+    });
 
     return {
       baseManifest,

@@ -63,10 +63,22 @@ jobs:
         with:
           version: v3.16.4
 
+      # The bash<->TS parity tests (WS3) shell out to the bash runners,
+      # which need yq (manifest merging) and envsubst (templating).
+      # VOW_PARITY_REQUIRED makes a missing tool a failure rather
+      # than a skip, so parity cannot silently void in CI.
+      - name: Install parity tools (yq, envsubst)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gettext-base
+          sudo curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.44.5/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Orchestrator tests
+        env:
+          VOW_PARITY_REQUIRED: '1'
         run: |
           pnpm --filter @vow/orchestrator build
           pnpm --filter @vow/orchestrator test
