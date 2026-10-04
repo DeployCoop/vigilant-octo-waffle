@@ -1,5 +1,8 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   validateStorageHostPrereqs,
   detectHostVolumeGroups,
@@ -11,6 +14,33 @@ import { findProjectRoot } from '../config.js';
 
 describe('Storage Fabric Engine', () => {
   const projectRoot = findProjectRoot();
+
+  // Hermetic kubectl stub: reports a healthy OpenEBS install (storage class,
+  // ready provisioner deployment, running pod) so the status/deploy logic can
+  // be exercised without a live cluster. Scoped to this test process only.
+  let stubDir = '';
+  let originalPath = '';
+  before(() => {
+    stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-kubectl-stub-'));
+    const stub = [
+      '#!/bin/sh',
+      'case "$*" in',
+      '  *"get sc"*) echo \'{"items":[{"metadata":{"name":"openebs-hostpath"},"provisioner":"openebs.io/local"}]}\' ;;',
+      '  *"get deployment"*) echo \'{"items":[{"metadata":{"name":"openebs-localpv-provisioner"},"status":{"readyReplicas":1,"replicas":1}}]}\' ;;',
+      '  *"get pods"*) echo "openebs-localpv-provisioner-abc 1/1 Running 0 1h" ;;',
+      "  *) echo '{}' ;;",
+      'esac',
+      'exit 0',
+      '',
+    ].join('\n');
+    fs.writeFileSync(path.join(stubDir, 'kubectl'), stub, { mode: 0o755 });
+    originalPath = process.env.PATH || '';
+    process.env.PATH = `${stubDir}${path.delimiter}${originalPath}`;
+  });
+  after(() => {
+    process.env.PATH = originalPath;
+    if (stubDir) fs.rmSync(stubDir, { recursive: true, force: true });
+  });
 
   it('validates host prerequisites without crashing', async () => {
     const prereqs = await validateStorageHostPrereqs();

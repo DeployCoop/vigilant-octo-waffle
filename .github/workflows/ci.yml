@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests & typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm version comes from the packageManager field in package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # The orchestrator smoke tests exercise the real `helm lint` /
+      # `helm template` against the example chart, so the binary must exist.
+      # kubectl is deliberately NOT installed: the storage tests stub it
+      # (see packages/orchestrator/src/__tests__/storage.test.ts), and no
+      # test needs a live cluster.
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Orchestrator tests
+        run: |
+          pnpm --filter @vow/orchestrator build
+          pnpm --filter @vow/orchestrator test
+
+      - name: Web tests
+        run: pnpm --filter @vow/web test
+
+      - name: Typecheck (web + ink; orchestrator typechecks via its build)
+        run: |
+          pnpm --filter @vow/web typecheck
+          pnpm --filter @vow/ink typecheck
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Root build: orchestrator -> ink -> web (web's prebuild also builds
+      # the orchestrator it bundles).
+      - name: Build all packages
+        run: pnpm build
+
+# Deliberately not included yet: a lint job. `pnpm lint` currently resolves
+# to `next lint` in apps/web but the repo has no ESLint/Biome config, so it
+# would not check anything meaningful. Add lint here once a config lands.
