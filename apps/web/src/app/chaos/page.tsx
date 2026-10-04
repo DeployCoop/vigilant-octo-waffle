@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useCan } from '@/lib/ability';
+import { apiErrorMessage } from '@/lib/envelope';
 import {
   Flame,
   Shield,
@@ -108,7 +109,7 @@ export default function ChaosPlaygroundPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error);
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
 
       setActionMessage(data.experiment?.details || 'Chaos experiment dispatched successfully!');
       loadData();

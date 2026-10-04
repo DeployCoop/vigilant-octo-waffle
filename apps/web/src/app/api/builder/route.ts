@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listLocalImages, buildLocalContainerImage } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,11 +12,8 @@ export async function GET(req: Request) {
   try {
     const images = await listLocalImages();
     return NextResponse.json({ images });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to list local container images', images: [] },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/builder', fallbackMessage: 'Failed to list local container images' });
   }
 }
 
@@ -29,10 +27,7 @@ export async function POST(req: Request) {
 
     if (action === 'build') {
       if (!imageName || !dockerfileContent) {
-        return NextResponse.json(
-          { error: 'imageName and dockerfileContent are required' },
-          { status: 400 }
-        );
+        return apiError(400, 'imageName and dockerfileContent are required');
       }
 
       const result = await buildLocalContainerImage({
@@ -45,14 +40,8 @@ export async function POST(req: Request) {
       return NextResponse.json(result);
     }
 
-    return NextResponse.json(
-      { error: `Unknown builder action: ${action}` },
-      { status: 400 }
-    );
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Image build execution failed' },
-      { status: 500 }
-    );
+    return apiError(400, `Unknown builder action: ${action}`);
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/builder', fallbackMessage: 'Image build execution failed' });
   }
 }

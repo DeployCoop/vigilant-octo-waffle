@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { apiErrorMessage } from '@/lib/envelope';
 import {
   Terminal as TerminalIcon,
   Play,
@@ -139,7 +140,7 @@ export default function TerminalPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setErrorMsg(data.error || 'Failed to dispatch command');
+        setErrorMsg(apiErrorMessage(data, 'Failed to dispatch command'));
         return;
       }
 

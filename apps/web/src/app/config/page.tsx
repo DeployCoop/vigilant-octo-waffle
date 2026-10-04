@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { apiErrorMessage } from '@/lib/envelope';
 import {
   Settings,
   Save,
@@ -119,7 +120,7 @@ export default function ConfigPage() {
         setMessage(`Imported profile '${data.name}' with overrides and enablers successfully!`);
         fetchConfig();
       } else {
-        setMessage(`Import error: ${data.error}`);
+        setMessage(`Import error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setMessage(`Failed parsing profile JSON: ${err.message}`);

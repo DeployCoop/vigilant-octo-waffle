@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import * as os from 'node:os';
 import { loadProjectConfig, APP_CATALOG } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,7 +62,7 @@ export async function GET(req: Request) {
         percentOfHostRam: Math.round((estimatedClusterMemMb / totalMemMb) * 100),
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return routeError(error, { route: 'GET /api/system' });
   }
 }

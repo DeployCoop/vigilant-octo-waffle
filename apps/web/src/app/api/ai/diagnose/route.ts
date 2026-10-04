@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { diagnoseIncident } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,10 +14,7 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     if (!podName || !namespace) {
-      return NextResponse.json(
-        { error: 'podName and namespace are required' },
-        { status: 400 }
-      );
+      return apiError(400, 'podName and namespace are required');
     }
 
     const diagnosis = await diagnoseIncident(namespace, podName, containerName);
@@ -28,10 +26,7 @@ export async function POST(req: Request) {
       recommendations: [diagnosis.suggestedFix],
     });
 
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Diagnostic analysis failed' },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/ai/diagnose', fallbackMessage: 'Diagnostic analysis failed' });
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { apiErrorMessage } from '@/lib/envelope';
 import Link from 'next/link';
 import {
   Bot,
@@ -193,7 +194,7 @@ export default function AntigravityPage() {
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        setToolNotice({ toolId, message: data.error || 'Execution failed', error: true });
+        setToolNotice({ toolId, message: apiErrorMessage(data, 'Execution failed'), error: true });
       } else {
         setToolNotice({
           toolId,
@@ -518,7 +519,7 @@ export default function AntigravityPage() {
       if (!res.ok || data.error) {
         setCommandOutput({
           command: trimmed,
-          output: `Command rejected or failed: ${data.error}`,
+          output: `Command rejected or failed: ${apiErrorMessage(data)}`,
           status: 'failed',
         });
       } else {

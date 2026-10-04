@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
 import { soundFx } from '@/lib/audio';
+import { apiErrorMessage } from '@/lib/envelope';
 import { ClusterTopologyMap } from '@/components/ClusterTopologyMap';
 import { RadialGauge } from '@/components/ui/RadialGauge';
 import { LiveSparkline } from '@/components/ui/LiveSparkline';
@@ -134,7 +135,7 @@ export default function DashboardPage() {
         }
       } else {
         soundFx.playError();
-        setMessage(`Failed: ${data.error || 'Unknown error'}`);
+        setMessage(`Failed: ${apiErrorMessage(data, 'Unknown error')}`);
       }
     } catch (err: any) {
       soundFx.playError();
@@ -163,7 +164,7 @@ export default function DashboardPage() {
         }
       } else {
         soundFx.playError();
-        setMessage(`Failed: ${data.error || 'Failed to start cluster'}`);
+        setMessage(`Failed: ${apiErrorMessage(data, 'Failed to start cluster')}`);
       }
     } catch (err: any) {
       soundFx.playError();
@@ -189,7 +190,7 @@ export default function DashboardPage() {
         }
       } else {
         soundFx.playError();
-        setMessage(`Failed: ${data.error || 'Failed to delete cluster'}`);
+        setMessage(`Failed: ${apiErrorMessage(data, 'Failed to delete cluster')}`);
       }
     } catch (err: any) {
       soundFx.playError();
