@@ -6,9 +6,27 @@
  *  - ${VAR:-default}
  *  - ${VAR:=default}
  */
+export interface SubstituteOptions {
+  /**
+   * When true, the substitution mirrors `envsubst` invoked with a
+   * variable allowlist — the way the bash runners call it (allowlist
+   * derived from src/default.env): only plain `$VAR` / `${VAR}`
+   * references to variables present in `env` are substituted;
+   * references to absent variables and parameter-expansion forms
+   * (`${VAR:-default}`, `${VAR:=default}` — envsubst never expands
+   * those) pass through literally. Manifest preparation needs this:
+   * manifests carry literal `$` content (PHP `$settings`, shell
+   * snippets, generated passwords containing `$XX`) that blanking
+   * would corrupt. Default false keeps the historical behavior
+   * (expand defaults, blank unknowns) used by config resolution.
+   */
+  preserveUnknown?: boolean;
+}
+
 export function substituteVariables(
   content: string,
-  env: Record<string, string | undefined>
+  env: Record<string, string | undefined>,
+  options?: SubstituteOptions
 ): string {
   // Regex matches:
   // 1. ${VAR:=default} or ${VAR:-default}
@@ -20,6 +38,20 @@ export function substituteVariables(
     pattern,
     (match, bracedVar, op, defaultValue, unbracedVar) => {
       const varName = bracedVar || unbracedVar;
+
+      // envsubst-with-allowlist semantics: parameter-expansion forms
+      // (${VAR:-default}) are not simple references and envsubst never
+      // expands them; a variable the caller did not supply is not a
+      // substitution target either. Both pass through literally.
+      if (options?.preserveUnknown) {
+        if (op === '-' || op === '=') {
+          return match;
+        }
+        if (!Object.prototype.hasOwnProperty.call(env, varName)) {
+          return match;
+        }
+      }
+
       const envVal = env[varName];
 
       if (envVal !== undefined && envVal !== '') {
