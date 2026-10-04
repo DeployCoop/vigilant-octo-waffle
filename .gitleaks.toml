@@ -1,0 +1,53 @@
+# Gitleaks configuration — improvements plan WS2 (§5.3).
+#
+# The stock ruleset stays fully enabled. The allowlists below mute specific
+# path+rule pairs whose findings were audited by hand on 2026-10-03 (full
+# history scan: 34 findings, all classified). They are deliberately narrow:
+# a different rule firing in the same file, or the same rule in a different
+# file, still fails the scan.
+#
+# Known item, not hidden: argo/drupal/argocd.yaml ships a hardcoded demo
+# database password for its example deployment (postgres + app user). It is
+# allowlisted below as example-app content, and tracked as a follow-up to
+# template it via ${THIS_*} like argo/goharbor already does.
+
+title = "vigilant-octo-waffle gitleaks"
+
+[extend]
+useDefault = true
+
+# Env templates: THIS_* defaults (booleans and template strings). Real
+# secrets are generated at install time by mksecret and never committed;
+# includes the historical .env.example / example.env paths (now
+# src/example.env).
+[[allowlists]]
+description = "Env template defaults are not secrets"
+condition = "AND"
+paths = ['^(src/default\.env|src/example\.env|\.env\.example|example\.env)$']
+rules = ["generic-api-key"]
+
+# Orchestrator source + tests: a hostname list and a list of script
+# filenames that trip the generic rule's entropy/name heuristics.
+[[allowlists]]
+description = "Hostname and filename lists in orchestrator code/tests"
+condition = "AND"
+paths = ['^packages/orchestrator/src/(hosts\.ts|__tests__/smoke\.test\.ts)$']
+rules = ["generic-api-key"]
+
+# Vendored upstream chart values and example app manifests: commented
+# documentation examples (incl. an RSA key block whose body is literally
+# "..."), secret key *names* (not values), upstream stock values docs, and
+# the drupal demo credentials noted in the header.
+[[allowlists]]
+description = "Vendored upstream chart values and example app manifests"
+condition = "AND"
+paths = ['^argo/(argo-cd/values\.yaml|airflow/argocd\.yaml|drupal/argocd\.yaml|drupal/values\.yaml|goharbor/argocd\.yaml|ams/argocd\.yaml)$']
+rules = ["generic-api-key", "private-key", "kubernetes-secret-yaml"]
+
+# Historical generated Kubeflow install bundle (file deleted; entry kept so
+# full-history scans remain meaningful if the bundle is regenerated).
+[[allowlists]]
+description = "Generated upstream Kubeflow bundle (historical)"
+condition = "AND"
+paths = ['^init/kubeflow/kubeflow\.yaml$']
+rules = ["generic-api-key", "kubernetes-secret-yaml"]
