@@ -76,7 +76,7 @@ export function renderInitializerManifests(
       finalYaml = fs.readFileSync(baseFilePath, 'utf-8');
     }
 
-    const substituted = substituteVariables(finalYaml, env);
+    const substituted = substituteVariables(finalYaml, env, { preserveUnknown: true });
     results.push({
       fileName: file,
       content: substituted,
