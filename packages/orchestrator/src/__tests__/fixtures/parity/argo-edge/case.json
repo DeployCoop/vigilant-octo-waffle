@@ -1,4 +1,5 @@
 {
   "app": "edge",
-  "description": "synthetic edge cases: unbraced references, foreign (non-allowlist) variables, and parameter-expansion forms that envsubst never expands"
+  "description": "synthetic edge cases: unbraced references, foreign (non-allowlist) variables, and parameter-expansion forms that envsubst never expands",
+  "pair": "argo"
 }

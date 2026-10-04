@@ -1,19 +1,26 @@
 /**
  * Bash <-> TypeScript parity contract tests (improvements plan WS3).
  *
- * The bash runners (src/argoRunner.bash et al.) and the TypeScript
- * engine are two implementations of the same templating behavior.
- * These tests run BOTH engines over identical fixture projects and
- * require their outputs to agree after canonicalization (parse the
- * YAML, sort keys recursively), and to match the fixture's golden
+ * The bash runners (src/argoRunner.bash, src/fluxRunner.bash) and the
+ * TypeScript engine are two implementations of the same templating
+ * and deployment behavior. These tests run BOTH engines over
+ * identical fixture projects and require agreement:
+ *
+ *   pair 1 (argo):  ArgoManager.prepareAppManifest vs argoRunner
+ *   pair 2 (deploy): ArgoManager.deployApp's argocd argv vs the
+ *                    runner's argocd argv (stub captures both)
+ *   pair 3 (flux):  FluxManager.prepareAppManifest vs fluxRunner
+ *                   (native manifests and argo->flux synthesis)
+ *
+ * Manifest outputs are compared after canonicalization (parse the
+ * YAML, sort keys recursively) and against the fixture's golden
  * `expected.yaml`, so behavior changes on either side are deliberate.
  *
- * Bash side: the real argoRunner is sourced and invoked with a stub
- * `argocd` on PATH that captures the manifest it would have applied.
- * TS side: ArgoManager.prepareAppManifest on the same project tree.
- * Both read the repository's real src/default.env (the fixture root
- * symlinks src/), so the envsubst allowlist and the TS config map see
- * identical inputs.
+ * The bash side runs the real runner scripts with stub `argocd` /
+ * `kubectl` binaries on PATH that capture what would have been
+ * applied. Both engines read the repository's real src/default.env
+ * (the fixture root symlinks src/), so the envsubst allowlist and
+ * the TS config map see identical inputs.
  *
  * Requires `yq` and `envsubst` on PATH (CI installs both and sets
  * VOW_PARITY_REQUIRED=1; locally the bash cases skip when the tools
@@ -27,7 +34,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
-import { ArgoManager } from '../index.js';
+import { ArgoManager, FluxManager } from '../index.js';
 import { substituteVariables } from '../template.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -69,22 +76,30 @@ function canonicalize(yamlText: string): string {
     .join('---\n');
 }
 
+type PairKind = 'argo' | 'flux';
 interface ParityCase {
   name: string;
   app: string;
   description: string;
+  pair: PairKind;
 }
 
-function loadCases(): ParityCase[] {
+function loadCases(pair: PairKind): ParityCase[] {
   return fs
     .readdirSync(fixturesRoot, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && e.name.startsWith('argo-'))
+    .filter((e) => e.isDirectory())
     .map((e) => {
       const meta = JSON.parse(
         fs.readFileSync(path.join(fixturesRoot, e.name, 'case.json'), 'utf-8')
-      ) as { app: string; description: string };
-      return { name: e.name, app: meta.app, description: meta.description };
+      ) as { app: string; description: string; pair?: PairKind };
+      return {
+        name: e.name,
+        app: meta.app,
+        description: meta.description,
+        pair: meta.pair ?? 'argo',
+      };
     })
+    .filter((c) => c.pair === pair)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -99,6 +114,7 @@ function materializeFixture(name: string): string {
 }
 
 const ARGOCD_STUB = `#!/bin/sh
+printf '%s\\n' "$@" > "$VOW_PARITY_ARGV"
 while [ $# -gt 0 ]; do
   if [ "$1" = "-f" ]; then shift; cp "$1" "$VOW_PARITY_CAPTURE"; fi
   shift
@@ -106,35 +122,102 @@ done
 exit 0
 `;
 
-/** Run the bash argoRunner and return the manifest argocd would get. */
-function runBashEngine(root: string, app: string): string {
+const KUBECTL_STUB = `#!/bin/sh
+if [ "$1" = "apply" ]; then
+  while [ $# -gt 0 ]; do
+    if [ "$1" = "-f" ]; then shift; cp "$1" "$VOW_PARITY_CAPTURE"; fi
+    shift
+  done
+fi
+exit 0
+`;
+
+interface BashRunResult {
+  manifest: string;
+  argv: string[] | null;
+  binDir: string;
+  capturePath: string;
+  argvPath: string;
+}
+
+/** Write the stub binaries and return their dir + capture paths. */
+function makeStubs(): Omit<BashRunResult, 'manifest' | 'argv'> {
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-parity-bin-'));
-  const stub = path.join(binDir, 'argocd');
-  fs.writeFileSync(stub, ARGOCD_STUB, { mode: 0o755 });
-  const capture = path.join(binDir, 'captured.yaml');
+  fs.writeFileSync(path.join(binDir, 'argocd'), ARGOCD_STUB, { mode: 0o755 });
+  fs.writeFileSync(path.join(binDir, 'kubectl'), KUBECTL_STUB, {
+    mode: 0o755,
+  });
+  return {
+    binDir,
+    capturePath: path.join(binDir, 'captured.yaml'),
+    argvPath: path.join(binDir, 'argv.txt'),
+  };
+}
+
+/** Run a bash runner (argoRunner/fluxRunner) with stubbed CLIs. */
+function runBashRunner(
+  root: string,
+  runnerFile: string,
+  runnerFn: string,
+  app: string,
+  stubs: Omit<BashRunResult, 'manifest' | 'argv'>
+): BashRunResult {
   const script = [
     'set -a',
     'source src/default.env',
     'if [ -f ./.env ]; then source ./.env; fi',
     'set +a',
-    'source src/argoRunner.bash',
-    `argoRunner ${app}`,
+    `source src/${runnerFile}`,
+    `${runnerFn} ${app}`,
   ].join('; ');
   execFileSync('bash', ['-c', script], {
     cwd: root,
     env: {
-      PATH: `${binDir}:${process.env.PATH ?? ''}`,
+      PATH: `${stubs.binDir}:${process.env.PATH ?? ''}`,
       HOME: root,
-      VOW_PARITY_CAPTURE: capture,
+      VOW_PARITY_CAPTURE: stubs.capturePath,
+      VOW_PARITY_ARGV: stubs.argvPath,
     },
     stdio: 'pipe',
     timeout: 120_000,
   });
   assert.ok(
-    fs.existsSync(capture),
-    'bash runner never handed a manifest to the argocd stub'
+    fs.existsSync(stubs.capturePath),
+    `${runnerFn} never handed a manifest to the CLI stub`
   );
-  return fs.readFileSync(capture, 'utf-8');
+  return {
+    ...stubs,
+    manifest: fs.readFileSync(stubs.capturePath, 'utf-8'),
+    argv: fs.existsSync(stubs.argvPath)
+      ? fs.readFileSync(stubs.argvPath, 'utf-8').split('\n').filter(Boolean)
+      : null,
+  };
+}
+
+function skipOrFail(t: { skip: (msg: string) => void }): boolean {
+  if (bashToolsReady) return false;
+  if (parityRequired) {
+    assert.fail('VOW_PARITY_REQUIRED=1 but yq/envsubst are not on PATH');
+  }
+  t.skip('yq/envsubst not on PATH (CI installs them)');
+  return true;
+}
+
+function assertGolden(fixtureName: string, canonicalActual: string): void {
+  const goldenPath = path.join(fixturesRoot, fixtureName, 'expected.yaml');
+  if (updateGoldens) {
+    fs.writeFileSync(goldenPath, canonicalActual);
+    return;
+  }
+  assert.ok(
+    fs.existsSync(goldenPath),
+    'missing golden expected.yaml (run with VOW_PARITY_UPDATE=1)'
+  );
+  assert.equal(
+    canonicalActual,
+    canonicalize(fs.readFileSync(goldenPath, 'utf-8')),
+    'rendered manifest drifted from the golden file'
+  );
 }
 
 describe('parity: substituteVariables preserveUnknown (envsubst allowlist semantics)', () => {
@@ -176,49 +259,143 @@ describe('parity: substituteVariables preserveUnknown (envsubst allowlist semant
   });
 });
 
-describe('parity: ArgoCD manifest preparation (bash argoRunner vs ArgoManager)', () => {
-  for (const parityCase of loadCases()) {
+describe('parity pair 1: ArgoCD manifest preparation (argoRunner vs ArgoManager)', () => {
+  for (const parityCase of loadCases('argo')) {
     it(
       `${parityCase.name}: ${parityCase.description}`,
       { timeout: 180_000 },
       (t) => {
-        if (!bashToolsReady) {
-          if (parityRequired) {
-            assert.fail(
-              'VOW_PARITY_REQUIRED=1 but yq/envsubst are not on PATH'
-            );
-          }
-          t.skip('yq/envsubst not on PATH (CI installs them)');
-          return;
-        }
-        const fixtureDir = path.join(fixturesRoot, parityCase.name);
+        if (skipOrFail(t)) return;
         const root = materializeFixture(parityCase.name);
         try {
           const tsYaml = new ArgoManager(root).prepareAppManifest(
             parityCase.app
           ).templatedYaml;
-          const bashYaml = runBashEngine(root, parityCase.app);
-
+          const bash = runBashRunner(
+            root,
+            'argoRunner.bash',
+            'argoRunner',
+            parityCase.app,
+            makeStubs()
+          );
           assert.equal(
             canonicalize(tsYaml),
-            canonicalize(bashYaml),
+            canonicalize(bash.manifest),
             'TypeScript and bash engines disagree on the rendered manifest'
           );
+          assertGolden(parityCase.name, canonicalize(tsYaml));
+        } finally {
+          fs.rmSync(root, { recursive: true, force: true });
+        }
+      }
+    );
+  }
+});
 
-          const goldenPath = path.join(fixtureDir, 'expected.yaml');
-          if (updateGoldens) {
-            fs.writeFileSync(goldenPath, canonicalize(tsYaml));
-          } else {
-            assert.ok(
-              fs.existsSync(goldenPath),
-              'missing golden expected.yaml (run with VOW_PARITY_UPDATE=1)'
-            );
-            assert.equal(
-              canonicalize(tsYaml),
-              canonicalize(fs.readFileSync(goldenPath, 'utf-8')),
-              'rendered manifest drifted from the golden file'
-            );
-          }
+describe('parity pair 2: ArgoCD deploy invocation (argocd argv)', () => {
+  it(
+    'deployApp passes the same argocd arguments as argoRunner',
+    { timeout: 180_000 },
+    async (t) => {
+      if (skipOrFail(t)) return;
+      const fixture = loadCases('argo').find((c) => c.name === 'argo-drupal');
+      assert.ok(fixture, 'argo-drupal fixture is required for pair 2');
+      const root = materializeFixture(fixture.name);
+      const stubs = makeStubs();
+      const savedEnv = {
+        PATH: process.env.PATH,
+        VOW_PARITY_CAPTURE: process.env.VOW_PARITY_CAPTURE,
+        VOW_PARITY_ARGV: process.env.VOW_PARITY_ARGV,
+      };
+      try {
+        const bash = runBashRunner(
+          root,
+          'argoRunner.bash',
+          'argoRunner',
+          fixture.app,
+          stubs
+        );
+
+        // TS side: the same stubs, reached through the test process env
+        // (processManager merges process.env into the child env).
+        process.env.PATH = `${stubs.binDir}:${savedEnv.PATH ?? ''}`;
+        process.env.VOW_PARITY_CAPTURE = path.join(
+          stubs.binDir,
+          'captured-ts.yaml'
+        );
+        process.env.VOW_PARITY_ARGV = path.join(stubs.binDir, 'argv-ts.txt');
+        const task = new ArgoManager(root).deployApp(fixture.app);
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('deployApp task did not finish')),
+            60_000
+          );
+          task.emitter.once('close', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        assert.equal(task.status, 'completed');
+
+        const tsArgv = fs
+          .readFileSync(process.env.VOW_PARITY_ARGV, 'utf-8')
+          .split('\n')
+          .filter(Boolean);
+        // The -f path legitimately differs (bash tmpdir vs .vow-cache).
+        const normalize = (argv: string[]): string[] => {
+          const out = [...argv];
+          const i = out.indexOf('-f');
+          if (i >= 0 && i + 1 < out.length) out[i + 1] = '<FILE>';
+          return out;
+        };
+        assert.ok(bash.argv, 'bash stub captured no argv');
+        assert.deepEqual(normalize(tsArgv), normalize(bash.argv));
+
+        // And the file each engine handed to argocd must agree too.
+        const tsManifest = fs.readFileSync(
+          process.env.VOW_PARITY_CAPTURE,
+          'utf-8'
+        );
+        assert.equal(canonicalize(tsManifest), canonicalize(bash.manifest));
+      } finally {
+        process.env.PATH = savedEnv.PATH;
+        if (savedEnv.VOW_PARITY_CAPTURE === undefined)
+          delete process.env.VOW_PARITY_CAPTURE;
+        else process.env.VOW_PARITY_CAPTURE = savedEnv.VOW_PARITY_CAPTURE;
+        if (savedEnv.VOW_PARITY_ARGV === undefined)
+          delete process.env.VOW_PARITY_ARGV;
+        else process.env.VOW_PARITY_ARGV = savedEnv.VOW_PARITY_ARGV;
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
+});
+
+describe('parity pair 3: Flux manifest preparation (fluxRunner vs FluxManager)', () => {
+  for (const parityCase of loadCases('flux')) {
+    it(
+      `${parityCase.name}: ${parityCase.description}`,
+      { timeout: 180_000 },
+      (t) => {
+        if (skipOrFail(t)) return;
+        const root = materializeFixture(parityCase.name);
+        try {
+          const tsYaml = new FluxManager(root).prepareAppManifest(
+            parityCase.app
+          ).templatedYaml;
+          const bash = runBashRunner(
+            root,
+            'fluxRunner.bash',
+            'fluxRunner',
+            parityCase.app,
+            makeStubs()
+          );
+          assert.equal(
+            canonicalize(tsYaml),
+            canonicalize(bash.manifest),
+            'TypeScript and bash engines disagree on the rendered manifest'
+          );
+          assertGolden(parityCase.name, canonicalize(tsYaml));
         } finally {
           fs.rmSync(root, { recursive: true, force: true });
         }

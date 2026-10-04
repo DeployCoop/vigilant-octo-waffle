@@ -1,0 +1,640 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: drupal-repo
+  namespace: flux-system
+spec:
+  interval: 5m
+  ref:
+    branch: main
+  url: https://github.com/DeployCoop/urban-disco.git
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: drupal
+  namespace: parity-test
+spec:
+  chart:
+    spec:
+      chart: charts/drupal
+      sourceRef:
+        kind: GitRepository
+        name: drupal-repo
+        namespace: flux-system
+  interval: 5m
+  targetNamespace: parity-test
+  values:
+    azure:
+      azureFile:
+        accessMode: ReadWriteMany
+        annotations: {}
+        backup:
+          spec: {}
+        enabled: false
+        folders:
+          - backup
+          - private
+          - public
+          - tmp
+        initMediaIconsFolder: true
+        private:
+          spec: {}
+        protocol: smb
+        public:
+          spec: {}
+        size: 256Gi
+        skuName: Standard_LRS
+        storageClass: example-hostpath
+        tmp:
+          spec: {}
+      sharedDisk:
+        accessMode: ReadWriteMany
+        annotations: {}
+        enabled: false
+        folders:
+          - private
+          - public
+        initMediaIconsFolder: true
+        maxShares: 2
+        private:
+          spec:
+            mountOptions:
+              - dir_mode=0777
+              - file_mode=0777
+              - uid=82
+              - gid=82
+              - mfsymlinks
+              - nobrl
+              - cache=none
+        public:
+          spec:
+            mountOptions:
+              - dir_mode=0777
+              - file_mode=0777
+              - uid=82
+              - gid=82
+              - mfsymlinks
+              - nobrl
+              - cache=none
+        size: 16Gi
+        storageClass: example-hostpath
+        volumeType: local
+      storageClass:
+        create: false
+    drupal:
+      additionalCrons: {}
+      args: []
+      autoscaling:
+        enabled: false
+        maxReplicas: 11
+        minReplicas: 1
+        targetCPUUtilizationPercentage: 50
+        targetMemoryUtilizationPercentage: 50
+      backup:
+        cleanup:
+          enabled: false
+        enabled: false
+        filesArgs: ""
+        persistence:
+          accessMode: ReadWriteOnce
+          annotations: {}
+          enabled: false
+          size: 8Gi
+          storageClass: example-hostpath
+        privateArgs: ""
+        schedule: 0 0 * * *
+        sqlDumpArgs: ""
+        volume: {}
+      cacheRebuildBeforeDatabaseMigration: true
+      command: []
+      configSplit:
+        enabled: false
+      configSync:
+        directory: /private/config/sync
+      cron:
+        enabled: true
+        failedJobsHistoryLimit: 1
+        preInstallScripts: ""
+        schedule: 0 * * * *
+        successfulJobsHistoryLimit: 3
+      dbAvailabilityScript: >-
+        until drush sql:query 'SHOW TABLES;'; do echo Waiting for DB; sleep 3;
+        done
+
+        echo DB available
+      disableDefaultFilesMount: false
+      extensions:
+        enabled: true
+      extraSettings: >-
+        $settings['trusted_host_patterns'] = ['^townhall\.webhosting\.coop$',
+        'townhall'];
+
+        $settings['allow_authorize_operations'] = TRUE;
+
+        #$settings['allow_authorize_operations'] = TRUE; #set it to True
+      healthcheck:
+        enabled: true
+        probes:
+          livenessProbe:
+            exec:
+              command:
+                - php-fpm-healthcheck
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            exec:
+              command:
+                - php-fpm-healthcheck
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+      image: drupalwxt/site-wxt
+      imagePullPolicy: IfNotPresent
+      install: true
+      migrate: true
+      nodeSelector: {}
+      password: 0?w64/Hrf`Ii|~)<I+9kpII+H1(4?/Jm5
+      persistence:
+        accessMode: ReadWriteOnce
+        annotations: {}
+        enabled: true
+        size: 8Gi
+        storageClass: example-hostpath
+      php:
+        fpm: |-
+          pm.max_children = 50
+          pm.start_servers = 5
+          pm.min_spare_servers = 5
+          pm.max_spare_servers = 35
+        ini: {}
+      podAnnotations: {}
+      postInstallScripts: ""
+      postUpgradeScripts: ""
+      preInstallScripts: ""
+      preUpgradeScripts: ""
+      profile: wxt
+      reconfigure: true
+      replicas: 1
+      resources: {}
+      restore:
+        convert: false
+        db: true
+        enabled: false
+        files: false
+        name: latest
+        suppressTarErrors: false
+        volume: {}
+      securityContext: {}
+      serviceAccount:
+        annotations: {}
+        automountServiceAccountToken: true
+        create: true
+        name: ""
+      serviceType: ClusterIP
+      services: ""
+      siteEmail: coopadmin@webhosting.coop
+      siteName: Drupal Install Profile (WxT)
+      siteRoot: /
+      smtp:
+        auth:
+          enabled: true
+          method: LOGIN
+          password: POmF$ON=XXcp@5p=Zc
+          user: townhall@bokbot.com
+        host: cheetah.webhosting.coop
+        port: "465"
+        starttls: true
+        tls: true
+      theme: theme-gcweb
+      tolerations: []
+      updateDBBeforeDatabaseMigration: true
+      username: coopadmin
+      version: d10
+      volumeMounts: null
+      volumePermissions:
+        enabled: false
+      volumes: null
+    external:
+      database: wxt
+      driver: mysql
+      enabled: false
+      host: mysql.example.org
+      password: password
+      port: 3306
+      user: wxt
+    extraEnvVars: []
+    ingress:
+      annotations:
+        cert-manager.io/cluster-issuer: mkcert-issuer
+        nginx.ingress.kubernetes.io/rewrite-target: /
+        spec.ingressClassName: nginx
+        traefik.ingress.kubernetes.io/router.middlewares: tekromancy-mw-stripper@kubernetescrd
+      className: nginx
+      enabled: true
+      hosts:
+        - drupal.example.com
+      path: /
+      tls:
+        - hosts:
+            - drupal.example.com
+          secretName: example-drupal-ingress-tls
+    mysql:
+      auth:
+        database: wxt
+        password: ""
+        rootPassword: ""
+        username: wxt
+      enabled: false
+      image:
+        tag: 8.0.29-debian-11-r3
+      primary:
+        configuration: |-
+          [mysqld]
+          default_authentication_plugin=mysql_native_password
+          skip-name-resolve
+          explicit_defaults_for_timestamp
+          basedir=/opt/bitnami/mysql
+          plugin_dir=/opt/bitnami/mysql/lib/plugin
+          port=3306
+          socket=/opt/bitnami/mysql/tmp/mysql.sock
+          datadir=/bitnami/mysql/data
+          tmpdir=/opt/bitnami/mysql/tmp
+          max_allowed_packet=16M
+          bind-address=0.0.0.0
+          pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+          log-error=/opt/bitnami/mysql/logs/mysqld.log
+          character-set-server=UTF8
+          collation-server=utf8_general_ci
+          slow_query_log=0
+          slow_query_log_file=/opt/bitnami/mysql/logs/mysqld.log
+          long_query_time=10.0
+          transaction_isolation="READ-COMMITTED"
+
+          max_allowed_packet = 256M
+          innodb_buffer_pool_size = 4096M
+          innodb_buffer_pool_instances = 4
+          table_definition_cache = 4096
+          table_open_cache = 8192
+          innodb_flush_log_at_trx_commit=2
+
+          [client]
+          port=3306
+          socket=/opt/bitnami/mysql/tmp/mysql.sock
+          default-character-set=UTF8
+          plugin_dir=/opt/bitnami/mysql/lib/plugin
+
+          [manager]
+          port=3306
+          socket=/opt/bitnami/mysql/tmp/mysql.sock
+          pid-file=/opt/bitnami/mysql/tmp/mysqld.pid
+        persistence:
+          enabled: true
+          size: 8Gi
+          storageClass: example-hostpath
+      volumePermissions:
+        enabled: true
+    netpol:
+      enabled: false
+      openshift:
+        enabled: false
+    nginx:
+      autoscaling:
+        enabled: false
+        maxReplicas: 11
+        minReplicas: 1
+        targetCPUUtilizationPercentage: 50
+        targetMemoryUtilizationPercentage: 50
+      client_max_body_size: 20m
+      customLocations: ""
+      gzip: true
+      healthcheck:
+        enabled: true
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /_healthz
+            port: 8080
+          initialDelaySeconds: 1
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /_healthz
+            port: 8080
+          initialDelaySeconds: 1
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+      image: drupalwxt/site-wxt
+      imagePullPolicy: IfNotPresent
+      nodeSelector: {}
+      real_ip_header: X-Forwarded-For
+      replicas: 1
+      resolver: kube-dns.kube-system.svc.cluster.local
+      resources: {}
+      securityContext: {}
+      serviceType: ClusterIP
+      tolerations: []
+      volumeMounts: null
+      volumes: null
+    pgbouncer:
+      enabled: false
+      host: mypgserver.postgres.database.azure.com
+      maxClientConnections: 400
+      password: password
+      poolSize: 50
+      user: username@hostname
+    postgresql:
+      auth:
+        database: townhalldb
+        enablePostgresUser: true
+        password: thahm7xu9Ohvaicu5aeS5beb6Pha1owie
+        postgresPassword: thahm7xu9Ohvaicu5aeS5beb6Pha1owie
+        user: townhalluser
+      enabled: true
+      image:
+        tag: 14.3.0-debian-11-r3
+      primary:
+        configuration: ""
+        extendedConfiguration: |-
+          listen_addresses='*'
+          max_connections=200
+          shared_buffers='512MB'
+          work_mem='2048MB'
+          effective_cache_size='512MB'
+          maintenance_work_mem='32MB'
+          min_wal_size='512MB'
+          max_wal_size='512MB'
+          bytea_output='escape'
+        persistence:
+          enabled: true
+          size: 12Gi
+          storageClass: example-hostpath
+      volumePermissions:
+        enabled: true
+    proxysql:
+      admin:
+        password: password
+        user: username@hostname
+      configuration:
+        maxConnections: 2048
+        serverVersion: 5.7.28
+        stackSize: 1048576
+      enabled: false
+      monitor:
+        password: password
+        user: username@hostname
+    redis:
+      commonConfiguration: |-
+        # Disable AOF https://redis.io/topics/persistence#append-only-file
+        appendonly no
+        # Disable RDB persistence.
+        save ""
+      enabled: true
+      master:
+        disableCommands: []
+        persistence:
+          enabled: false
+        service:
+          type: ClusterIP
+      replica:
+        disableCommands: []
+        enabled: false
+        persistence:
+          enabled: false
+        replicaCount: 0
+        service:
+          type: ClusterIP
+      sentinel:
+        enabled: false
+    solr:
+      enabled: false
+    varnish:
+      affinity: {}
+      enabled: true
+      nodeSelector: {}
+      resources: {}
+      service:
+        port: 8080
+        type: ClusterIP
+      tolerations: []
+      varnishConfigContent: |
+        vcl 4.0;
+
+        import std;
+        import directors;
+
+        backend nginx {
+          .host = "{{ include "backend.fullname" . }}-nginx";
+          .host_header = "{{ include "backend.fullname" . }}-nginx";
+          .port = "8080";
+        }
+
+        sub vcl_init {
+          new backends = directors.round_robin();
+          backends.add_backend(nginx);
+        }
+
+        sub vcl_recv {
+          set req.http.X-Forwarded-Host = req.http.Host;
+          if (!req.http.X-Forwarded-Proto) {
+            set req.http.X-Forwarded-Proto = "http";
+          }
+
+          # Answer healthcheck
+          if (req.url == "/_healthcheck" || req.url == "/healthcheck.txt") {
+            return (synth(700, "HEALTHCHECK"));
+          }
+
+          # Answer splashpage
+          # if (req.url == "/") {
+          #   return (synth(701, "SPLASH"));
+          # }
+
+          set req.backend_hint = backends.backend();
+
+          # Always cache certain file types
+          # Remove cookies that Drupal doesn't care about
+          if (req.url ~ "(?i)\.(asc|dat|tgz|png|gif|jpeg|jpg|ico|swf|css|js)(\?.*)?$") {
+            unset req.http.Cookie;
+          } else if (req.http.Cookie) {
+            set req.http.Cookie = ";" + req.http.Cookie;
+            set req.http.Cookie = regsuball(req.http.Cookie, "; +", ";");
+            set req.http.Cookie = regsuball(req.http.Cookie, ";(SESS[a-z0-9]+|SSESS[a-z0-9]+|NO_CACHE)=", "; \1=");
+            set req.http.Cookie = regsuball(req.http.Cookie, ";[^ ][^;]*", "");
+            set req.http.Cookie = regsuball(req.http.Cookie, "^[; ]+|[; ]+$", "");
+            if (req.http.Cookie == "") {
+                unset req.http.Cookie;
+            } else {
+                return (pass);
+            }
+          }
+          # If POST, PUT or DELETE, then don't cache
+          if (req.method == "POST" || req.method == "PUT" || req.method == "DELETE") {
+            return (pass);
+          }
+          # Happens before we check if we have this in cache already.
+          #
+          # Typically you clean up the request here, removing cookies you don't need,
+          # rewriting the request, etc.
+          return (hash);
+          #return (pass);
+        }
+
+        sub vcl_backend_fetch {
+          # NEW
+          set bereq.http.Host = "{{ include "backend.fullname" . }}-nginx";
+
+          # Don't add 127.0.0.1 to X-Forwarded-For
+          set bereq.http.X-Forwarded-For = regsub(bereq.http.X-Forwarded-For, "(, )?127\.0\.0\.\d$", "");
+        }
+
+        sub vcl_backend_response {
+          if (beresp.http.Location && beresp.http.Location !~ "^https://api.twitter.com/") {
+            set beresp.http.Location = regsub(
+              beresp.http.Location,
+              "^https?://[^/]+/",
+              bereq.http.X-Forwarded-Proto + "://" + bereq.http.X-Forwarded-Host + "/"
+            );
+          }
+          # Only cache select response codes
+          if (beresp.status == 200 || beresp.status == 203 || beresp.status == 204 || beresp.status == 206 || beresp.status == 300 || beresp.status == 301 || beresp.status == 404 || beresp.status == 405 || beresp.status == 410 || beresp.status == 414 || beresp.status == 501) {
+            # Cache for 5 minutes
+            set beresp.ttl = 5m;
+            set beresp.grace = 12h;
+            set beresp.keep = 24h;
+          } else {
+            set beresp.ttl = 0s;
+          }
+        }
+
+        sub vcl_deliver {
+          # Remove identifying information
+          unset resp.http.Server;
+          unset resp.http.X-Powered-By;
+          unset resp.http.X-Varnish;
+          unset resp.http.Via;
+
+          # Comment these for easier Drupal cache tag debugging in development.
+          unset resp.http.Cache-Tags;
+          unset resp.http.X-Drupal-Cache-Contexts;
+
+          # Add Content-Security-Policy
+          # set resp.http.Content-Security-Policy = "default-src 'self' *.example.ca *.example.ca; style-src 'self' 'unsafe-inline' *.example.ca https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' *.example.ca  *.adobedtm.com use.fontawesome.com blob:; connect-src 'self' *.example.ca *.omtrdc.net *.demdex.net *.everesttech.net; img-src 'self' *.example.ca *.omtrdc.net *.demdex.net *.everesttech.net data:; font-src 'self' *.example.ca https://fonts.gstatic.com";
+
+          # Add CORS Headers
+          # if (req.http.Origin ~ "(?i)\.example\.ca$") {
+          #   if (req.url ~ "\.(ttd|woff|woff2)(\?.*)?$") {
+          #     set resp.http.Access-Control-Allow-Origin = "*";
+          #     set resp.http.Access-Control-Allow-Methods = "GET";
+          #   }
+          # }
+
+          # Add X-Frame-Options
+          # if (req.url ~ "^/(en/|fr/)?media/") {
+          #   set resp.http.X-Frame-Options = "SAMEORIGIN";
+          # } else {
+          #   set resp.http.X-Frame-Options = "DENY";
+          # }
+
+          set resp.http.X-Content-Type-Options = "nosniff";
+          set resp.http.X-XSS-Protection = "1; mode=block";
+          set resp.http.Strict-Transport-Security = "max-age=2629800";
+
+          if (req.http.host ~ "site.example.ca") {
+            set resp.http.X-Robots-Tag = "noindex, nofollow";
+          }
+
+          if (req.url ~ "^/(en/|fr/)?(search/|recherche/)site/") {
+            set resp.http.X-Robots-Tag = "noindex, nofollow";
+          }
+
+          # Happens when we have all the pieces we need, and are about to send the
+          # response to the client.
+          #
+          # You can do accounting or modifying the final object here.
+          if (obj.hits > 0) {
+            set resp.http.X-Cache = "HIT";
+          } else {
+            set resp.http.X-Cache = "MISS";
+          }
+          # Handle errors
+          if ( (resp.status >= 500 && resp.status <= 599)
+            || resp.status == 400
+            || resp.status == 401
+            || resp.status == 403
+            || resp.status == 404) {
+            return (synth(resp.status));
+          }
+        }
+
+        sub vcl_synth {
+          # Remove identifying information
+          unset resp.http.Server;
+          unset resp.http.X-Powered-By;
+          unset resp.http.X-Varnish;
+          unset resp.http.Via;
+
+          # Add Content-Security-Policy
+          # set resp.http.Content-Security-Policy = "default-src 'self' *.example.ca; style-src 'self' 'unsafe-inline' *.example.ca; script-src 'self' 'unsafe-inline' 'unsafe-eval' *.example.ca *.adobedtm.com use.fontawesome.com blob:; connect-src 'self' *.example.ca *.omtrdc.net *.demdex.net *.everesttech.net; img-src 'self' *.example.ca data:;";
+          # set resp.http.X-Content-Type-Options = "nosniff";
+          # set resp.http.X-Frame-Options = "DENY";
+          # set resp.http.X-XSS-Protection = "1; mode=block";
+
+          set resp.http.Strict-Transport-Security = "max-age=2629800";
+
+          # if (resp.status >= 500 && resp.status <= 599) {
+          #   set resp.http.Content-Type = "text/html; charset=utf-8";
+          #   synthetic(std.fileread("/data/configuration/varnish/errors/503.html"));
+          #   return (deliver);
+          # } elseif (resp.status == 400) { # 400 - Bad Request
+          #   set resp.http.Content-Type = "text/html; charset=utf-8";
+          #   synthetic(std.fileread("/data/configuration/varnish/errors/400.html"));
+          #   return (deliver);
+          # } elseif (resp.status == 401) { # 401 - Unauthorized
+          #   set resp.http.Content-Type = "text/html; charset=utf-8";
+          #   synthetic(std.fileread("/data/configuration/varnish/errors/401.html"));
+          #   return (deliver);
+          # } elseif (resp.status == 403) { # 403 - Forbidden
+          #   set resp.http.Content-Type = "text/html; charset=utf-8";
+          #   synthetic(std.fileread("/data/configuration/varnish/errors/403.html"));
+          #   return (deliver);
+          # } elseif (resp.status == 404) { # 404 - Not Found
+          #   set resp.http.Content-Type = "text/html; charset=utf-8";
+          #   synthetic(std.fileread("/data/configuration/varnish/errors/404.html"));
+          #   return (deliver);
+          # } else
+          if (resp.status == 700) { # Respond to healthcheck
+            set resp.status = 200;
+            set resp.http.Content-Type = "text/plain";
+            synthetic ( {"OK"} );
+            return (deliver);
+          }
+          # elseif (resp.status == 701) { # Respond to splash
+          #   set resp.status = 200;
+          #   set resp.http.Content-Type = "text/html";
+          #   synthetic(std.fileread("/splash/index.html"));
+          #   return (deliver);
+          # }
+        }
+
+        ##
+        # ERROR HANDLING
+        ##
+        # sub vcl_backend_error {
+        #   set beresp.http.Content-Type = "text/html; charset=utf-8";
+        #   synthetic(std.fileread("/data/configuration/varnish/errors/503.html"));
+        #   return (deliver);
+        # }
+      varnishd:
+        image: varnish
+        imagePullPolicy: IfNotPresent
+        tag: 6.5.1

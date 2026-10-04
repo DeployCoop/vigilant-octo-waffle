@@ -1,0 +1,5 @@
+{
+  "app": "drupal",
+  "description": "argo->flux synthesis, helm branch: GitRepository + HelmRelease generated from the drupal Argo manifest, incl. its chart values (which contain a duplicate key both parsers must tolerate)",
+  "pair": "flux"
+}

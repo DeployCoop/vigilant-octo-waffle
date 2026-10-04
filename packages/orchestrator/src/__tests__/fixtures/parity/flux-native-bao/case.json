@@ -1,0 +1,5 @@
+{
+  "app": "bao",
+  "description": "real native flux manifest (multi-doc GitRepository + HelmRelease), plain substitution, no override",
+  "pair": "flux"
+}
