@@ -1,6 +1,6 @@
 # Authorization (AuthZ) Implementation Plan — CASL for Vigilant Octo Waffle
 
-**Status:** Draft for review
+**Status:** ✅ Implemented — shipped October 2026 via PRs #22 (webhook token), #23 (engine), #24 (guards + OIDC + CLI), #25 (full route coverage + redaction + audit), #26 (admin API + dashboard), and the PR 5 docs update. This document remains the design record; the shipped behavior is documented in `README.md` (Security Model) and `ARCHITECTURE.md` (Authorization Model).
 **Scope:** Web control plane (`apps/web`) + orchestrator (`packages/orchestrator`)
 **Goal:** Replace the single shared `VOW_API_TOKEN` gate with a Paperclip-style authorization system — named principals, roles, scoped permission grants, and a central `decide()` that returns explainable allow/deny reasons — using [CASL](https://casl.js.org/) (`@casl/ability`) as the evaluation engine.
 **Based on:** `main` @ `a2ee4b2`
