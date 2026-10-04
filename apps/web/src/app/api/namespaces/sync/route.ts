@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { applyClusterNamespaces } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export async function POST(req: Request) {
   const denied = await authorizeRequest(req, 'namespaces:manage');
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
       success: true,
       result,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/namespaces/sync' });
   }
 }

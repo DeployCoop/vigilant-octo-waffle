@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { K8sClient } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
     const tailLines = tailLinesParam ? parseInt(tailLinesParam, 10) : 250;
 
     if (!namespace || !name) {
-      return NextResponse.json({ error: 'namespace and pod name required' }, { status: 400 });
+      return apiError(400, 'namespace and pod name required');
     }
 
     const k8sClient = new K8sClient();
@@ -33,6 +34,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ logs });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message, logs: '' }, { status: 500 });
+    return routeError(err, { route: 'GET /api/k8s/logs' });
   }
 }

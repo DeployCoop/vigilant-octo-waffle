@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { discoverClusterNamespaces, generateNamespaceManifests } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export async function GET(req: Request) {
   const denied = await authorizeRequest(req, 'namespaces:manage');
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
       byCategory: result.byCategory,
       manifests,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/namespaces' });
   }
 }

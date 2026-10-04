@@ -32,6 +32,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { soundFx } from '@/lib/audio';
+import { apiErrorMessage } from '@/lib/envelope';
 import { useTerminal } from '@/context/TerminalContext';
 
 interface StorageClassItem {
@@ -239,7 +240,7 @@ export default function StoragePage() {
         setTimeout(() => fetchStorage(true), 4000);
       } else {
         soundFx.playError();
-        setMessage({ text: data.error || 'Failed to dispatch configuration', type: 'error' });
+        setMessage({ text: apiErrorMessage(data, 'Failed to dispatch configuration'), type: 'error' });
       }
     } catch (err: any) {
       soundFx.playError();
@@ -273,7 +274,7 @@ export default function StoragePage() {
         }
       } else {
         soundFx.playError();
-        setMessage({ text: data.error || 'Benchmark failed', type: 'error' });
+        setMessage({ text: apiErrorMessage(data, 'Benchmark failed'), type: 'error' });
       }
     } catch (err: any) {
       soundFx.playError();
@@ -303,7 +304,7 @@ export default function StoragePage() {
         fetchStorage(true);
       } else {
         soundFx.playError();
-        setMessage({ text: data.error, type: 'error' });
+        setMessage({ text: apiErrorMessage(data), type: 'error' });
       }
     } catch (err: any) {
       soundFx.playError();
@@ -332,7 +333,7 @@ export default function StoragePage() {
         fetchStorage(true);
       } else {
         soundFx.playError();
-        setMessage({ text: data.error, type: 'error' });
+        setMessage({ text: apiErrorMessage(data), type: 'error' });
       }
     } catch (err: any) {
       soundFx.playError();
