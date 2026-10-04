@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { getProjectRoot } from '@/lib/project';
 import { ArgoManager, loadProjectConfig } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
     const app = searchParams.get('app');
 
     if (!app) {
-      return NextResponse.json({ error: 'App parameter required' }, { status: 400 });
+      return apiError(400, 'App parameter required');
     }
 
     const denied = await authorizeRequest(req, 'apps:read', { appId: app });
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
     const overridePath = path.join(root, '.argo_overrides', app, 'argocd.yaml');
 
     if (!fs.existsSync(basePath)) {
-      return NextResponse.json({ error: `Manifest not found for ${app}` }, { status: 404 });
+      return apiError(404, `Manifest not found for ${app}`);
     }
 
     const baseYaml = fs.readFileSync(basePath, 'utf-8');
@@ -46,8 +47,8 @@ export async function GET(req: Request) {
       overrideYaml,
       templatedYaml: prepared.templatedYaml,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/argo/diff' });
   }
 }
 
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
     const { app, overrideYaml } = body;
 
     if (!app || typeof overrideYaml !== 'string') {
-      return NextResponse.json({ error: 'app and overrideYaml required' }, { status: 400 });
+      return apiError(400, 'app and overrideYaml required');
     }
 
     // This POST writes (or deletes) an Argo override manifest.
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, app });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/argo/diff' });
   }
 }

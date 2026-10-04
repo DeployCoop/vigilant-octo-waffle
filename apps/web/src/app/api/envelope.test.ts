@@ -25,11 +25,6 @@ const RAW_ERROR_PATTERN = /NextResponse\.json\(\s*\{\s*error\s*:/;
 const PENDING_MIGRATION = new Set([
   'ai/diagnose/route.ts',
   'antigravity/route.ts',
-  'apps/[id]/route.ts',
-  'apps/custom/route.ts',
-  'apps/route.ts',
-  'argo/diff/route.ts',
-  'argo/webhook/route.ts',
   'backups/route.ts',
   'builder/route.ts',
   'chaos/route.ts',
@@ -44,9 +39,7 @@ const PENDING_MIGRATION = new Set([
   'dns/route.ts',
   'export/route.ts',
   'finops/route.ts',
-  'flux/route.ts',
   'health/route.ts',
-  'helm/route.ts',
   'k8s/exec/route.ts',
   'k8s/logs/route.ts',
   'k8s/metrics/route.ts',
@@ -55,7 +48,6 @@ const PENDING_MIGRATION = new Set([
   'network/route.ts',
   'profiles/route.ts',
   'remote/route.ts',
-  'rollouts/route.ts',
   'security/route.ts',
   'storage/route.ts',
   'system/route.ts',
@@ -63,11 +55,6 @@ const PENDING_MIGRATION = new Set([
   'tasks/run/route.ts',
   'topology/route.ts',
   'traces/route.ts',
-  'waffle/abort/route.ts',
-  'waffle/route.ts',
-  'waffle/run/route.ts',
-  'waffle/sources/route.ts',
-  'waffle/sync/route.ts',
 ]);
 
 function collectRouteFiles(dir: string, prefix = ''): string[] {

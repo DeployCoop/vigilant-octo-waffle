@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { postArgoWebhook } from '@/lib/webhook';
+import { apiErrorMessage } from '@/lib/envelope';
 import {
   Layers,
   Search,
@@ -150,7 +151,7 @@ export default function AppsPage() {
         body: JSON.stringify({ action: 'set-runner', cdRunner: runner }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error);
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       setCdRunner(runner);
       setActionMessage(`GitOps Runner switched to: ${runner.toUpperCase()}`);
       setTimeout(() => setActionMessage(null), 4000);
@@ -172,7 +173,7 @@ export default function AppsPage() {
         body: JSON.stringify({ action: 'bootstrap' }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error);
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.taskId) {
         openTerminal(data.taskId, 'Bootstrapping FluxCD Controllers');
       }
@@ -196,7 +197,7 @@ export default function AppsPage() {
         body: JSON.stringify({ action: 'reconcile-all' }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error);
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.taskId) {
         openTerminal(data.taskId, 'Reconciling Flux Resources');
       }
@@ -344,7 +345,7 @@ export default function AppsPage() {
     try {
       const res = await postArgoWebhook(appId ? { action: 'accelerate', appName: appId, hardRefresh: true } : { action: 'webhook' });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error);
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       setActionMessage(data.message || 'Hard refresh initiated! Sub-second sync completed.');
       setTimeout(() => setActionMessage(null), 4000);
       fetchTelemetry();
@@ -387,7 +388,7 @@ export default function AppsPage() {
         setCustomSubdomain('');
         fetchApps();
       } else {
-        setActionMessage(`Error: ${data.error}`);
+        setActionMessage(`Error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setActionMessage(`Failed to scaffold app: ${err.message}`);

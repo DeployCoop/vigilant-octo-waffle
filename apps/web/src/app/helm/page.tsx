@@ -25,6 +25,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface HelmReleaseInfo {
   name: string;
@@ -140,7 +141,7 @@ export default function HelmPage() {
         setActionMessage(`Updated charts directory to: ${data.chartsDir} (${data.chartCount} charts found)`);
         fetchData();
       } else {
-        setActionMessage(`Error: ${data.error}`);
+        setActionMessage(`Error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setActionMessage(`Failed to update charts directory: ${err.message}`);
@@ -163,7 +164,7 @@ export default function HelmPage() {
         setActionMessage('Populated example "sample-app" into charts directory!');
         fetchData();
       } else {
-        setActionMessage(`Error: ${data.error}`);
+        setActionMessage(`Error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setActionMessage(`Scaffold failed: ${err.message}`);
@@ -225,7 +226,7 @@ export default function HelmPage() {
         }
         setInstallModalChart(null);
       } else {
-        setActionMessage(`Deployment error: ${data.error}`);
+        setActionMessage(`Deployment error: ${apiErrorMessage(data)}`);
       }
     } catch (err: any) {
       setActionMessage(`Deploy failed: ${err.message}`);

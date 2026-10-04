@@ -8,6 +8,7 @@ import {
   type WafflePipeline,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     } else if (blueprintId) {
       const bp = getBlueprintById(blueprintId);
       if (!bp) {
-        return NextResponse.json({ error: `Blueprint "${blueprintId}" not found` }, { status: 404 });
+        return apiError(404, `Blueprint "${blueprintId}" not found`);
       }
       targetPipeline = bp;
       targetBaseDir = root;
@@ -46,16 +47,16 @@ export async function POST(req: Request) {
       targetBaseDir = baseDir;
       effectiveSourceId = 'custom';
     } else {
-      return NextResponse.json(
-        { error: 'Specify either "sourceId", "blueprintId", or "customPath"' },
-        { status: 400 }
+      return apiError(
+        400,
+        'Specify either "sourceId", "blueprintId", or "customPath"'
       );
     }
 
     if (runner.getActiveRun() && runner.getActiveRun()?.status === 'running') {
-      return NextResponse.json(
-        { error: 'Another pipeline run is currently in progress. Wait for it to finish or abort it first.' },
-        { status: 409 }
+      return apiError(
+        409,
+        'Another pipeline run is currently in progress. Wait for it to finish or abort it first.'
       );
     }
 
@@ -82,7 +83,10 @@ export async function POST(req: Request) {
         : `Started ${dryRun ? 'dry-run of ' : ''}pipeline "${targetPipeline.metadata.name}"`,
       run: activeRun,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Failed to start pipeline' }, { status: 500 });
+  } catch (err) {
+    return routeError(err, {
+      route: 'POST /api/waffle/run',
+      fallbackMessage: 'Failed to start pipeline',
+    });
   }
 }

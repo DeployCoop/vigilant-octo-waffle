@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { getWaffleSourceManager } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,11 +18,11 @@ export async function POST(req: Request) {
 
     const { type, pathOrUrl, name, branch } = body;
     if (!type || !pathOrUrl) {
-      return NextResponse.json({ error: 'Fields "type" (local | git) and "pathOrUrl" are required' }, { status: 400 });
+      return apiError(400, 'Fields "type" (local | git) and "pathOrUrl" are required');
     }
 
     if (type !== 'local' && type !== 'git') {
-      return NextResponse.json({ error: 'Type must be either "local" or "git"' }, { status: 400 });
+      return apiError(400, 'Type must be either "local" or "git"');
     }
 
     const source = await sourceManager.addSource({
@@ -32,8 +33,12 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ source, message: 'Waffle source added successfully' });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Failed to add source' }, { status: 400 });
+  } catch (err) {
+    return routeError(err, {
+      route: 'POST /api/waffle/sources',
+      status: 400,
+      fallbackMessage: 'Failed to add source',
+    });
   }
 }
 
@@ -48,16 +53,19 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'Parameter "id" is required' }, { status: 400 });
+      return apiError(400, 'Parameter "id" is required');
     }
 
     const removed = await sourceManager.removeSource(id);
     if (!removed) {
-      return NextResponse.json({ error: `Source "${id}" not found` }, { status: 404 });
+      return apiError(404, `Source "${id}" not found`);
     }
 
     return NextResponse.json({ success: true, message: `Waffle source "${id}" removed` });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Failed to remove source' }, { status: 500 });
+  } catch (err) {
+    return routeError(err, {
+      route: 'DELETE /api/waffle/sources',
+      fallbackMessage: 'Failed to remove source',
+    });
   }
 }

@@ -71,7 +71,7 @@ describe('POST /api/argo/webhook service token', () => {
     expect(res.status).toBe(401);
     expect(mockedSync).not.toHaveBeenCalled();
     const data = await res.json();
-    expect(data.error).toMatch(/webhook token/i);
+    expect(data.error.message).toMatch(/webhook token/i);
   });
 
   it('rejects requests with a wrong token', async () => {
