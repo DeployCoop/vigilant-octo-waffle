@@ -59,7 +59,7 @@ jobs:
       # kubectl is deliberately NOT installed: the storage tests stub it
       # (see packages/orchestrator/src/__tests__/storage.test.ts), and no
       # test needs a live cluster.
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: v3.16.4
 
