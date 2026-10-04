@@ -54,4 +54,4 @@ munger "HARBOR_ADMIN_PASSWORD:" "12" "openssl"
 munger "OPENSEARCH_INITIAL_ADMIN_PASSWORD:" "23" "tr"
 }
 
-time main $@
+time main "$@"
