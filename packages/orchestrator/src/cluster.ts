@@ -44,7 +44,7 @@ export class ClusterOrchestrator {
 
       if (fs.existsSync(tplPath)) {
         const rawTpl = fs.readFileSync(tplPath, 'utf-8');
-        const rendered = substituteVariables(rawTpl, config.raw);
+        const rendered = substituteVariables(rawTpl, config.raw, { preserveUnknown: true });
         fs.writeFileSync(renderedConfigPath, rendered, 'utf-8');
       }
 
@@ -62,7 +62,7 @@ export class ClusterOrchestrator {
 
       if (fs.existsSync(tplPath)) {
         const rawTpl = fs.readFileSync(tplPath, 'utf-8');
-        const rendered = substituteVariables(rawTpl, config.raw);
+        const rendered = substituteVariables(rawTpl, config.raw, { preserveUnknown: true });
         fs.writeFileSync(renderedConfigPath, rendered, 'utf-8');
       }
 

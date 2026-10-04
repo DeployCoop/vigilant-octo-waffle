@@ -162,7 +162,7 @@ export function renderAppManifest(
     return null;
   }
 
-  return substituteVariables(rawYaml, env);
+  return substituteVariables(rawYaml, env, { preserveUnknown: true });
 }
 
 /**

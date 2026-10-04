@@ -172,7 +172,11 @@ loki:
     drivesPerNode: 1
     mode: standalone
     # Disable this if you want to enabled external s3 bucket, and uncomment the storage section above.
-    enabled: ${THIS_OPENEBS_ENABLE_MINIO:-false}
+    # Plain reference on purpose: THIS_OPENEBS_ENABLE_MINIO is always set
+    # (src/default.env defaults it to false), and the TS renderer uses
+    # envsubst-allowlist semantics, which leave ${VAR:-default} forms
+    # untouched - the plain form is what actually expands.
+    enabled: ${THIS_OPENEBS_ENABLE_MINIO}
     persistence:
       # -- Enabled persistence for minio
       enabled: true

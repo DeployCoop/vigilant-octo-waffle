@@ -309,7 +309,7 @@ export async function deployOpenEBS(
       ...config.raw,
       THIS_LVM_VG: vg || 'defaultVG',
       THIS_OPENEBS_NAMESPACE: namespace,
-    });
+    }, { preserveUnknown: true });
   }
 
   const cacheDir = path.join(projectRoot, '.vow-cache', 'storage');

@@ -185,7 +185,7 @@ export async function deployIngressNginx(
   let valuesYaml = '';
   if (fs.existsSync(tplPath)) {
     const raw = fs.readFileSync(tplPath, 'utf-8');
-    valuesYaml = substituteVariables(raw, config.raw);
+    valuesYaml = substituteVariables(raw, config.raw, { preserveUnknown: true });
   }
 
   const cacheDir = path.join(projectRoot, '.vow-cache', 'ingress');
@@ -267,7 +267,7 @@ export async function deployTraefik(
   let valuesYaml = '';
   if (fs.existsSync(tplPath)) {
     const raw = fs.readFileSync(tplPath, 'utf-8');
-    valuesYaml = substituteVariables(raw, config.raw);
+    valuesYaml = substituteVariables(raw, config.raw, { preserveUnknown: true });
   }
 
   const cacheDir = path.join(projectRoot, '.vow-cache', 'ingress');
@@ -328,7 +328,7 @@ export async function deployHAProxy(
   let valuesYaml = '';
   if (fs.existsSync(tplPath)) {
     const raw = fs.readFileSync(tplPath, 'utf-8');
-    valuesYaml = substituteVariables(raw, config.raw);
+    valuesYaml = substituteVariables(raw, config.raw, { preserveUnknown: true });
   }
 
   const cacheDir = path.join(projectRoot, '.vow-cache', 'ingress');

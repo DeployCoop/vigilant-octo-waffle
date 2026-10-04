@@ -17,8 +17,13 @@ export interface SubstituteOptions {
    * those) pass through literally. Manifest preparation needs this:
    * manifests carry literal `$` content (PHP `$settings`, shell
    * snippets, generated passwords containing `$XX`) that blanking
-   * would corrupt. Default false keeps the historical behavior
-   * (expand defaults, blank unknowns) used by config resolution.
+   * would corrupt. All file-template rendering opts in — app and
+   * initializer manifests, cluster configs (kind/k3d), and the
+   * ingress/OpenEBS Helm values templates (the OpenEBS values embed
+   * Go-template code, `$releaseName` and friends, for the Alloy
+   * config). Default false keeps the historical behavior
+   * (expand defaults, blank unknowns) used by config resolution,
+   * where shell-like expansion of `.env` values is the point.
    */
   preserveUnknown?: boolean;
 }
