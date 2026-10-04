@@ -49,7 +49,7 @@ export function parseDefaultEnv(content: string): Record<string, string> {
     const colonIdx = line.indexOf(':=', startIdx);
     const dashIdx = line.indexOf(':-', startIdx);
     let opIdx = -1;
-    let opLen = 2;
+    const opLen = 2;
     if (colonIdx !== -1 && (dashIdx === -1 || colonIdx < dashIdx)) {
       opIdx = colonIdx;
     } else if (dashIdx !== -1) {

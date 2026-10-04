@@ -318,7 +318,7 @@ export async function applyClusterNamespaces(
       applied: true,
       manifest,
     };
-  } catch (err: any) {
+  } catch {
     return {
       total: discovery.total,
       namespaces: discovery.namespaces.map((n) => n.name),

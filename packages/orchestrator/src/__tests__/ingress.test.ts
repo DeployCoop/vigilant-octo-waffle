@@ -1,6 +1,5 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import * as path from 'node:path';
 import { renderInitializerManifests } from '../initializer.js';
 import { loadProjectConfig, findProjectRoot } from '../config.js';
 

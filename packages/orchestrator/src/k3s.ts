@@ -1433,18 +1433,6 @@ export function preloadK3sModel(projectRoot: string, modelName: string, namespac
 }
 
 // Helper to poll task completion
-async function waitForTask(taskId: string): Promise<void> {
-  return new Promise((resolve) => {
-    const check = setInterval(() => {
-      const t = processManager.getTask(taskId);
-      if (t && t.status !== 'running') {
-        clearInterval(check);
-        resolve();
-      }
-    }, 50);
-  });
-}
-
 // ==============================================================================
 // Phase 7: Autonomous Self-Healing Watchdog
 // ==============================================================================

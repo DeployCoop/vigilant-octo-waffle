@@ -1,4 +1,4 @@
-import { APP_CATALOG, type AppDefinition } from './registry.js';
+import { APP_CATALOG } from './registry.js';
 
 export interface TopologyNode {
   id: string;

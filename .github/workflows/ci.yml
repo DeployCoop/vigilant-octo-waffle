@@ -81,6 +81,21 @@ jobs:
           docker run --rm vow-web:ci node --version | tee /tmp/nodever
           grep -E '^v24\.' /tmp/nodever
 
-# Deliberately not included yet: a lint job. `pnpm lint` currently resolves
-# to `next lint` in apps/web but the repo has no ESLint/Biome config, so it
-# would not check anything meaningful. Add lint here once a config lands.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint all packages
+        run: pnpm -r lint
