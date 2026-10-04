@@ -7,12 +7,21 @@ import type { NextRequest } from 'next/server';
  * 1. Restricts mutating requests (POST, PUT, DELETE, PATCH) on /api/* routes
  * 2. Enforces CSRF / Origin validation against localhost / local network / host
  * 3. Enforces optional token authentication if VOW_API_TOKEN is defined
+ * 4. Defers /api/argo/webhook to its own service token when VOW_WEBHOOK_TOKEN is defined
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Protect mutating API endpoints
   if (pathname.startsWith('/api/') && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
+    // 0. ArgoCD webhook accelerator: when VOW_WEBHOOK_TOKEN is configured, the
+    // route enforces its own service token (see api/argo/webhook/route.ts), so
+    // the shared-token and origin gates here defer to it. This lets external
+    // automation call the webhook with only its least-privilege credential.
+    if (pathname === '/api/argo/webhook' && process.env.VOW_WEBHOOK_TOKEN) {
+      return NextResponse.next();
+    }
+
     // 1. Optional API Token Gate
     const requiredToken = process.env.VOW_API_TOKEN;
     if (requiredToken) {

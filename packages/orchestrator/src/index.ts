@@ -22,6 +22,7 @@ export * from './data.js';
 export * from './security.js';
 export * from './scaler.js';
 export * from './webhook.js';
+export * from './webhook-auth.js';
 export * from './export.js';
 export * from './chaos.js';
 export * from './rollouts.js';

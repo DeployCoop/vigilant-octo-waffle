@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { postArgoWebhook } from '@/lib/webhook';
 import {
   Layers,
   Search,
@@ -339,11 +340,7 @@ export default function AppsPage() {
     if (appId) setUpdatingId(appId);
     setActionMessage(appId ? `Dispatching hard refresh for ${appId}...` : 'Dispatching Git push webhook to ArgoCD...');
     try {
-      const res = await fetch('/api/argo/webhook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(appId ? { action: 'accelerate', appName: appId, hardRefresh: true } : { action: 'webhook' }),
-      });
+      const res = await postArgoWebhook(appId ? { action: 'accelerate', appName: appId, hardRefresh: true } : { action: 'webhook' });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error);
       setActionMessage(data.message || 'Hard refresh initiated! Sub-second sync completed.');
