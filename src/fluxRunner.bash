@@ -66,10 +66,10 @@ metadata:
   name: ${THIS_THING}-repo
   namespace: ${flux_ns}
 spec:
-  interval: \${THIS_FLUX_INTERVAL:-5m}
+  interval: ${THIS_FLUX_INTERVAL:-5m}
   url: ${repo_url}
   ref:
-    branch: \${THIS_FLUX_BRANCH:-main}
+    branch: ${THIS_FLUX_BRANCH:-main}
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -77,7 +77,7 @@ metadata:
   name: ${THIS_THING}
   namespace: ${target_ns}
 spec:
-  interval: \${THIS_FLUX_INTERVAL:-5m}
+  interval: ${THIS_FLUX_INTERVAL:-5m}
   targetNamespace: ${target_ns}
   chart:
     spec:
@@ -98,10 +98,10 @@ metadata:
   name: ${THIS_THING}-repo
   namespace: ${flux_ns}
 spec:
-  interval: \${THIS_FLUX_INTERVAL:-5m}
+  interval: ${THIS_FLUX_INTERVAL:-5m}
   url: ${repo_url}
   ref:
-    branch: \${THIS_FLUX_BRANCH:-main}
+    branch: ${THIS_FLUX_BRANCH:-main}
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -109,7 +109,7 @@ metadata:
   name: ${THIS_THING}
   namespace: ${flux_ns}
 spec:
-  interval: \${THIS_FLUX_INTERVAL:-5m}
+  interval: ${THIS_FLUX_INTERVAL:-5m}
   targetNamespace: ${target_ns}
   prune: true
   sourceRef:
