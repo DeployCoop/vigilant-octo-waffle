@@ -42,6 +42,8 @@ export interface RouteErrorOptions {
   /** Force the envelope code. */
   code?: string;
   principalId?: string;
+  /** Message when the thrown value carries none (generic branch). */
+  fallbackMessage?: string;
 }
 
 export function routeError(err: unknown, opts: RouteErrorOptions): NextResponse {
@@ -68,7 +70,10 @@ export function routeError(err: unknown, opts: RouteErrorOptions): NextResponse 
       ? `${first.path.join('.') || 'body'}: ${first.message}`
       : 'Invalid request body';
   } else {
-    message = err instanceof Error ? err.message : 'Internal error';
+    message =
+      err instanceof Error && err.message
+        ? err.message
+        : (opts.fallbackMessage ?? 'Internal error');
     code = opts.code ?? codeForStatus(status);
   }
 

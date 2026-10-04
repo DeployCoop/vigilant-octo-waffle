@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { apiErrorMessage } from '@/lib/envelope';
 import {
   Sparkles,
   Play,
@@ -402,7 +403,7 @@ export default function WaffleStudioPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setLiveLogs((prev) => [...prev, `[ERROR] ${data.error}`]);
+        setLiveLogs((prev) => [...prev, `[ERROR] ${apiErrorMessage(data)}`]);
         setExecuting(false);
       } else {
         setActiveRun(data.run);
@@ -435,7 +436,7 @@ export default function WaffleStudioPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setLiveLogs((prev) => [...prev, `[ERROR] ${data.error}`]);
+        setLiveLogs((prev) => [...prev, `[ERROR] ${apiErrorMessage(data)}`]);
         setExecuting(false);
       } else {
         setActiveRun(data.run);
@@ -476,7 +477,7 @@ export default function WaffleStudioPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setFormError(data.error || 'Failed to add source');
+        setFormError(apiErrorMessage(data, 'Failed to add source'));
       } else {
         setShowAddModal(false);
         setNewSourcePath('');

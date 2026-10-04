@@ -15,6 +15,7 @@ import {
   setChartsDirectory,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
     if (chartId) {
       const detail = getLocalChartDetail(root, chartId, customDir);
       if (!detail) {
-        return NextResponse.json({ error: `Local chart '${chartId}' not found` }, { status: 404 });
+        return apiError(404, `Local chart '${chartId}' not found`);
       }
 
       // Optional lint check on fetch
@@ -91,8 +92,8 @@ export async function GET(req: Request) {
       localChartsCount: localCharts.length,
       localCharts,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message, releases: [] }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/helm' });
   }
 }
 
@@ -111,7 +112,7 @@ export async function POST(req: Request) {
     if (action === 'set-charts-dir') {
       const newDir = body.chartsDir;
       if (!newDir || typeof newDir !== 'string' || !newDir.trim()) {
-        return NextResponse.json({ error: 'Valid chartsDir string is required' }, { status: 400 });
+        return apiError(400, 'Valid chartsDir string is required');
       }
 
       const trimmed = newDir.trim();
@@ -138,7 +139,7 @@ export async function POST(req: Request) {
     if (action === 'install' || action === 'upgrade') {
       const { chartId, releaseName, namespace, valuesYaml, wait, timeout, customDir, domain, set } = body;
       if (!chartId) {
-        return NextResponse.json({ error: 'chartId is required' }, { status: 400 });
+        return apiError(400, 'chartId is required');
       }
 
       const task = installLocalChart(root, chartId, {
@@ -164,7 +165,7 @@ export async function POST(req: Request) {
     if (action === 'uninstall') {
       const { releaseName, namespace } = body;
       if (!releaseName) {
-        return NextResponse.json({ error: 'releaseName is required' }, { status: 400 });
+        return apiError(400, 'releaseName is required');
       }
 
       const task = uninstallLocalChart(root, releaseName, namespace || 'default');
@@ -179,7 +180,7 @@ export async function POST(req: Request) {
     if (action === 'lint') {
       const { chartId, customDir } = body;
       if (!chartId) {
-        return NextResponse.json({ error: 'chartId is required' }, { status: 400 });
+        return apiError(400, 'chartId is required');
       }
 
       const result = await lintLocalChart(root, chartId, customDir);
@@ -190,7 +191,7 @@ export async function POST(req: Request) {
     if (action === 'template') {
       const { chartId, releaseName, namespace, valuesYaml, customDir, domain, set } = body;
       if (!chartId) {
-        return NextResponse.json({ error: 'chartId is required' }, { status: 400 });
+        return apiError(400, 'chartId is required');
       }
 
       const rendered = await templateLocalChart(root, chartId, {
@@ -218,7 +219,7 @@ export async function POST(req: Request) {
       if (fs.existsSync(exampleSource)) {
         fs.cpSync(exampleSource, targetDir, { recursive: true });
       } else {
-        return NextResponse.json({ error: 'example.charts/sample-app source not found' }, { status: 404 });
+        return apiError(404, 'example.charts/sample-app source not found');
       }
 
       const charts = listLocalCharts(root);
@@ -230,8 +231,8 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return apiError(400, 'Invalid action');
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/helm' });
   }
 }

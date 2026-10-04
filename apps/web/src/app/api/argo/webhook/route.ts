@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { accelerateArgoSync, authorizeWebhookRequest, decide } from '@vow/orchestrator';
 import { resolveAuthzContext, recordAudit } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +18,9 @@ export async function POST(req: Request) {
   //    used when no store principal resolves (or no store exists).
   const ctx = await resolveAuthzContext(req);
   if (ctx.loaded.status === 'invalid') {
-    return NextResponse.json(
-      { error: 'Authorization store is invalid', reason: 'deny_store_invalid' },
-      { status: 403 }
-    );
+    return apiError(403, 'Authorization store is invalid', {
+      reason: 'deny_store_invalid',
+    });
   }
   if (ctx.loaded.status === 'ready' && ctx.principal) {
     const decision = decide(ctx.loaded, ctx.principal, 'webhook:argo', undefined, {
@@ -29,10 +29,9 @@ export async function POST(req: Request) {
     });
     recordAudit(req, 'webhook:argo', decision);
     if (!decision.allowed) {
-      return NextResponse.json(
-        { error: 'Principal lacks the webhook:argo permission', reason: decision.reason },
-        { status: 403 }
-      );
+      return apiError(403, 'Principal lacks the webhook:argo permission', {
+        reason: decision.reason,
+      });
     }
   } else {
     // Service-token gate: when VOW_WEBHOOK_TOKEN is configured, this route
@@ -43,7 +42,7 @@ export async function POST(req: Request) {
     const auth = authorizeWebhookRequest(req.headers);
     if (!auth.authorized) {
       recordAudit(req, 'webhook:argo', { allowed: false, reason: 'deny_unauthenticated' });
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
+      return apiError(auth.status, auth.error ?? 'Unauthorized');
     }
     if (auth.mode === 'unconfigured' && !warnedUnconfigured) {
       warnedUnconfigured = true;
@@ -59,10 +58,10 @@ export async function POST(req: Request) {
 
     const result = await accelerateArgoSync(appName, domain);
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Webhook / sync dispatch failed' },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, {
+      route: 'POST /api/argo/webhook',
+      fallbackMessage: 'Webhook / sync dispatch failed',
+    });
   }
 }

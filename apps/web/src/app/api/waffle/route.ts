@@ -10,6 +10,7 @@ import {
   loadWafflePipeline,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,8 +35,8 @@ export async function GET(req: Request) {
         const { pipeline, baseDir } = await loadWafflePipeline(validatePath);
         const validation = validateWafflePipeline(pipeline, baseDir);
         return NextResponse.json({ valid: validation.valid, validation, pipeline });
-      } catch (err: any) {
-        return NextResponse.json({ valid: false, error: err.message }, { status: 400 });
+      } catch (err) {
+        return routeError(err, { route: 'GET /api/waffle', status: 400 });
       }
     }
 
@@ -45,8 +46,8 @@ export async function GET(req: Request) {
         const { pipeline, source } = await sourceManager.getSourcePipeline(sourceId);
         const validation = validateWafflePipeline(pipeline, source.localPath);
         return NextResponse.json({ pipeline, source, validation });
-      } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 404 });
+      } catch (err) {
+        return routeError(err, { route: 'GET /api/waffle', status: 404 });
       }
     }
 
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
     if (blueprintId) {
       const bp = getBlueprintById(blueprintId);
       if (!bp) {
-        return NextResponse.json({ error: `Blueprint "${blueprintId}" not found` }, { status: 404 });
+        return apiError(404, `Blueprint "${blueprintId}" not found`);
       }
       const validation = validateWafflePipeline(bp);
       return NextResponse.json({ pipeline: bp, validation });
@@ -80,7 +81,10 @@ export async function GET(req: Request) {
       activeRun,
       history,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+  } catch (err) {
+    return routeError(err, {
+      route: 'GET /api/waffle',
+      fallbackMessage: 'Internal Server Error',
+    });
   }
 }
