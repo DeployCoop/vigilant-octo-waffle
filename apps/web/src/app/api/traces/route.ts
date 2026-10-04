@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchClusterTraces } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,10 +16,7 @@ export async function GET(req: Request) {
 
     const traces = await fetchClusterTraces(service, minDuration);
     return NextResponse.json({ traces });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to fetch distributed traces', traces: [] },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/traces', fallbackMessage: 'Failed to fetch distributed traces' });
   }
 }

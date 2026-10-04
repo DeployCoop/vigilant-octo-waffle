@@ -19,6 +19,7 @@ import {
   type Principal,
 } from '@vow/orchestrator';
 import { getProjectRoot } from './project';
+import { errorBody } from './envelope';
 
 /**
  * Route-level authorization guards (plan §6.1).
@@ -186,6 +187,48 @@ export function auditLogPath(root: string): string {
   return path.join(root, '.vow', 'audit.log');
 }
 
+/** Generations kept by size-based rotation: audit.log + .1 .. .3. */
+export const AUDIT_GENERATIONS = 3;
+
+/** Size cap for the active audit file (default 5 MiB, env-overridable). */
+export function auditMaxBytes(): number {
+  const raw = Number(process.env.VOW_AUDIT_MAX_BYTES);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 5 * 1024 * 1024;
+}
+
+/**
+ * Rotates the audit log when appending `incomingBytes` would exceed the
+ * size cap: audit.log -> audit.log.1 -> audit.log.2 -> audit.log.3, with
+ * the oldest generation dropped. Worst case on disk is therefore
+ * (AUDIT_GENERATIONS + 1) x the cap. Never throws.
+ */
+export function rotateAuditIfNeeded(
+  file: string,
+  incomingBytes: number,
+  maxBytes: number = auditMaxBytes(),
+  generations: number = AUDIT_GENERATIONS
+): void {
+  try {
+    let size = 0;
+    try {
+      size = fs.statSync(file).size;
+    } catch {
+      return; // no file yet — nothing to rotate
+    }
+    if (size + incomingBytes <= maxBytes) return;
+    for (let i = generations; i >= 2; i--) {
+      try {
+        fs.renameSync(`${file}.${i - 1}`, `${file}.${i}`);
+      } catch {
+        // generation absent — fine
+      }
+    }
+    fs.renameSync(file, `${file}.1`);
+  } catch {
+    // rotation must never break the audit write itself
+  }
+}
+
 export function formatAuditEntry(entry: AuditEntry): string {
   return JSON.stringify(entry);
 }
@@ -220,7 +263,9 @@ export function recordAudit(
       reason: decision.reason,
       route,
     };
-    fs.appendFileSync(file, formatAuditEntry(entry) + '\n');
+    const line = formatAuditEntry(entry) + '\n';
+    rotateAuditIfNeeded(file, Buffer.byteLength(line));
+    fs.appendFileSync(file, line);
   } catch (err) {
     console.error('[authz] failed to write audit entry:', err);
   }
@@ -229,7 +274,18 @@ export function recordAudit(
 /** Reads the most recent audit entries (newest first). */
 export function readAuditEntries(root: string, limit = 200): AuditEntry[] {
   try {
-    const lines = fs.readFileSync(auditLogPath(root), 'utf-8').split('\n').filter(Boolean);
+    // Read across rotation generations, oldest first, so recent history is
+    // not lost at a rotation boundary: .3, .2, .1, then the active file.
+    const base = auditLogPath(root);
+    const lines: string[] = [];
+    for (let i = AUDIT_GENERATIONS; i >= 1; i--) {
+      try {
+        lines.push(...fs.readFileSync(`${base}.${i}`, 'utf-8').split('\n').filter(Boolean));
+      } catch {
+        // generation absent — fine
+      }
+    }
+    lines.push(...fs.readFileSync(base, 'utf-8').split('\n').filter(Boolean));
     const entries: AuditEntry[] = [];
     for (const line of lines.slice(-limit)) {
       try {
@@ -309,7 +365,16 @@ export async function requirePermission(
 
 export function authzErrorResponse(err: unknown): NextResponse | null {
   if (err instanceof AuthzError) {
-    return NextResponse.json({ error: err.message, reason: err.reason }, { status: err.status });
+    // WS4 envelope: the deny shape { error: string, reason } is
+    // absorbed into { error: { code, message, reason } }.
+    return NextResponse.json(
+      errorBody(
+        err.status === 401 ? 'unauthenticated' : 'forbidden',
+        err.message,
+        err.reason
+      ),
+      { status: err.status }
+    );
   }
   return null;
 }

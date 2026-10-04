@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  # Allowlisted variable; value pinned by the fixture .env.
+  name: edge-${THIS_NAMESPACE}
+  namespace: argocd
+  annotations:
+    # Parameter-expansion form: envsubst never expands these (in any
+    # mode), so parity mode must leave it literal too — even though
+    # THIS_CLUSTER_ISSUER is allowlisted and set (empty, via .env).
+    parity/default-op-form: "${THIS_CLUSTER_ISSUER:-fallback-issuer}"
+    # NOT in the default.env allowlist: envsubst leaves the reference
+    # untouched, and the TypeScript engine (preserveUnknown) must too —
+    # literal $ content in manifests (PHP $settings, shell snippets,
+    # generated passwords) depends on it.
+    parity/foreign-var: "home is $HOME and host is ${HOSTNAME}"
+    # Non-allowlist braced reference WITH a default: envsubst's
+    # allowlist wins over the default expansion, so this stays literal
+    # on both engines.
+    parity/foreign-default: "${THIS_PARITY_UNSET:-should-not-appear}"
+spec:
+  project: default
+  source:
+    # Allowlisted, unbraced form.
+    repoURL: $THIS_REPO_URL
+    targetRevision: HEAD
+    path: charts/edge
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${THIS_NAMESPACE}

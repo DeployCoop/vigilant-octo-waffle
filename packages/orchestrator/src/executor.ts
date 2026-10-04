@@ -2,6 +2,13 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import {
+  TaskStore,
+  taskStorePath,
+  taskToRecord,
+  type TaskRecord,
+} from './taskStore.js';
+import { findProjectRoot } from './config.js';
 
 export const ALLOWED_EXECUTABLES = new Set([
   'kubectl',
@@ -135,7 +142,7 @@ export interface TaskRun {
   command: string;
   args: string[];
   cwd: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   exitCode?: number | null;
   startedAt: string;
   finishedAt?: string;
@@ -145,17 +152,73 @@ export interface TaskRun {
 }
 
 /**
- * In-memory process and task manager for orchestrator operations.
+ * Process and task manager for orchestrator operations.
+ *
+ * Live tasks are tracked in memory; when a task store is attached
+ * (see initTaskPersistence), task *records* write through to SQLite
+ * under .vow/ and reads merge memory with persisted history, so a
+ * process restart no longer orphans task history (WS5). PTY exec
+ * sessions stay in-memory deliberately — they hold live OS resources
+ * that cannot survive a restart.
  *
  * NOTE: Tasks and execution states are maintained in-memory within this single Node.js process.
  * Running under multi-instance, clustered, or stateless serverless runtimes will not share task state.
  * For production multi-replica deployments, backing state with Redis, PostgreSQL, or a persistent job queue is required.
  */
-class ProcessManager {
+export class ProcessManager {
   private tasks: Map<string, TaskRun> = new Map();
+  private store: TaskStore | null = null;
+  private lastFlush = new Map<string, number>();
+  private autoAttachTried = false;
+
+  /**
+   * Lazy persistence (WS5): on the first task, if the task's cwd is
+   * inside a VOW project (a src/default.env at or above it), open the
+   * project's store, reconcile, and attach. This makes every entry
+   * point (web routes, CLI, scripts) persistent without a boot hook,
+   * while non-project cwds (unit tests, scratch dirs) stay in-memory.
+   * VOW_TASK_STORE=off disables it; initTaskPersistence attaches
+   * explicitly. Never throws.
+   */
+  private maybeAutoAttach(cwd: string): void {
+    if (this.store || this.autoAttachTried) return;
+    this.autoAttachTried = true;
+    if (process.env.VOW_TASK_STORE === 'off') return;
+    try {
+      const root = findProjectRoot(cwd);
+      if (!fs.existsSync(path.join(root, 'src', 'default.env'))) return;
+      const store = new TaskStore(taskStorePath(root));
+      store.reconcileRunning();
+      this.attachStore(store);
+    } catch {
+      // persistence is best-effort
+    }
+  }
+
+  /** Attach a persistent store; records write through from here on. */
+  public attachStore(store: TaskStore): void {
+    this.store = store;
+  }
+
+  public get attachedStore(): TaskStore | null {
+    return this.store;
+  }
+
+  /** Write-through persistence: never throws (a store failure must
+   *  not break task execution). */
+  private persist(task: TaskRun): void {
+    if (!this.store) return;
+    try {
+      this.store.upsert(taskToRecord(task));
+      this.lastFlush.set(task.id, Date.now());
+    } catch {
+      // deliberately swallowed — see class doc
+    }
+  }
   private maxLogsPerTask = 2000;
 
   public createTask(command: string, args: string[], cwd: string): TaskRun {
+    this.maybeAutoAttach(cwd);
     const id = `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const emitter = new EventEmitter();
 
@@ -171,15 +234,37 @@ class ProcessManager {
     };
 
     this.tasks.set(id, task);
+    this.persist(task);
     return task;
   }
 
   public getTask(id: string): TaskRun | undefined {
-    return this.tasks.get(id);
+    const live = this.tasks.get(id);
+    if (live) return live;
+    if (!this.store) return undefined;
+    try {
+      const record = this.store.get(id);
+      return record ? hydrateRecord(record) : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   public getAllTasks(): TaskRun[] {
-    return Array.from(this.tasks.values()).sort(
+    const merged = new Map<string, TaskRun>();
+    if (this.store) {
+      try {
+        for (const record of this.store.list()) {
+          merged.set(record.id, hydrateRecord(record));
+        }
+      } catch {
+        // history unavailable; live tasks still return below
+      }
+    }
+    for (const task of this.tasks.values()) {
+      merged.set(task.id, task);
+    }
+    return Array.from(merged.values()).sort(
       (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
     );
   }
@@ -212,6 +297,7 @@ class ProcessManager {
       });
 
       task.childProcess = child;
+      this.persist(task);
 
       child.stdout.on('data', (data: Buffer) => {
         const text = data.toString('utf-8');
@@ -232,6 +318,7 @@ class ProcessManager {
           'system',
           `Process exited with code ${code} (${task.status})`
         );
+        this.persist(task);
         task.emitter.emit('close', code);
       });
 
@@ -239,12 +326,14 @@ class ProcessManager {
         task.status = 'failed';
         task.finishedAt = new Date().toISOString();
         this.appendLog(task, 'system', `Process error: ${err.message}`);
+        this.persist(task);
         task.emitter.emit('error', err);
       });
     } catch (err: any) {
       task.status = 'failed';
       task.finishedAt = new Date().toISOString();
       this.appendLog(task, 'system', `Failed to spawn: ${err.message}`);
+      this.persist(task);
       task.emitter.emit('error', err);
     }
 
@@ -262,6 +351,7 @@ class ProcessManager {
       task.status = 'cancelled';
       task.finishedAt = new Date().toISOString();
       this.appendLog(task, 'system', 'Process terminated by user');
+      this.persist(task);
       task.emitter.emit('close', -1);
       return true;
     } catch {
@@ -281,8 +371,59 @@ class ProcessManager {
       task.logs.shift();
     }
 
+    // Write-through flush point, throttled: log streams can be hot,
+    // and the transition flushes (start/close/cancel) carry the
+    // state that matters most.
+    if (this.store && Date.now() - (this.lastFlush.get(task.id) ?? 0) > 250) {
+      this.persist(task);
+    }
+
     task.emitter.emit('log', entry);
   }
 }
 
+/** Rebuild a TaskRun view from its persisted record (history). */
+function hydrateRecord(record: TaskRecord): TaskRun {
+  const meta = record.meta as {
+    command?: string;
+    args?: string[];
+    cwd?: string;
+  };
+  return {
+    id: record.id,
+    command: meta.command ?? record.label,
+    args: meta.args ?? [],
+    cwd: meta.cwd ?? '',
+    status: record.status,
+    exitCode: record.exitCode,
+    startedAt: record.startedAt,
+    finishedAt: record.endedAt ?? undefined,
+    logs: record.logTail,
+    emitter: new EventEmitter(),
+  };
+}
+
 export const processManager = new ProcessManager();
+
+let persistenceInitialized = false;
+
+/**
+ * Attach SQLite task persistence for a project (WS5): opens
+ * <projectRoot>/.vow/state.db, reconciles tasks a previous process
+ * left marked running, and attaches the store to the shared
+ * processManager. Idempotent; returns the store, or null when
+ * persistence is unavailable — it never throws, because task
+ * execution must not depend on the history store.
+ */
+export function initTaskPersistence(projectRoot: string): TaskStore | null {
+  if (persistenceInitialized) return processManager.attachedStore;
+  persistenceInitialized = true;
+  try {
+    const store = new TaskStore(taskStorePath(projectRoot));
+    store.reconcileRunning();
+    processManager.attachStore(store);
+    return store;
+  } catch {
+    return null;
+  }
+}

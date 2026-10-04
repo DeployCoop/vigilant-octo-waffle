@@ -8,6 +8,7 @@ import {
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,11 +19,11 @@ export async function GET(req: Request) {
   try {
     const nodes = await listClusterNodeDetails();
     return NextResponse.json({ nodes });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to list cluster nodes', nodes: [] },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, {
+      route: 'GET /api/cluster/nodes',
+      fallbackMessage: 'Failed to list cluster nodes',
+    });
   }
 }
 
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
 
     if (action === 'k3s_ssh_join') {
       if (!body.targetHost) {
-        return NextResponse.json({ error: 'Target host (user@ip) is required for SSH provisioning' }, { status: 400 });
+        return apiError(400, 'Target host (user@ip) is required for SSH provisioning');
       }
       const task = provisionK3sNodeViaSsh(root, {
         targetHost: body.targetHost,
@@ -96,11 +97,11 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Node operation failed' },
-      { status: 500 }
-    );
+    return apiError(400, `Unknown action: ${action}`);
+  } catch (err) {
+    return routeError(err, {
+      route: 'POST /api/cluster/nodes',
+      fallbackMessage: 'Node operation failed',
+    });
   }
 }

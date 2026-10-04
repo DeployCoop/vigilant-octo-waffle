@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { estimateFinOpsTelemetry, getK3sFinOpsStatus } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 import { authorizeRequest } from '@/lib/authz';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +22,7 @@ export async function GET(req: Request) {
       ...report,
       k3sFinOps,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to estimate FinOps telemetry' },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/finops', fallbackMessage: 'Failed to estimate FinOps telemetry' });
   }
 }

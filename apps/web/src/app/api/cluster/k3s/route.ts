@@ -62,6 +62,7 @@ import {
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -164,11 +165,11 @@ export async function GET(req: Request) {
       ...joinInfo,
       nodes,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to retrieve K3s cluster join details' },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, {
+      route: 'GET /api/cluster/k3s',
+      fallbackMessage: 'Failed to retrieve K3s cluster join details',
+    });
   }
 }
 
@@ -214,7 +215,7 @@ export async function POST(req: Request) {
 
     if (action === 'ssh-join') {
       if (!body.targetHost) {
-        return NextResponse.json({ error: 'Target host (user@ip) is required for SSH provisioning' }, { status: 400 });
+        return apiError(400, 'Target host (user@ip) is required for SSH provisioning');
       }
       const task = provisionK3sNodeViaSsh(root, {
         targetHost: body.targetHost,
@@ -383,7 +384,7 @@ export async function POST(req: Request) {
 
     if (action === 'drain') {
       if (!body.nodeName) {
-        return NextResponse.json({ error: 'Node name is required for drain operation' }, { status: 400 });
+        return apiError(400, 'Node name is required for drain operation');
       }
       const task = drainK3sNode(root, body.nodeName, body.options);
       return NextResponse.json({
@@ -395,7 +396,7 @@ export async function POST(req: Request) {
 
     if (action === 'uncordon') {
       if (!body.nodeName) {
-        return NextResponse.json({ error: 'Node name is required for uncordon operation' }, { status: 400 });
+        return apiError(400, 'Node name is required for uncordon operation');
       }
       const task = uncordonK3sNode(root, body.nodeName);
       return NextResponse.json({
@@ -407,7 +408,7 @@ export async function POST(req: Request) {
 
     if (action === 'cordon') {
       if (!body.nodeName) {
-        return NextResponse.json({ error: 'Node name is required for cordon operation' }, { status: 400 });
+        return apiError(400, 'Node name is required for cordon operation');
       }
       const task = cordonK3sNode(root, body.nodeName);
       return NextResponse.json({
@@ -690,11 +691,11 @@ export async function POST(req: Request) {
       return NextResponse.json(res);
     }
 
-    return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'K3s operation failed' },
-      { status: 500 }
-    );
+    return apiError(400, `Unknown action: ${action}`);
+  } catch (err) {
+    return routeError(err, {
+      route: 'POST /api/cluster/k3s',
+      fallbackMessage: 'K3s operation failed',
+    });
   }
 }

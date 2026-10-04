@@ -5,10 +5,10 @@ import {
   upsertPrincipal,
   generatePrincipalToken,
   hashToken,
-  AuthzInvariantError,
 } from '@vow/orchestrator';
 import { authorizeRequest, toPublicPrincipal } from '@/lib/authz';
 import { getProjectRoot } from '@/lib/project';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,14 +24,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const loaded = loadAuthzStore(getProjectRoot());
   if (loaded.status !== 'ready') {
-    return NextResponse.json(
-      { error: 'Authorization is not enabled', reason: 'authz_not_enabled' },
-      { status: 409 }
-    );
+    return apiError(409, 'Authorization is not enabled', {
+      reason: 'authz_not_enabled',
+    });
   }
   const existing = loaded.store.principals.find((p) => p.id === id);
   if (!existing) {
-    return NextResponse.json({ error: `Unknown principal: ${id}` }, { status: 404 });
+    return apiError(404, `Unknown principal: ${id}`);
   }
 
   const token = generatePrincipalToken();
@@ -40,10 +39,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const updated = upsertPrincipal(loaded.store, next);
     saveAuthzStore(getProjectRoot(), updated);
   } catch (err) {
-    if (err instanceof AuthzInvariantError) {
-      return NextResponse.json({ error: err.message, reason: 'authz_invariant' }, { status: 409 });
-    }
-    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    return routeError(err, {
+      route: 'POST /api/authz/principals/[id]/rotate',
+      status: 400,
+    });
   }
   return NextResponse.json({ principal: toPublicPrincipal(next), token });
 }

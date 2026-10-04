@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { buildAbility } from '@vow/orchestrator';
 import { resolveAuthzContext } from '@/lib/authz';
+import { apiError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +18,10 @@ export async function GET(req: Request) {
   }
 
   if (ctx.loaded.status === 'invalid') {
-    return NextResponse.json(
-      { error: 'Authorization store is invalid', reason: 'deny_store_invalid' },
-      { status: 500 }
-    );
+    return apiError(500, 'Authorization store is invalid', {
+      reason: 'deny_store_invalid',
+      route: 'GET /api/authz/me',
+    });
   }
 
   if (!ctx.principal) {
@@ -34,15 +35,12 @@ export async function GET(req: Request) {
       });
     }
     const reason = ctx.unknownPrincipal ? 'deny_unknown_principal' : 'deny_unauthenticated';
-    return NextResponse.json(
-      {
-        error:
-          reason === 'deny_unknown_principal'
-            ? 'Identity is not provisioned as a principal'
-            : 'Authentication required',
-        reason,
-      },
-      { status: 401 }
+    return apiError(
+      401,
+      reason === 'deny_unknown_principal'
+        ? 'Identity is not provisioned as a principal'
+        : 'Authentication required',
+      { reason }
     );
   }
 

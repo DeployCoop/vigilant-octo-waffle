@@ -16,9 +16,11 @@
   "scripts": {
     "prepare": "tsc",
     "build": "tsc",
+    "lint": "eslint src",
     "test": "node --test --test-concurrency=1 dist/__tests__/*.test.js",
     "typecheck": "tsc --noEmit",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test:parity:update": "tsc -p tsconfig.json && VOW_PARITY_UPDATE=1 node --test dist/__tests__/parity.test.js"
   },
   "dependencies": {
     "@casl/ability": "^6.8.1",

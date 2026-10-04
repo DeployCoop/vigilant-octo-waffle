@@ -1,0 +1,5 @@
+{
+  "app": "velero",
+  "description": "base manifest merged with the example .argo_overrides manifest (yq *+ vs TS deepMerge), then substituted",
+  "pair": "argo"
+}

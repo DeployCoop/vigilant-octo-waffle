@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { generateModularSecretBundles, syncSecretsAcrossNamespaces, MODULAR_SECRET_BUNDLES } from '@vow/orchestrator';
+import { syncSecretsAcrossNamespaces, MODULAR_SECRET_BUNDLES } from '@vow/orchestrator';
 
 interface SecretsViewProps {
   onBack: () => void;

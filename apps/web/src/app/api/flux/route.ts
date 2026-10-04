@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { loadProjectConfig, saveEnvFile, K8sClient, FluxManager, processManager } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,8 +44,8 @@ export async function GET(req: Request) {
       totalControllers: controllers.length,
       activeControllers: controllers.filter((c) => c.status === 'Running').length,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/flux' });
   }
 }
 
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
 
     if (action === 'set-runner' && cdRunner) {
       if (!['argocd', 'flux', 'both'].includes(cdRunner)) {
-        return NextResponse.json({ error: 'Invalid cdRunner value. Allowed: argocd, flux, both' }, { status: 400 });
+        return apiError(400, 'Invalid cdRunner value. Allowed: argocd, flux, both');
       }
       saveEnvFile(root, { ...config.raw, THIS_CD_RUNNER: cdRunner });
       return NextResponse.json({
@@ -113,8 +114,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, taskId: task.id, app: name });
     }
 
-    return NextResponse.json({ error: 'Invalid action. Allowed: bootstrap, set-runner, reconcile, reconcile-all' }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return apiError(400, 'Invalid action. Allowed: bootstrap, set-runner, reconcile, reconcile-all');
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/flux' });
   }
 }

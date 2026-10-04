@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { generateProductionBlueprint, BlueprintOptions } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,10 +12,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as BlueprintOptions;
     if (!body.provider || !['aws', 'gcp', 'azure', 'baremetal'].includes(body.provider)) {
-      return NextResponse.json(
-        { error: 'Valid provider (aws, gcp, azure, baremetal) is required' },
-        { status: 400 }
-      );
+      return apiError(400, 'Valid provider (aws, gcp, azure, baremetal) is required');
     }
 
     const blueprint = generateProductionBlueprint({
@@ -28,10 +26,7 @@ export async function POST(req: Request) {
       success: true,
       blueprint,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Blueprint generation failed' },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/export', fallbackMessage: 'Blueprint generation failed' });
   }
 }

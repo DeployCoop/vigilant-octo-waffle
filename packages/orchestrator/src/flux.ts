@@ -36,7 +36,10 @@ export class FluxManager {
       const baseArgoPath = path.join(this.projectRoot, 'argo', appName, 'argocd.yaml');
       if (fs.existsSync(baseArgoPath)) {
         const argoRaw = fs.readFileSync(baseArgoPath, 'utf-8');
-        baseManifest = this.synthesizeFluxFromArgo(argoRaw, appName, fluxNs);
+        baseManifest = this.synthesizeFluxFromArgo(argoRaw, appName, fluxNs, {
+          interval: config.raw.THIS_FLUX_INTERVAL || '5m',
+          branch: config.raw.THIS_FLUX_BRANCH || 'main',
+        });
         source = 'synthesized';
       } else {
         throw new Error(`No manifest found for '${appName}' in flux/ or argo/`);
@@ -51,8 +54,11 @@ export class FluxManager {
       finalYaml = deepMergeYaml(baseManifest, overrideManifest);
     }
 
-    // Substitute environment variables (${THIS_...})
-    const templatedYaml = substituteVariables(finalYaml, config.raw);
+    // Substitute environment variables (${THIS_...}); unknown
+    // references are preserved, matching fluxRunner's envsubst usage.
+    const templatedYaml = substituteVariables(finalYaml, config.raw, {
+      preserveUnknown: true,
+    });
 
     return {
       baseManifest,
@@ -65,10 +71,25 @@ export class FluxManager {
   /**
    * Synthesizes a FluxCD GitRepository + HelmRelease (or Kustomization) from an Argo Application CRD
    */
-  public synthesizeFluxFromArgo(argoContent: string, appName: string, fluxNs = 'flux-system'): string {
+  public synthesizeFluxFromArgo(
+    argoContent: string,
+    appName: string,
+    fluxNs = 'flux-system',
+    resolved: { interval?: string; branch?: string } = {}
+  ): string {
+    // The interval/branch are resolved HERE, at generation time, on
+    // purpose: the bash fluxRunner expands them while writing its
+    // heredoc, and envsubst (either engine's substitution pass) never
+    // expands \${VAR:-default} forms. Callers with a project config
+    // (prepareAppManifest) pass the configured values; direct callers
+    // get the historical placeholder text.
+    const interval = resolved.interval ?? '${THIS_FLUX_INTERVAL:-5m}';
+    const branch = resolved.branch ?? '${THIS_FLUX_BRANCH:-main}';
     let parsed: any = {};
     try {
-      parsed = yaml.parse(argoContent) || {};
+      // uniqueKeys off: yq (the bash engine) tolerates duplicate map
+      // keys last-wins, and real chart values in this repo use them.
+      parsed = yaml.parse(argoContent, { uniqueKeys: false }) || {};
     } catch {
       parsed = {};
     }
@@ -89,10 +110,10 @@ export class FluxManager {
         namespace: fluxNs,
       },
       spec: {
-        interval: '${THIS_FLUX_INTERVAL:-5m}',
+        interval,
         url: repoUrl,
         ref: {
-          branch: '${THIS_FLUX_BRANCH:-main}',
+          branch,
         },
       },
     };
@@ -103,7 +124,7 @@ export class FluxManager {
       if (rawValues) {
         try {
           helmValues = typeof rawValues === 'string'
-            ? yaml.parse(rawValues) || {}
+            ? yaml.parse(rawValues, { uniqueKeys: false }) || {}
             : rawValues;
         } catch {
           helmValues = {};
@@ -118,7 +139,7 @@ export class FluxManager {
           namespace: targetNs,
         },
         spec: {
-          interval: '${THIS_FLUX_INTERVAL:-5m}',
+          interval,
           targetNamespace: targetNs,
           chart: {
             spec: {
@@ -146,7 +167,7 @@ export class FluxManager {
         namespace: fluxNs,
       },
       spec: {
-        interval: '${THIS_FLUX_INTERVAL:-5m}',
+        interval,
         targetNamespace: targetNs,
         prune: true,
         sourceRef: {

@@ -5,7 +5,6 @@ import {
   upsertPrincipal,
   generatePrincipalToken,
   hashToken,
-  AuthzInvariantError,
   PERMISSIONS,
   ROLES,
   type AuthzStore,
@@ -14,16 +13,15 @@ import {
 } from '@vow/orchestrator';
 import { authorizeRequest, toPublicPrincipal, uniquePrincipalId } from '@/lib/authz';
 import { getProjectRoot } from '@/lib/project';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
 function notEnabled() {
-  return NextResponse.json(
-    {
-      error: 'Authorization is not enabled yet. Initialize it via POST /api/authz/init or `vow authz init`.',
-      reason: 'authz_not_enabled',
-    },
-    { status: 409 }
+  return apiError(
+    409,
+    'Authorization is not enabled yet. Initialize it via POST /api/authz/init or `vow authz init`.',
+    { reason: 'authz_not_enabled' }
   );
 }
 
@@ -42,10 +40,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ authzEnabled: false, principals: [] });
   }
   if (loaded.status === 'invalid') {
-    return NextResponse.json(
-      { error: 'Authorization store is invalid', reason: 'deny_store_invalid' },
-      { status: 500 }
-    );
+    return apiError(500, 'Authorization store is invalid', {
+      reason: 'deny_store_invalid',
+      route: 'GET /api/authz/principals',
+    });
   }
   return NextResponse.json({
     authzEnabled: true,
@@ -79,13 +77,10 @@ export async function POST(req: Request) {
       : undefined;
 
   if (!name) {
-    return NextResponse.json({ error: 'A non-empty name is required' }, { status: 400 });
+    return apiError(400, 'A non-empty name is required');
   }
   if (!ROLES.includes(role)) {
-    return NextResponse.json(
-      { error: `role must be one of: ${ROLES.join(', ')}` },
-      { status: 400 }
-    );
+    return apiError(400, `role must be one of: ${ROLES.join(', ')}`);
   }
 
   const token = oidcSubject ? null : generatePrincipalToken();
@@ -104,10 +99,7 @@ export async function POST(req: Request) {
     const next = upsertPrincipal(store, principal);
     saveAuthzStore(getProjectRoot(), next);
   } catch (err) {
-    if (err instanceof AuthzInvariantError) {
-      return NextResponse.json({ error: err.message, reason: 'authz_invariant' }, { status: 409 });
-    }
-    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    return routeError(err, { route: 'POST /api/authz/principals', status: 400 });
   }
 
   return NextResponse.json(

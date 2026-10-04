@@ -357,7 +357,7 @@ export default function DocumentationPage() {
                   <span>1. Automatic Cataloging</span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Every folder with a valid <code className="text-sky-300">Chart.yaml</code> is indexed into the <strong>App Store</strong> under the <em>"Custom & Local Charts"</em> category with metadata, icons, and status badges.
+                  Every folder with a valid <code className="text-sky-300">Chart.yaml</code> is indexed into the <strong>App Store</strong> under the <em>&quot;Custom & Local Charts&quot;</em> category with metadata, icons, and status badges.
                 </p>
               </div>
 
@@ -973,7 +973,7 @@ spec:
                 allowRun
               />
               <p className="text-xs text-slate-400">
-                Or simply click the <strong>"Populate Example Chart"</strong> button on the <Link href="/helm" className="text-sky-400 underline">Helm Hub</Link> page.
+                Or simply click the <strong>&quot;Populate Example Chart&quot;</strong> button on the <Link href="/helm" className="text-sky-400 underline">Helm Hub</Link> page.
               </p>
             </div>
           </section>
@@ -1010,7 +1010,7 @@ spec:
               <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
                 <h4 className="font-semibold text-amber-400">Flannel `subnet.env: no such file or directory`</h4>
                 <p className="text-slate-400 leading-relaxed">
-                  Occurs on fresh K3s baremetal node starts while the Flannel CNI pod is initializing. Kubelet waits until Flannel allocates the node's pod CIDR subnet. Verify Flannel daemonset status:
+                  Occurs on fresh K3s baremetal node starts while the Flannel CNI pod is initializing. Kubelet waits until Flannel allocates the node&apos;s pod CIDR subnet. Verify Flannel daemonset status:
                 </p>
                 <CodeBlock
                   id="cli-flannel"
@@ -1069,7 +1069,7 @@ spec:
             </div>
 
             <p className="text-sm text-slate-300 leading-relaxed">
-              When running K3s (<code className="text-sky-300 font-mono">THIS_K8S_TYPE="k3s"</code>), you can expand from a single laptop control plane to a full baremetal or virtualized multi-node cluster.
+              When running K3s (<code className="text-sky-300 font-mono">THIS_K8S_TYPE=&quot;k3s&quot;</code>), you can expand from a single laptop control plane to a full baremetal or virtualized multi-node cluster.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -1114,7 +1114,7 @@ spec:
             </div>
 
             <p className="text-sm text-slate-300 leading-relaxed">
-              Vigilant Octo Waffle supports both **ArgoCD** and **FluxCD** as first-class GitOps controllers. You can run either or both simultaneously via <code className="text-sky-300 font-mono">THIS_CD_RUNNER="argocd" | "flux" | "both"</code>.
+              Vigilant Octo Waffle supports both **ArgoCD** and **FluxCD** as first-class GitOps controllers. You can run either or both simultaneously via <code className="text-sky-300 font-mono">THIS_CD_RUNNER=&quot;argocd&quot; | &quot;flux&quot; | &quot;both&quot;</code>.
             </p>
 
             <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl space-y-2 text-xs text-slate-300">

@@ -1,0 +1,39 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: bao-repo
+  namespace: ${THIS_FLUX_NAMESPACE}
+spec:
+  interval: ${THIS_FLUX_INTERVAL}
+  url: https://github.com/joshuacox/argocd-tests.git
+  ref:
+    branch: main
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openbao
+  namespace: ${THIS_NAMESPACE}
+spec:
+  interval: ${THIS_FLUX_INTERVAL}
+  targetNamespace: ${THIS_NAMESPACE}
+  chart:
+    spec:
+      chart: charts/openbao
+      sourceRef:
+        kind: GitRepository
+        name: bao-repo
+        namespace: ${THIS_FLUX_NAMESPACE}
+  values:
+    global:
+      enabled: true
+      namespace: ${THIS_NAMESPACE}
+      tlsDisable: true
+    server:
+      dataStorage:
+        enabled: true
+        size: 2Gi
+        storageClass: "${THIS_STORAGECLASS}"
+    ui:
+      enabled: true
+      serviceType: ClusterIP

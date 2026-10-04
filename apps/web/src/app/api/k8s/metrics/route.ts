@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPodMetrics, getNodeMetrics } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,10 +30,10 @@ export async function GET(req: Request) {
       history: podsData.history,
       nodes,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to fetch metrics', pods: [], nodes: [], history: {} },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, {
+      route: 'GET /api/k8s/metrics',
+      fallbackMessage: 'Failed to fetch metrics',
+    });
   }
 }

@@ -10,6 +10,7 @@ import {
   getTopologicalOrder,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,8 +51,8 @@ export async function GET(req: Request) {
       validation,
       topologicalOrder,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/apps' });
   }
 }
 
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
     if (body.presetId) {
       const preset = DEPLOYMENT_PRESETS.find((p) => p.id === body.presetId);
       if (!preset) {
-        return NextResponse.json({ error: `Preset ${body.presetId} not found` }, { status: 404 });
+        return apiError(404, `Preset ${body.presetId} not found`);
       }
 
       const updatedEnablers: Record<string, boolean> = {};
@@ -110,7 +111,7 @@ export async function POST(req: Request) {
     // Case 3: Single App Toggle
     const { enablerVar, enabled } = body;
     if (!enablerVar) {
-      return NextResponse.json({ error: 'Missing enablerVar or presetId' }, { status: 400 });
+      return apiError(400, 'Missing enablerVar or presetId');
     }
 
     const updatedEnablers = {
@@ -125,7 +126,7 @@ export async function POST(req: Request) {
       enablerVar,
       enabled: Boolean(enabled),
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/apps' });
   }
 }

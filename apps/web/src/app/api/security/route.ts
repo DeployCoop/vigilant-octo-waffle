@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { scanClusterSecurity } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +22,7 @@ export async function GET(req: Request) {
       totalWorkloads: report.totals.scannedPods + (report.totals.scannedIngresses || 0),
     });
 
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Security audit execution failed' },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/security', fallbackMessage: 'Security audit execution failed' });
   }
 }

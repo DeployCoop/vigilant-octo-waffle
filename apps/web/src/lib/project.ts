@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
  */
 export function getProjectRoot(): string {
   // Start from current working directory or process.cwd()
-  let curr = process.cwd();
+  const curr = process.cwd();
 
   // If running inside apps/web, root is one level up
   if (fs.existsSync(path.join(curr, 'pnpm-workspace.yaml'))) {

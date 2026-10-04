@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAbilityContext } from '@/lib/ability';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface Grant {
   permission: string;
@@ -93,7 +94,7 @@ export default function AccessPage() {
         setAuthzEnabled(true);
         return;
       }
-      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      if (!res.ok) throw new Error(apiErrorMessage(data, `Request failed (${res.status})`));
       setForbidden(false);
       setAuthzEnabled(Boolean(data.authzEnabled));
       setPrincipals(data.principals ?? []);
@@ -119,7 +120,7 @@ export default function AccessPage() {
 
   const fail = async (res: Response) => {
     const data = await res.json().catch(() => ({}));
-    setError(data.error || `Request failed (${res.status})`);
+    setError(apiErrorMessage(data, `Request failed (${res.status})`));
   };
 
   const handleEnable = async () => {

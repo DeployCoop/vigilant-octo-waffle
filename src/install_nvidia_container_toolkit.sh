@@ -81,4 +81,4 @@ main () {
   configure_checker crio
 }
 
-time main $@
+time main "$@"

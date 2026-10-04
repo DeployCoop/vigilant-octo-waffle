@@ -4,13 +4,13 @@ import {
   saveAuthzStore,
   upsertPrincipal,
   removePrincipal,
-  AuthzInvariantError,
   ROLES,
   type Principal,
   type Role,
 } from '@vow/orchestrator';
 import { authorizeRequest, toPublicPrincipal } from '@/lib/authz';
 import { getProjectRoot } from '@/lib/project';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,14 +22,7 @@ function loadReadyStore() {
 }
 
 function notFound(id: string) {
-  return NextResponse.json({ error: `Unknown principal: ${id}` }, { status: 404 });
-}
-
-function invariantOr400(err: unknown) {
-  if (err instanceof AuthzInvariantError) {
-    return NextResponse.json({ error: err.message, reason: 'authz_invariant' }, { status: 409 });
-  }
-  return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+  return apiError(404, `Unknown principal: ${id}`);
 }
 
 /**
@@ -45,10 +38,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const { id } = await params;
   const store = loadReadyStore();
   if (!store) {
-    return NextResponse.json(
-      { error: 'Authorization is not enabled', reason: 'authz_not_enabled' },
-      { status: 409 }
-    );
+    return apiError(409, 'Authorization is not enabled', {
+      reason: 'authz_not_enabled',
+    });
   }
   const existing = store.principals.find((p) => p.id === id);
   if (!existing) return notFound(id);
@@ -56,10 +48,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const body = await req.json().catch(() => ({}));
   const role = body.role as Role;
   if (!ROLES.includes(role)) {
-    return NextResponse.json(
-      { error: `role must be one of: ${ROLES.join(', ')}` },
-      { status: 400 }
-    );
+    return apiError(400, `role must be one of: ${ROLES.join(', ')}`);
   }
 
   const next: Principal = {
@@ -80,7 +69,10 @@ export async function PATCH(req: Request, { params }: Ctx) {
     const updated = upsertPrincipal(store, next);
     saveAuthzStore(getProjectRoot(), updated);
   } catch (err) {
-    return invariantOr400(err);
+    return routeError(err, {
+      route: 'PATCH /api/authz/principals/[id]',
+      status: 400,
+    });
   }
   return NextResponse.json({ principal: toPublicPrincipal(next) });
 }
@@ -93,10 +85,9 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const { id } = await params;
   const store = loadReadyStore();
   if (!store) {
-    return NextResponse.json(
-      { error: 'Authorization is not enabled', reason: 'authz_not_enabled' },
-      { status: 409 }
-    );
+    return apiError(409, 'Authorization is not enabled', {
+      reason: 'authz_not_enabled',
+    });
   }
   if (!store.principals.some((p) => p.id === id)) return notFound(id);
 
@@ -104,7 +95,10 @@ export async function DELETE(req: Request, { params }: Ctx) {
     const updated = removePrincipal(store, id);
     saveAuthzStore(getProjectRoot(), updated);
   } catch (err) {
-    return invariantOr400(err);
+    return routeError(err, {
+      route: 'DELETE /api/authz/principals/[id]',
+      status: 400,
+    });
   }
   return NextResponse.json({ success: true, id });
 }

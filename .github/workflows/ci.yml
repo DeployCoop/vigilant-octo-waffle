@@ -13,6 +13,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secrets-scan:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz | tar -xz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+
+      # Scan only the change range (PR commits, or the pushed range), not
+      # all of history: history carries audited example content that
+      # .gitleaks.toml documents. Config is auto-loaded from the repo root.
+      - name: Scan the change range for secrets
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }}..${{ github.sha }}"
+          elif [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            RANGE="${{ github.event.before }}..${{ github.sha }}"
+          else
+            RANGE="-n 1"
+          fi
+          gitleaks git --redact --log-opts="$RANGE" .
+
   test:
     name: Tests & typecheck
     runs-on: ubuntu-latest
@@ -36,16 +63,33 @@ jobs:
         with:
           version: v3.16.4
 
+      # The bash<->TS parity tests (WS3) shell out to the bash runners,
+      # which need yq (manifest merging) and envsubst (templating).
+      # VOW_PARITY_REQUIRED makes a missing tool a failure rather
+      # than a skip, so parity cannot silently void in CI.
+      - name: Install parity tools (yq, envsubst)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gettext-base
+          sudo curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.44.5/yq_linux_amd64"
+          sudo chmod +x /usr/local/bin/yq
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Orchestrator tests
+        env:
+          VOW_PARITY_REQUIRED: '1'
         run: |
           pnpm --filter @vow/orchestrator build
           pnpm --filter @vow/orchestrator test
 
       - name: Web tests
         run: pnpm --filter @vow/web test
+
+      - name: Ink tests
+        run: |
+          pnpm --filter @vow/ink build
+          pnpm --filter @vow/ink test
 
       - name: Typecheck (web + ink; orchestrator typechecks via its build)
         run: |
@@ -81,6 +125,39 @@ jobs:
           docker run --rm vow-web:ci node --version | tee /tmp/nodever
           grep -E '^v24\.' /tmp/nodever
 
-# Deliberately not included yet: a lint job. `pnpm lint` currently resolves
-# to `next lint` in apps/web but the repo has no ESLint/Biome config, so it
-# would not check anything meaningful. Add lint here once a config lands.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint all packages
+        run: pnpm -r lint
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          curl -sSL https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz | tar -xJ
+          sudo install -m 0755 shellcheck-v0.10.0/shellcheck /usr/local/bin/shellcheck
+
+      # Gate at error severity (plan §5.2, §16 Q3 decided). Warning-level
+      # findings are a tracked burn-down, not a gate; the only permitted
+      # suppressions are per-line `# shellcheck disable=SCxxxx` comments
+      # carrying a justification.
+      - name: ShellCheck (error severity)
+        run: shellcheck --severity=error src/*.bash src/*.sh up bin/vow

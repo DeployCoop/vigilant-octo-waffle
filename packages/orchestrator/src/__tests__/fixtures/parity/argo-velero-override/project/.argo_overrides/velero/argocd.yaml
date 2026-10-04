@@ -1,0 +1,17 @@
+spec:
+  source:
+    helm:
+      values: |
+        configuration:
+          backupStorageLocation:
+          - name:
+            provider: "${THIS_VELERO_PROVIDER}"
+            bucket: "${THIS_VELERO_BUCKET}"
+            default: "${THIS_VELERO_DEFAULTED}"
+            accessMode: ReadWrite
+            credential:
+              name:
+              key:
+            config:
+              s3ForcePathStyle: /testpath
+              s3Url: s3.example.com

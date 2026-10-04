@@ -1,0 +1,5 @@
+{
+  "app": "drupal",
+  "description": "real drupal manifest, plain substitution, no override; embeds literal $ content (PHP $settings, a generated password with a $XX sequence) that must survive both engines",
+  "pair": "argo"
+}

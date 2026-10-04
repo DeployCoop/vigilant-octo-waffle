@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAbilityContext } from '@/lib/ability';
+import { apiErrorMessage } from '@/lib/envelope';
 import {
   Boxes,
   RefreshCw,
@@ -145,7 +146,7 @@ export default function PodsPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Diagnostic failed');
+      if (!res.ok) throw new Error(apiErrorMessage(data, 'Diagnostic failed'));
       setAiDiagnosis(data);
     } catch (err: any) {
       setAiError(err.message || 'AI diagnostic encountered an error');
@@ -228,7 +229,7 @@ export default function PodsPage() {
         }),
       });
       const data = await res.json();
-      if (!data.sessionId) throw new Error(data.error || 'Failed starting session');
+      if (!data.sessionId) throw new Error(apiErrorMessage(data, 'Failed starting session'));
 
       setExecSessionId(data.sessionId);
       setTerminalOutput((prev) => prev + `Connected! Session ID: ${data.sessionId}\n$ `);

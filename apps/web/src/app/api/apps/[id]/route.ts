@@ -13,6 +13,7 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 import type { Permission } from '@vow/orchestrator';
 
 export async function GET(
@@ -22,7 +23,7 @@ export async function GET(
   try {
     const { id } = await params;
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
-      return NextResponse.json({ error: 'Invalid application ID format' }, { status: 400 });
+      return apiError(400, 'Invalid application ID format');
     }
 
     const denied = await authorizeRequest(req, 'apps:read', { appId: id });
@@ -37,7 +38,7 @@ export async function GET(
     const appDef = catalog.find((a) => a.id === id);
 
     if (!appDef) {
-      return NextResponse.json({ error: 'App not found in catalog' }, { status: 404 });
+      return apiError(404, 'App not found in catalog');
     }
 
     // Local Helm Chart handling
@@ -122,8 +123,8 @@ export async function GET(
       templatedYaml,
       hasOverride: Boolean(overrideManifest),
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/apps/[id]' });
   }
 }
 
@@ -134,7 +135,7 @@ export async function POST(
   try {
     const { id } = await params;
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
-      return NextResponse.json({ error: 'Invalid application ID format' }, { status: 400 });
+      return apiError(400, 'Invalid application ID format');
     }
 
     const root = getProjectRoot();
@@ -143,7 +144,7 @@ export async function POST(
     const appDef = catalog.find((a) => a.id === id);
 
     if (!appDef) {
-      return NextResponse.json({ error: 'App not found in catalog' }, { status: 404 });
+      return apiError(404, 'App not found in catalog');
     }
 
     const body = await req.json().catch(() => ({}));
@@ -181,12 +182,12 @@ export async function POST(
     // Local Helm Chart save override
     if (appDef.isLocalChart && body.action === 'saveOverride') {
       if (typeof body.overrideYaml !== 'string') {
-        return NextResponse.json({ error: 'overrideYaml string is required' }, { status: 400 });
+        return apiError(400, 'overrideYaml string is required');
       }
       const overridesBase = path.resolve(root, '.chart_overrides');
       const overrideDir = path.resolve(overridesBase, id);
       if (!overrideDir.startsWith(overridesBase + path.sep)) {
-        return NextResponse.json({ error: 'Invalid override destination path' }, { status: 400 });
+        return apiError(400, 'Invalid override destination path');
       }
       if (!fs.existsSync(overrideDir)) {
         fs.mkdirSync(overrideDir, { recursive: true });
@@ -237,7 +238,7 @@ export async function POST(
 
     if (body.action === 'saveOverride') {
       if (typeof body.overrideYaml !== 'string') {
-        return NextResponse.json({ error: 'overrideYaml string is required' }, { status: 400 });
+        return apiError(400, 'overrideYaml string is required');
       }
 
       const isFlux = runner === 'flux';
@@ -246,7 +247,7 @@ export async function POST(
 
       // Path traversal containment check
       if (!overrideDir.startsWith(overridesBase + path.sep)) {
-        return NextResponse.json({ error: 'Invalid override destination path' }, { status: 400 });
+        return apiError(400, 'Invalid override destination path');
       }
 
       if (!fs.existsSync(overrideDir)) {
@@ -259,8 +260,8 @@ export async function POST(
       return NextResponse.json({ success: true, runner: isFlux ? 'flux' : 'argocd' });
     }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return apiError(400, 'Invalid action');
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/apps/[id]' });
   }
 }

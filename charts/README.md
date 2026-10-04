@@ -13,4 +13,4 @@ You can change this charts directory to any path on your system:
 - Set `THIS_CHARTS_DIR="/path/to/charts"` in `.env` or `src/default.env`.
 - Or navigate to **Helm Hub (`/helm`)** in the Web UI, type the directory path, and click **Apply Directory**.
 
-For a full reference and examples, see [`example.charts/README.md`](file:///home/thoth/vigilant-octo-waffle/example.charts/README.md).
+For a full reference and examples, see [`example.charts/README.md`](../example.charts/README.md).

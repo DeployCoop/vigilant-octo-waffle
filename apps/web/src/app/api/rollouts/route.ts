@@ -6,6 +6,7 @@ import {
   abortRollout,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,11 +20,11 @@ export async function GET(req: Request) {
 
     const rollouts = await listRollouts(namespace);
     return NextResponse.json({ rollouts });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to list rollouts', rollouts: [] },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, {
+      route: 'GET /api/rollouts',
+      fallbackMessage: 'Failed to list rollouts',
+    });
   }
 }
 
@@ -36,10 +37,7 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     if (!name || !namespace) {
-      return NextResponse.json(
-        { error: 'name and namespace are required' },
-        { status: 400 }
-      );
+      return apiError(400, 'name and namespace are required');
     }
 
     if (action === 'set_weight') {
@@ -57,14 +55,11 @@ export async function POST(req: Request) {
       return NextResponse.json(res);
     }
 
-    return NextResponse.json(
-      { error: `Unknown rollout action: ${action}` },
-      { status: 400 }
-    );
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || 'Rollout action failed' },
-      { status: 500 }
-    );
+    return apiError(400, `Unknown rollout action: ${action}`);
+  } catch (err) {
+    return routeError(err, {
+      route: 'POST /api/rollouts',
+      fallbackMessage: 'Rollout action failed',
+    });
   }
 }

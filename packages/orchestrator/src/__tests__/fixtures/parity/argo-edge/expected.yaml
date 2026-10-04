@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  annotations:
+    parity/default-op-form: ${THIS_CLUSTER_ISSUER:-fallback-issuer}
+    parity/foreign-default: ${THIS_PARITY_UNSET:-should-not-appear}
+    parity/foreign-var: home is $HOME and host is ${HOSTNAME}
+  name: edge-parity-test
+  namespace: argocd
+spec:
+  destination:
+    namespace: parity-test
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: charts/edge
+    repoURL: https://github.com/DeployCoop/urban-disco.git
+    targetRevision: HEAD

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
+import { apiError, routeError } from '@/lib/route-error';
 import { loadProjectConfig, saveEnvFile } from '@vow/orchestrator';
 import { authorizeRequest, callerCan } from '@/lib/authz';
 import { redactSecrets } from '@/lib/redaction';
@@ -21,8 +22,8 @@ export async function GET(req: Request) {
     // config with secret values masked.
     const canSeeSecrets = await callerCan(req, 'secrets:read');
     return NextResponse.json(canSeeSecrets ? payload : redactSecrets(payload));
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/config' });
   }
 }
 
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     const { updates } = await req.json();
 
     if (!updates || typeof updates !== 'object') {
-      return NextResponse.json({ error: 'Invalid updates' }, { status: 400 });
+      return apiError(400, 'Invalid updates');
     }
 
     const currentConfig = loadProjectConfig(root);
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
       success: true,
       updated: Object.keys(updates).length,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/config' });
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { ClusterOrchestrator, K8sClient } from '@vow/orchestrator';
 import { authorizeRequest, withAuthz } from '@/lib/authz';
+import { routeError } from '@/lib/route-error';
 
 export async function GET(req: Request) {
   const denied = await authorizeRequest(req, 'cluster:read');
@@ -32,8 +33,8 @@ export async function GET(req: Request) {
       isRunning: telemetry.isConnected,
       telemetry,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/cluster' });
   }
 }
 
@@ -56,8 +57,8 @@ export const POST = withAuthz('cluster:manage', async (req: Request) => {
       taskId: task.id,
       command: `${task.command} ${task.args.join(' ')}`,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/cluster' });
   }
 });
 
@@ -81,7 +82,7 @@ export const DELETE = withAuthz('cluster:manage', async () => {
       taskId: task.id,
       command: `${task.command} ${task.args.join(' ')}`,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'DELETE /api/cluster' });
   }
 });

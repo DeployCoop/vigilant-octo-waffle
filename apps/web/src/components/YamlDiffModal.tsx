@@ -16,6 +16,7 @@ import {
   Save,
 } from 'lucide-react';
 import { copyToClipboard } from '@/lib/clipboard';
+import { apiErrorMessage } from '@/lib/envelope';
 
 export interface DetectedManifestPayload {
   raw: string;
@@ -146,7 +147,7 @@ export function YamlDiffModal({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to save manifest override');
+        throw new Error(apiErrorMessage(data, 'Failed to save manifest override'));
       }
 
       if (syncAfter) {

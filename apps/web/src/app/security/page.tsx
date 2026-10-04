@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiErrorMessage } from '@/lib/envelope';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -50,7 +51,7 @@ export default function SecurityAuditPage() {
     try {
       const res = await fetch('/api/security');
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(apiErrorMessage(data));
       setReport(data);
     } catch (err) {
       console.error('Failed to load security audit:', err);

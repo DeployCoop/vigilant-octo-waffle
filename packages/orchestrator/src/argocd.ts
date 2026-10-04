@@ -35,7 +35,9 @@ export class ArgoManager {
     }
 
     // Substitute variables using current configuration
-    const templatedYaml = substituteVariables(yamlContent, config.raw);
+    const templatedYaml = substituteVariables(yamlContent, config.raw, {
+      preserveUnknown: true,
+    });
 
     return {
       appName,
@@ -60,14 +62,26 @@ export class ArgoManager {
     const tmpFile = path.join(tmpDir, `${appName}.yaml`);
     fs.writeFileSync(tmpFile, templatedYaml, 'utf-8');
 
+    // Argument parity with src/argoRunner.bash: the runner appends
+    // $ARGOCD_CREATE_APP_EXTRA_ARGS (default --insecure) and
+    // --loglevel $THIS_ARGO_LOG_LEVEL to the create invocation.
+    const extraArgsRaw = config.raw['ARGOCD_CREATE_APP_EXTRA_ARGS']?.trim();
+    const extraArgs = (extraArgsRaw ? extraArgsRaw : '--insecure')
+      .split(/\s+/)
+      .filter(Boolean);
+    const logLevel = config.raw['THIS_ARGO_LOG_LEVEL'] || 'info';
+
     return processManager.runCommand(
       'argocd',
       [
         'app',
         'create',
         '--upsert',
+        ...extraArgs,
         '--name',
         appName,
+        '--loglevel',
+        logLevel,
         '--grpc-web',
         '-f',
         tmpFile,

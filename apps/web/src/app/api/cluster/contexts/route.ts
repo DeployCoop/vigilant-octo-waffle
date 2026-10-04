@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError, routeError } from '@/lib/route-error';
 import { K8sClient } from '@vow/orchestrator';
 import { authorizeRequest, withAuthz } from '@/lib/authz';
 
@@ -13,7 +14,7 @@ export async function GET(req: Request) {
     const data = k8sClient.getContexts();
     return NextResponse.json(data);
   } catch (err: any) {
-    return NextResponse.json({ current: '', contexts: [], error: err.message }, { status: 500 });
+    return routeError(err, { route: 'GET /api/cluster/contexts' });
   }
 }
 
@@ -24,14 +25,14 @@ export const POST = withAuthz('cluster:manage', async (req: Request) => {
     const { contextName } = body;
 
     if (!contextName) {
-      return NextResponse.json({ error: 'contextName required' }, { status: 400 });
+      return apiError(400, 'contextName required');
     }
 
     const k8sClient = new K8sClient();
     await k8sClient.switchContext(contextName);
 
     return NextResponse.json({ success: true, current: contextName });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/cluster/contexts' });
   }
 });

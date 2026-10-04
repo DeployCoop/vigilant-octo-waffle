@@ -7,6 +7,7 @@ import {
   type CustomAppOptions,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +19,8 @@ export async function GET(req: Request) {
     const root = getProjectRoot();
     const apps = listCustomApps(root);
     return NextResponse.json({ apps });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message, apps: [] }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/apps/custom' });
   }
 }
 
@@ -32,16 +33,13 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     if (!options.id || !options.name || !options.repoURL) {
-      return NextResponse.json(
-        { error: 'id, name, and repoURL are required' },
-        { status: 400 }
-      );
+      return apiError(400, 'id, name, and repoURL are required');
     }
 
     const result = scaffoldCustomApp(options, root);
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/apps/custom' });
   }
 }
 
@@ -52,7 +50,7 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'id query param required' }, { status: 400 });
+      return apiError(400, 'id query param required');
     }
 
     const denied = await authorizeRequest(req, 'apps:deploy', { appId: id });
@@ -60,7 +58,7 @@ export async function DELETE(req: Request) {
 
     deleteCustomApp(id, root);
     return NextResponse.json({ success: true, id });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'DELETE /api/apps/custom' });
   }
 }

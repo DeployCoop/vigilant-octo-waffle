@@ -11,6 +11,7 @@ import {
   K8sClient,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export async function GET(req: Request) {
   // DNS records are generated from config; the only DNS key is dns:update.
@@ -57,7 +58,7 @@ export async function GET(req: Request) {
       certificates,
       clusterIssuers,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/dns' });
   }
 }

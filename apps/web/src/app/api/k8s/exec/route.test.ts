@@ -73,7 +73,7 @@ describe('POST /api/k8s/exec guard', () => {
     hoisted.load = { status: 'ready', store: { version: 1, principals: [scoped] } };
     const res = await POST(post(startBody));
     expect(res.status).toBe(401);
-    expect((await res.json()).reason).toBe('deny_unauthenticated');
+    expect((await res.json()).error.reason).toBe('deny_unauthenticated');
     expect(hoisted.createSession).not.toHaveBeenCalled();
   });
 
@@ -87,7 +87,7 @@ describe('POST /api/k8s/exec guard', () => {
       post({ action: 'start', namespace: 'kube-system', podName: 'coredns-0' }, operatorToken)
     );
     expect(outOfScope.status).toBe(403);
-    expect((await outOfScope.json()).reason).toBe('deny_scope');
+    expect((await outOfScope.json()).error.reason).toBe('deny_scope');
   });
 
   it('guards the output stream as well', async () => {

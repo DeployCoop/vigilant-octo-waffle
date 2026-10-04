@@ -1,0 +1,5 @@
+{
+  "app": "mariadb-operator-crds",
+  "description": "argo->flux synthesis, kustomize branch: GitRepository + Kustomization generated from a no-helm Argo manifest",
+  "pair": "flux"
+}

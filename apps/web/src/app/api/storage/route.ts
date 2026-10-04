@@ -8,6 +8,7 @@ import {
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -31,11 +32,8 @@ export async function GET(req: Request) {
       ...storage,
       openEBS: k3sStorage,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { storageClasses: [], persistentVolumes: [], persistentVolumeClaims: [], openEBS: null, error: err.message },
-      { status: 500 }
-    );
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/storage' });
   }
 }
 
@@ -92,7 +90,7 @@ export async function POST(req: Request) {
     if (action === 'set-default-sc') {
       const targetSc = body.storageClass;
       if (!targetSc) {
-        return NextResponse.json({ error: 'StorageClass name required' }, { status: 400 });
+        return apiError(400, 'StorageClass name required');
       }
       // Remove default annotation from any existing default SCs
       await execAsync(
@@ -108,8 +106,8 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ error: `Unknown action '${action}'` }, { status: 400 });
+    return apiError(400, `Unknown action '${action}'`);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return routeError(err, { route: 'POST /api/storage' });
   }
 }

@@ -22,6 +22,7 @@ import {
   type Principal,
 } from '@vow/orchestrator';
 import {
+  AUDIT_GENERATIONS,
   AuthzError,
   authorizeRequest,
   extractRequestToken,
@@ -29,6 +30,7 @@ import {
   readAuditEntries,
   requirePermission,
   resolveAuthzContext,
+  rotateAuditIfNeeded,
 } from './authz';
 
 const viewerToken = generatePrincipalToken();
@@ -168,8 +170,9 @@ describe('authorizeRequest', () => {
     const denied = await authorizeRequest(request(viewerToken), 'k8s:exec');
     expect(denied?.status).toBe(403);
     const body = await denied!.json();
-    expect(body.reason).toBe('deny_missing_grant');
-    expect(body.error).toMatch(/permission/i);
+    expect(body.error.code).toBe('forbidden');
+    expect(body.error.reason).toBe('deny_missing_grant');
+    expect(body.error.message).toMatch(/permission/i);
   });
 });
 
@@ -267,5 +270,60 @@ describe('audit logging', () => {
       'chaos:run',
       'cluster:manage',
     ]);
+  });
+
+  describe('rotation', () => {
+    const auditFile = () => path.join(hoisted.root, '.vow', 'audit.log');
+
+    it('rotateAuditIfNeeded shifts generations and drops the oldest', () => {
+      const file = auditFile();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, 'current\n');
+      fs.writeFileSync(`${file}.1`, 'gen1\n');
+      fs.writeFileSync(`${file}.2`, 'gen2\n');
+      fs.writeFileSync(`${file}.3`, 'gen3\n');
+
+      rotateAuditIfNeeded(file, 100, 10); // 8 bytes present + 100 > cap 10
+
+      expect(fs.readFileSync(`${file}.1`, 'utf-8')).toBe('current\n');
+      expect(fs.readFileSync(`${file}.2`, 'utf-8')).toBe('gen1\n');
+      expect(fs.readFileSync(`${file}.3`, 'utf-8')).toBe('gen2\n');
+      expect(fs.existsSync(file)).toBe(false); // moved to .1
+      expect(fs.existsSync(`${file}.${AUDIT_GENERATIONS + 1}`)).toBe(false);
+    });
+
+    it('rotateAuditIfNeeded is a no-op under the cap and without a file', () => {
+      const file = auditFile();
+      rotateAuditIfNeeded(file, 100, 10); // no file — must not throw
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, 'tiny\n');
+      rotateAuditIfNeeded(file, 1, 1024);
+      expect(fs.readFileSync(file, 'utf-8')).toBe('tiny\n');
+      expect(fs.existsSync(`${file}.1`)).toBe(false);
+    });
+
+    it('recordAudit rotates at the env-configured cap and reads span generations', async () => {
+      const prev = process.env.VOW_AUDIT_MAX_BYTES;
+      process.env.VOW_AUDIT_MAX_BYTES = '260'; // each denial entry is ~200 bytes
+      try {
+        hoisted.load = { status: 'ready', store: store(viewer) };
+        for (let i = 0; i < 6; i++) {
+          await authorizeRequest(request(viewerToken), 'k8s:exec');
+        }
+      } finally {
+        if (prev === undefined) delete process.env.VOW_AUDIT_MAX_BYTES;
+        else process.env.VOW_AUDIT_MAX_BYTES = prev;
+      }
+
+      // Rotation happened, generations are bounded, active file is small.
+      expect(fs.existsSync(`${auditFile()}.1`)).toBe(true);
+      expect(fs.existsSync(`${auditFile()}.${AUDIT_GENERATIONS + 1}`)).toBe(false);
+      expect(fs.statSync(auditFile()).size).toBeLessThanOrEqual(260 + 260);
+
+      // The reader still sees recent history across the boundary.
+      const entries = readAuditEntries(hoisted.root);
+      expect(entries.length).toBeGreaterThanOrEqual(2);
+      expect(entries.every((e) => e.permission === 'k8s:exec')).toBe(true);
+    });
   });
 });

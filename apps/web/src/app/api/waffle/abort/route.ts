@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { getWaffleRunner } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,10 @@ export async function POST(req: Request) {
     const runner = getWaffleRunner(root);
     runner.abort();
     return NextResponse.json({ success: true, message: 'Pipeline run abort signal sent' });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Failed to abort pipeline' }, { status: 500 });
+  } catch (err) {
+    return routeError(err, {
+      route: 'POST /api/waffle/abort',
+      fallbackMessage: 'Failed to abort pipeline',
+    });
   }
 }

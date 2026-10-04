@@ -1,0 +1,33 @@
+metadata:
+  name: velero-parity-test
+  namespace: argocd
+spec:
+  destination:
+    namespace: velero
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    helm:
+      values: |
+        configuration:
+          backupStorageLocation:
+          - name:
+            provider: "aws"
+            bucket: "parity-bucket"
+            default: "true"
+            accessMode: ReadWrite
+            credential:
+              name:
+              key:
+            config:
+              s3ForcePathStyle: /testpath
+              s3Url: s3.example.com
+    path: charts/velero
+    repoURL: https://github.com/DeployCoop/urban-disco.git
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=false

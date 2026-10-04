@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
+import { routeError } from '@/lib/route-error';
 import { ProfileManager } from '@vow/orchestrator';
 import { authorizeRequest, callerCan } from '@/lib/authz';
 import { redactSecrets } from '@/lib/redaction';
@@ -21,8 +22,8 @@ export async function GET(req: Request) {
     // Profile bundles carry configuration (and any embedded secrets).
     const canSeeSecrets = await callerCan(req, 'secrets:read');
     return NextResponse.json(canSeeSecrets ? bundle : redactSecrets(bundle));
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'GET /api/profiles' });
   }
 }
 
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     pm.importProfile(bundle);
 
     return NextResponse.json({ success: true, name: bundle.name });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    return routeError(err, { route: 'POST /api/profiles' });
   }
 }

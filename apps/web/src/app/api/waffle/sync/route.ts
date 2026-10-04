@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { getWaffleSourceManager } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,12 +17,15 @@ export async function POST(req: Request) {
     const { id } = body;
 
     if (!id) {
-      return NextResponse.json({ error: 'Source ID is required in body' }, { status: 400 });
+      return apiError(400, 'Source ID is required in body');
     }
 
     const updated = await sourceManager.syncSource(id);
     return NextResponse.json({ source: updated, message: `Source "${id}" synchronized` });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Sync failed' }, { status: 500 });
+  } catch (err) {
+    return routeError(err, {
+      route: 'POST /api/waffle/sync',
+      fallbackMessage: 'Sync failed',
+    });
   }
 }

@@ -88,8 +88,9 @@ initializer () {
   local init_dir="${INITIALIZER_TMP}/${base_dir}"
   if [[ -d ".init_overrides/${base_dir}" ]]; then
     mkdir "${init_dir}"
-    these_files=$(find ".init_overrides/${base_dir}" -regex '.*.ya?ml'|sort)
-    for f in ${these_files[@]}; do
+    these_files=()
+    mapfile -t these_files < <(find ".init_overrides/${base_dir}" -regex '.*.ya?ml' | sort)
+    for f in "${these_files[@]}"; do
       base_name=$(basename "${f}")
       echo "merging ${f}"
       if [[ -f "init/${base_dir}/${base_name}" ]]; then
@@ -109,8 +110,9 @@ initializer () {
     log_error "'${init_dir}' is not a valid directory."
   fi
 
-  these_files=$(find ${init_dir} -regex '.*.ya?ml'|sort)
-  for f in ${these_files[@]}; do
+  these_files=()
+  mapfile -t these_files < <(find ${init_dir} -regex '.*.ya?ml' | sort)
+  for f in "${these_files[@]}"; do
     echo "subbing ${f}"
     if [[ "${DEBUG}" == "true" ]]; then
       envsubst < ${f}
@@ -224,7 +226,7 @@ secret_maker () {
 
 secret_getter () {
   if [[ ! $# -eq 3 ]]; then
-    echo "wrong args $# $@"
+    echo "wrong args $# $*"
     exit 1
   fi
   secret_namespace=$1
