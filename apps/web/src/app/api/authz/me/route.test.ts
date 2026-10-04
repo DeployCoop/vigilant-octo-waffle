@@ -57,7 +57,7 @@ describe('GET /api/authz/me', () => {
     hoisted.load = { status: 'ready', store: { version: 1, principals: [viewer] } };
     const res = await GET(request());
     expect(res.status).toBe(401);
-    expect((await res.json()).reason).toBe('deny_unauthenticated');
+    expect((await res.json()).error.reason).toBe('deny_unauthenticated');
   });
 
   it('reports bootstrap local-board mode for an empty store', async () => {
@@ -72,6 +72,6 @@ describe('GET /api/authz/me', () => {
     hoisted.load = { status: 'invalid', error: 'bad yaml' };
     const res = await GET(request(viewerToken));
     expect(res.status).toBe(500);
-    expect((await res.json()).reason).toBe('deny_store_invalid');
+    expect((await res.json()).error.reason).toBe('deny_store_invalid');
   });
 });

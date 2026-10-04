@@ -124,7 +124,7 @@ describe('POST /api/config guard', () => {
 
     const denied = await POST(post(viewerToken));
     expect(denied.status).toBe(403);
-    expect((await denied.json()).reason).toBe('deny_missing_grant');
+    expect((await denied.json()).error.reason).toBe('deny_missing_grant');
 
     const ok = await POST(post(adminToken));
     expect(ok.status).toBe(200);

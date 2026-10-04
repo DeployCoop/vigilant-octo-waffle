@@ -19,6 +19,7 @@ import {
   type Principal,
 } from '@vow/orchestrator';
 import { getProjectRoot } from './project';
+import { errorBody } from './envelope';
 
 /**
  * Route-level authorization guards (plan §6.1).
@@ -364,7 +365,16 @@ export async function requirePermission(
 
 export function authzErrorResponse(err: unknown): NextResponse | null {
   if (err instanceof AuthzError) {
-    return NextResponse.json({ error: err.message, reason: err.reason }, { status: err.status });
+    // WS4 envelope: the deny shape { error: string, reason } is
+    // absorbed into { error: { code, message, reason } }.
+    return NextResponse.json(
+      errorBody(
+        err.status === 401 ? 'unauthenticated' : 'forbidden',
+        err.message,
+        err.reason
+      ),
+      { status: err.status }
+    );
   }
   return null;
 }

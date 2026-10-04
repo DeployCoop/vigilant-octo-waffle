@@ -65,7 +65,7 @@ describe('GET /api/authz/audit', () => {
   it('is restricted to users:manage_permissions (owner only, not admin)', async () => {
     const denied = await GET(get(adminToken));
     expect(denied.status).toBe(403);
-    expect((await denied.json()).reason).toBe('deny_missing_grant');
+    expect((await denied.json()).error.reason).toBe('deny_missing_grant');
   });
 
   it('contains only the caller’s own access when nothing else was audited', async () => {
