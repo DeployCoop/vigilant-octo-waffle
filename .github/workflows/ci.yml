@@ -99,3 +99,21 @@ jobs:
 
       - name: Lint all packages
         run: pnpm -r lint
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          curl -sSL https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz | tar -xJ
+          sudo install -m 0755 shellcheck-v0.10.0/shellcheck /usr/local/bin/shellcheck
+
+      # Gate at error severity (plan §5.2, §16 Q3 decided). Warning-level
+      # findings are a tracked burn-down, not a gate; the only permitted
+      # suppressions are per-line `# shellcheck disable=SCxxxx` comments
+      # carrying a justification.
+      - name: ShellCheck (error severity)
+        run: shellcheck --severity=error src/*.bash src/*.sh up bin/vow

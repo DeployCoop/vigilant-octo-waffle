@@ -12,6 +12,6 @@ mkblock () {
   envsubst < src/hosts|tail -n +2|awk '{print $2}'|cut -f1 -d.|sed "s/$/\t1\tIN\tA\t$TARGET ; cf_tags=cf-proxied:false/"
 }
 
-for i in $@; do 
+for i in "$@"; do 
   mkblock $i
 done
