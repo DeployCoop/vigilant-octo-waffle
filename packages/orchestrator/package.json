@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@casl/ability": "^6.8.1",
-    "@kubernetes/client-node": "^1.1.0",
+    "@kubernetes/client-node": "^2.0.0",
     "dotenv": "^18.0.5",
     "jose": "^6.2.12",
     "yaml": "^2.7.0",
