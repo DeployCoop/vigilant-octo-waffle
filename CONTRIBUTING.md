@@ -1,5 +1,45 @@
 # Contributing
 
+## Development setup
+
+- **Node 24** — the repo pins it in `.nvmrc` (`nvm use` picks it up) and in
+  `engines` across all packages; CI and the shipped Docker image use the
+  same version.
+- **pnpm 11** — the exact version is pinned by the `packageManager` field in
+  the root `package.json`. Install with `pnpm install --frozen-lockfile`.
+
+## Running tests
+
+Each package has its own suite; CI runs all of them.
+
+| Package | Command |
+| --- | --- |
+| `packages/orchestrator` | `pnpm --filter @vow/orchestrator build && pnpm --filter @vow/orchestrator test` (compiles, then `node --test` on `dist`) |
+| `apps/web` | `pnpm --filter @vow/web test` (vitest) and `pnpm --filter @vow/web typecheck` |
+| `apps/ink` | `pnpm --filter @vow/ink build && pnpm --filter @vow/ink test` |
+
+## CI and merging
+
+- `main` is protected: pull requests are required, branches must be up to
+  date, and the **Tests & typecheck** and **Production build** checks must
+  pass. If a PR suddenly reports *no checks at all*, it has usually gone
+  merge-conflicted — GitHub cannot build the test-merge commit, so rebase
+  onto `main` first.
+- New CI jobs start out **non-required** and are only promoted to required
+  checks after they have run green on `main` at least once.
+- Releases are annotated tags (`vX.Y.Z`) with notes kept in
+  `CHANGELOG.md` (Keep-a-Changelog format) — add an entry under
+  *Unreleased* with your change.
+
+## A note on native dependencies (allowBuilds)
+
+pnpm 11 refuses to install when a dependency's build script has no
+recorded decision (`ERR_PNPM_IGNORED_BUILDS`). When you add a package
+with a native build step, record it explicitly in `allowBuilds` in
+`pnpm-workspace.yaml` — `true` if the build is needed (e.g. `esbuild`),
+`false` if the package ships a prebuilt binding and the script is
+unnecessary (e.g. `unrs-resolver`).
+
 ## Matrix
 
 Join our [matrix](https://matrix.to/#/#vigilant-octo-waffle:matrix.org) to chat with us directly.
