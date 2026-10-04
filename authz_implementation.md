@@ -354,43 +354,52 @@ Phase 1 assumes the dashboard stores the principal token in `localStorage` and s
 **Which do you prefer for v1?**
 
 **Answer:**
+localStorage is fine
 
 ### Q2. Is `context` scoping worth it in v1?
 VOW typically manages one cluster per install, so scoping grants by kubeconfig context may be dead weight in v1. The field costs little in the schema, but the UI and tests grow. **Keep context scoping in v1, or app/namespace only?**
 
 **Answer:**
+app/namespace only
 
 ### Q3. Store format: JSON or YAML?
 The plan uses `.vow/authz.json` (easy zod validation, machine-written). This repo is YAML-native and humans may want to hand-edit grants. **JSON (machine-managed via UI/CLI only) or YAML (hand-editable, diff-friendly)?**
 
 **Answer:**
+yaml
 
 ### Q4. OIDC / Keycloak in scope?
 The app catalog already ships Keycloak. Principals are modeled so an OIDC identity can map to a principal without a token hash. **Is OIDC login a v1 requirement, a planned v2, or explicitly out of scope?**
 
 **Answer:**
+OIDC is a v1 requirement
 
 ### Q5. Secret redaction split
 Splitting `config:read` from `secrets:read` means principals without `secrets:read` must get redacted config/secret responses (Paperclip redacts peer agent config the same way). This touches `config.ts` / `secrets.ts` response shaping in PR 3. **Confirm the redaction list/behavior you want, or should `config:read` imply full config visibility in v1?**
 
 **Answer:**
+yes lets implement the redactions
 
 ### Q6. GET-route authentication
 When authz is on, this plan authenticates reads too (today GETs are open). That is a breaking change for scripts/curl users who currently read freely with only the network posture protecting them. **Reads authenticated when authz is on — yes, or should reads stay open unless a `VOW_AUTHZ_PROTECT_READS` flag is set?**
 
 **Answer:**
+yes reads authenticate when authz is on
 
 ### Q7. Web test infrastructure
 `apps/web` currently has a placeholder test script (`echo 'Web smoke tests: ok'`). PR 2 wants guard tests. **Add a real test runner (vitest) to `apps/web` as part of PR 2, or keep web verification manual for now?**
 
 **Answer:**
+add a real test runner to apps/web
 
 ### Q8. Role set — is `operator` split correctly?
 The plan keeps `k8s:exec`, `remote:exec`, `secrets:read`, `config:update`, `cluster:manage`, `cluster:nodes:join`, `chaos:run`, and `data:query` out of the default `operator` bundle. **Any of those belong in operator by default for your team's workflow — or any operator key that should be removed?**
 
 **Answer:**
+lets stick with the recommendation here
 
 ### Q9. PR sequencing
 The plan ships engine-first (PR 1) with zero behavior change, then critical routes, then full coverage. **Happy with that order, or should the webhook service token (arguably an open hole today) jump the queue as a standalone fix first?**
 
 **Answer:**
+yes lets begin with the webhook service token and test based around that to ensure we dont break it going forward
