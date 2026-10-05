@@ -177,7 +177,7 @@ export const WaffleHealthCheckSchema = z.object({
 export const WaffleSecretKeySchema = z.object({
   name: z.string(),
   namespace: z.string().optional(),
-  literals: z.record(z.string()).optional(),
+  literals: z.record(z.string(), z.string()).optional(),
   fromEnv: z.array(z.string()).optional(),
 });
 
@@ -228,10 +228,10 @@ export const WaffleStepSchema = z.object({
   wait: z.boolean().optional().default(true),
   timeout: z.string().optional().default('5m'),
   domain: z.string().optional(),
-  values: z.record(z.any()).optional(),
-  set: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  values: z.record(z.string(), z.any()).optional(),
+  set: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   healthCheck: WaffleHealthCheckSchema.optional(),
-  keys: z.union([z.record(z.string()), WaffleSecretKeySchema]).optional(),
+  keys: z.union([z.record(z.string(), z.string()), WaffleSecretKeySchema]).optional(),
 });
 
 export const WaffleStageSchema = z.object({
@@ -247,7 +247,7 @@ export const WafflePipelineSchema = z.object({
   apiVersion: z.string().optional().default('waffle.dev/v1'),
   kind: z.string().optional().default('WafflePipeline'),
   metadata: WafflePipelineMetadataSchema,
-  settings: WaffleSettingsSchema.optional().default({}),
+  settings: WaffleSettingsSchema.prefault({}),
   preflight: WafflePreflightSchema,
   keys: WaffleKeysConfigSchema.optional(),
   builds: WaffleBuildsSchema.optional(),
@@ -268,7 +268,7 @@ export function parseWaffleYaml(content: string): WafflePipeline {
   }
   const result = WafflePipelineSchema.safeParse(parsed);
   if (!result.success) {
-    const errorMessages = result.error.errors.map((e) => `${e.path.join('.') || 'root'}: ${e.message}`).join('; ');
+    const errorMessages = result.error.issues.map((e) => `${e.path.join('.') || 'root'}: ${e.message}`).join('; ');
     throw new Error(`Waffle manifest validation failed: ${errorMessages}`);
   }
   return result.data as WafflePipeline;
