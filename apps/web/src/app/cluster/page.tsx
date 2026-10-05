@@ -17,6 +17,7 @@ import {
   Pause,
   LogOut,
   PlayCircle,
+  Key,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useClusterPage } from './useClusterPage';
@@ -24,7 +25,7 @@ import K3sOpsModal from './components/K3sOpsModal';
 
 export default function ClusterPage() {
   const state = useClusterPage();
-  const { canManageCluster, canJoinNodes, cluster, actionLoading, scaling, message, nodeMetrics, k3sLoading, k3sHealth, k3sEtcd, k3sCerts, k3sCis, handleScaleNodes, openK3sModal, handleDrainNode, handleCordonNode, handleUncordonNode, handleAction } = state;
+  const { openSignInPrompt, canManageCluster, canJoinNodes, cluster, actionLoading, scaling, message, nodeMetrics, k3sLoading, k3sHealth, k3sEtcd, k3sCerts, k3sCis, handleScaleNodes, openK3sModal, handleDrainNode, handleCordonNode, handleUncordonNode, handleAction } = state;
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Header */}
@@ -41,19 +42,39 @@ export default function ClusterPage() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => handleAction('start')}
-            disabled={actionLoading || !canManageCluster}
-            title={canManageCluster ? undefined : 'Requires the cluster:manage permission'}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors disabled:opacity-50"
+            onClick={() => {
+              if (!canManageCluster) {
+                openSignInPrompt();
+                return;
+              }
+              handleAction('start');
+            }}
+            disabled={actionLoading}
+            title={canManageCluster ? undefined : 'Requires the cluster:manage permission (click to sign in)'}
+            className={`px-3.5 py-2 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors cursor-pointer ${
+              canManageCluster
+                ? 'bg-emerald-600 hover:bg-emerald-500'
+                : 'bg-emerald-800/70 hover:bg-emerald-700/80 text-emerald-200 border border-emerald-600/40'
+            }`}
           >
             <Play className="w-3.5 h-3.5 fill-white" />
             <span>Create Cluster</span>
           </button>
           <button
-            onClick={() => handleAction('stop')}
-            disabled={actionLoading || !canManageCluster}
-            title={canManageCluster ? undefined : 'Requires the cluster:manage permission'}
-            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors disabled:opacity-50"
+            onClick={() => {
+              if (!canManageCluster) {
+                openSignInPrompt();
+                return;
+              }
+              handleAction('stop');
+            }}
+            disabled={actionLoading}
+            title={canManageCluster ? undefined : 'Requires the cluster:manage permission (click to sign in)'}
+            className={`px-3.5 py-2 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors cursor-pointer ${
+              canManageCluster
+                ? 'bg-rose-600 hover:bg-rose-500'
+                : 'bg-rose-900/60 hover:bg-rose-800/70 text-rose-200 border border-rose-700/40'
+            }`}
           >
             <Square className="w-3.5 h-3.5 fill-white" />
             <span>Delete Cluster</span>
@@ -67,6 +88,24 @@ export default function ClusterPage() {
           </Link>
         </div>
       </div>
+
+      {!canManageCluster && (
+        <div className="p-4 bg-amber-950/40 border border-amber-800/60 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-200">
+          <div className="flex items-center space-x-2.5">
+            <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              Cluster lifecycle controls are locked. You are viewing in read-only mode without the <code className="bg-amber-950/80 border border-amber-800/50 px-1 py-0.5 rounded font-mono">cluster:manage</code> permission.
+            </span>
+          </div>
+          <button
+            onClick={openSignInPrompt}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg shrink-0 transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>Sign In with Token</span>
+          </button>
+        </div>
+      )}
 
       {message && (
         <div className="p-4 bg-sky-950/60 border border-sky-800 text-sky-300 text-sm rounded-lg flex items-center justify-between">
