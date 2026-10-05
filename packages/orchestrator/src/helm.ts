@@ -456,6 +456,6 @@ export async function templateLocalChart(
     const { stdout } = await execAsync(cmd);
     return stdout;
   } catch (err: any) {
-    throw new Error(`Helm template failed: ${err.message}\n${err.stderr || ''}`);
+    throw new Error(`Helm template failed: ${err.message}\n${err.stderr || ''}`, { cause: err });
   }
 }

@@ -64,7 +64,7 @@ async function queryOllama(options: {
     };
   } catch (err: any) {
     clearTimeout(timeout);
-    throw new Error(`Ollama connection error (${baseUrl}): ${err.message}`);
+    throw new Error(`Ollama connection error (${baseUrl}): ${err.message}`, { cause: err });
   }
 }
 
@@ -120,7 +120,7 @@ async function queryVllm(options: {
     };
   } catch (err: any) {
     clearTimeout(timeout);
-    throw new Error(`vLLM connection error (${baseUrl}): ${err.message}`);
+    throw new Error(`vLLM connection error (${baseUrl}): ${err.message}`, { cause: err });
   }
 }
 

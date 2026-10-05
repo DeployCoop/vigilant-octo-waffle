@@ -26,7 +26,7 @@ export class FluxManager {
     const baseFluxPath = path.join(this.projectRoot, 'flux', appName, 'flux.yaml');
     const overrideFluxPath = path.join(this.projectRoot, '.flux_overrides', appName, 'flux.yaml');
 
-    let baseManifest = '';
+    let baseManifest: string;
     let source: 'native' | 'synthesized' = 'native';
 
     if (fs.existsSync(baseFluxPath)) {
@@ -85,7 +85,7 @@ export class FluxManager {
     // get the historical placeholder text.
     const interval = resolved.interval ?? '${THIS_FLUX_INTERVAL:-5m}';
     const branch = resolved.branch ?? '${THIS_FLUX_BRANCH:-main}';
-    let parsed: any = {};
+    let parsed: any;
     try {
       // uniqueKeys off: yq (the bash engine) tolerates duplicate map
       // keys last-wins, and real chart values in this repo use them.

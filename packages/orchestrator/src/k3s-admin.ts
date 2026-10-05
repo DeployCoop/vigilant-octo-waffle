@@ -319,7 +319,7 @@ export async function getK3sNodes(projectRoot: string): Promise<K3sNodeDetail[]>
       }));
 
       const readyCond = conds.find((c: any) => c.type === 'Ready');
-      let status: K3sNodeDetail['status'] = 'Unknown';
+      let status: K3sNodeDetail['status'];
       if (node.spec?.unschedulable) status = 'SchedulingDisabled';
       else if (readyCond?.status === 'True') status = 'Ready';
       else status = 'NotReady';

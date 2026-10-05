@@ -260,7 +260,7 @@ export function loadAuthzStore(
 ): AuthzStoreLoad {
   const file = authzStorePath(projectRoot);
 
-  let mtimeMs: number | null = null;
+  let mtimeMs: number | null;
   try {
     mtimeMs = fs.statSync(file).mtimeMs;
   } catch {

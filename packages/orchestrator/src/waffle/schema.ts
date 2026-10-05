@@ -229,9 +229,13 @@ export const WaffleStepSchema = z.object({
   timeout: z.string().optional().default('5m'),
   domain: z.string().optional(),
   values: z.record(z.string(), z.any()).optional(),
-  set: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  set: z
+    .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+    .optional(),
   healthCheck: WaffleHealthCheckSchema.optional(),
-  keys: z.union([z.record(z.string(), z.string()), WaffleSecretKeySchema]).optional(),
+  keys: z
+    .union([z.record(z.string(), z.string()), WaffleSecretKeySchema])
+    .optional(),
 });
 
 export const WaffleStageSchema = z.object({
@@ -247,6 +251,10 @@ export const WafflePipelineSchema = z.object({
   apiVersion: z.string().optional().default('waffle.dev/v1'),
   kind: z.string().optional().default('WafflePipeline'),
   metadata: WafflePipelineMetadataSchema,
+  // Zod v4: .default() takes the full output type; .prefault({}) feeds {}
+  // through the schema so a missing settings block yields every field's
+  // declared default (v3's .default({}) returned the sparse {} instead,
+  // which only the consumers' || fallbacks papered over).
   settings: WaffleSettingsSchema.prefault({}),
   preflight: WafflePreflightSchema,
   keys: WaffleKeysConfigSchema.optional(),
@@ -268,7 +276,9 @@ export function parseWaffleYaml(content: string): WafflePipeline {
   }
   const result = WafflePipelineSchema.safeParse(parsed);
   if (!result.success) {
-    const errorMessages = result.error.issues.map((e) => `${e.path.join('.') || 'root'}: ${e.message}`).join('; ');
+    const errorMessages = result.error.issues
+      .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+      .join('; ');
     throw new Error(`Waffle manifest validation failed: ${errorMessages}`);
   }
   return result.data as WafflePipeline;
@@ -279,7 +289,7 @@ export function parseWaffleYaml(content: string): WafflePipeline {
  */
 export async function loadWafflePipeline(dirOrFilePath: string): Promise<{ pipeline: WafflePipeline; manifestPath: string; baseDir: string }> {
   let manifestPath = dirOrFilePath;
-  let baseDir = dirOrFilePath;
+  let baseDir: string;
 
   const stat = await fs.promises.stat(dirOrFilePath);
   if (stat.isDirectory()) {
