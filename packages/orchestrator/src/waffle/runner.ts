@@ -643,7 +643,7 @@ spec:
         );
         this.logToRun(`[BUILDS] Imported ${fullTag} into node ${ip}.`);
       } catch (e: any) {
-        throw new Error(`failed to import ${fullTag} into node ${ip}: ${String(e.message).split('\n')[0]}`);
+        throw new Error(`failed to import ${fullTag} into node ${ip}: ${String(e.message).split('\n')[0]}`, { cause: e });
       }
     }
   }

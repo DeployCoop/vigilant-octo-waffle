@@ -61,7 +61,7 @@ export function scaffoldCustomApp(
   fs.mkdirSync(argoDir, { recursive: true });
 
   // Generate ArgoCD Application manifest
-  let sourceBlock = '';
+  let sourceBlock: string;
   if (options.sourceType === 'helm') {
     sourceBlock = `  source:
     repoURL: '${options.repoURL}'

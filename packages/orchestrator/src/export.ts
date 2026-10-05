@@ -25,8 +25,8 @@ export function generateProductionBlueprint(options: BlueprintOptions): Blueprin
     .filter(Boolean);
 
   // 1. main.tf
-  let providerBlock = '';
-  let clusterBlock = '';
+  let providerBlock: string;
+  let clusterBlock: string;
 
   if (provider === 'aws') {
     providerBlock = `terraform {

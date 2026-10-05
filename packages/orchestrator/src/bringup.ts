@@ -150,10 +150,10 @@ export class ClusterBringUpEngine extends EventEmitter {
                   await execAsync(`bash "${k3sUpScript}" --skip-up`, { cwd: root, env: { ...process.env, ...config.raw } });
                   step.message = 'Started K3s cluster engine successfully';
                 } else {
-                  throw new Error('Kubernetes cluster not reachable and src/k3s_up.sh not found');
+                  throw new Error('Kubernetes cluster not reachable and src/k3s_up.sh not found', { cause: err });
                 }
               } else {
-                throw new Error(`Cluster unreachable: ${err.message}`);
+                throw new Error(`Cluster unreachable: ${err.message}`, { cause: err });
               }
             }
             break;

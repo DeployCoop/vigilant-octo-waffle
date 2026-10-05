@@ -90,7 +90,7 @@ export async function deployCertManager(
       output: (stdout + '\n' + stderr).trim(),
     };
   } catch (err: any) {
-    throw new Error(`Cert-Manager installation failed: ${err.message}\n${err.stderr || ''}`);
+    throw new Error(`Cert-Manager installation failed: ${err.message}\n${err.stderr || ''}`, { cause: err });
   }
 }
 
@@ -122,7 +122,7 @@ export async function setupMkcert(
       output: 'Successfully installed mkcert CA secret and ClusterIssuer mkcert-issuer',
     };
   } catch (err: any) {
-    throw new Error(`mkcert setup failed: ${err.message}`);
+    throw new Error(`mkcert setup failed: ${err.message}`, { cause: err });
   }
 }
 
@@ -142,7 +142,7 @@ export async function setupLetsEncrypt(
       output: 'Successfully applied Let\'s Encrypt staging and production ClusterIssuers',
     };
   } catch (err: any) {
-    throw new Error(`Let's Encrypt setup failed: ${err.message}`);
+    throw new Error(`Let's Encrypt setup failed: ${err.message}`, { cause: err });
   }
 }
 
