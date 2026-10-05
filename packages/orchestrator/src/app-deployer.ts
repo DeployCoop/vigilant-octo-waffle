@@ -143,7 +143,7 @@ export function renderAppManifest(
   const baseManifestPath = path.join(root, 'argo', appId, 'argocd.yaml');
   const overridePath = path.join(root, '.argo_overrides', appId, 'argocd.yaml');
 
-  let rawYaml = '';
+  let rawYaml: string;
   if (fs.existsSync(overridePath)) {
     const overrideYaml = fs.readFileSync(overridePath, 'utf-8');
     if (fs.existsSync(baseManifestPath)) {

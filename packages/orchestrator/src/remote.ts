@@ -59,7 +59,7 @@ export function generateQrSvg(data: string, size = 220): string {
   for (let r = 0; r < gridSize; r++) {
     for (let c = 0; c < gridSize; c++) {
       const finder = isFinder(r, c);
-      let isBlack = false;
+      let isBlack: boolean;
 
       if (finder !== null) {
         isBlack = finder;

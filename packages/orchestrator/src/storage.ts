@@ -337,7 +337,7 @@ export async function deployOpenEBS(
   };
 
   let stdout = '';
-  let stderr = '';
+  let stderr: string;
   try {
     const res = await execAsync(cmd, { cwd: projectRoot, env: executionEnv });
     stdout = res.stdout;

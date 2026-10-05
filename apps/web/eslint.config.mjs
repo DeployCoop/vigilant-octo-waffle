@@ -11,6 +11,12 @@ export default [
   ...nextVitals,
   ...nextTs,
   {
+    // Pin the React version: eslint-plugin-react 7.37.5's 'detect' path
+    // calls context.getFilename(), which ESLint 10 removed — version
+    // detection crashes the whole lint run. An explicit version skips it.
+    settings: { react: { version: '19.3.0' } },
+  },
+  {
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
       // New in eslint-plugin-react-hooks v6 (via eslint-config-next 16).
