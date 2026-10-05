@@ -40,7 +40,10 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # --ignore-scripts: the site is standalone (no @vow/orchestrator
+        # dependency), and a plain install would run the orchestrator's
+        # prepare build, coupling this workflow to the engine's health.
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build static export
         env:
