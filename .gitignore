@@ -7,6 +7,8 @@
 .init_overrides
 node_modules/
 .next/
+# apps/githubio static export (deployed to GitHub Pages by workflow)
+apps/githubio/out/
 dist/
 .vow-cache/
 .vow/
