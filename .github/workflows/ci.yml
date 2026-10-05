@@ -73,6 +73,13 @@ jobs:
           sudo curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.44.5/yq_linux_amd64"
           sudo chmod +x /usr/local/bin/yq
 
+      # The TLS helper tests exercise the real `mkcert` binary to
+      # generate a dev certificate, so it must exist.
+      - name: Install mkcert
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/mkcert "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64"
+          sudo chmod +x /usr/local/bin/mkcert
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
