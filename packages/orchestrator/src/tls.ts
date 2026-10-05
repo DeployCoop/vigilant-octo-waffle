@@ -43,7 +43,7 @@ export async function getMkcertCaRoot(): Promise<string> {
     const { stdout } = await execAsync('mkcert -CAROOT');
     return stdout.trim();
   } catch (err: any) {
-    throw new Error(`Failed to query mkcert -CAROOT: ${err.message}`);
+    throw new Error(`Failed to query mkcert -CAROOT: ${err.message}`, { cause: err });
   }
 }
 
@@ -109,7 +109,7 @@ export async function ensureDevCertificate(
     await execAsync(cmd, { cwd: projectRoot });
     fs.chmodSync(keyPath, 0o600);
   } catch (err: any) {
-    throw new Error(`Failed to generate mkcert certificate: ${err.message}`);
+    throw new Error(`Failed to generate mkcert certificate: ${err.message}`, { cause: err });
   }
 
   return {
