@@ -11,11 +11,57 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:${PATH}"
 
 if [[ -f "${SCRIPT_DIR}/default.env" ]]; then
-  set +u
+  set +eu +o pipefail
   # shellcheck source=/dev/null
   source "${SCRIPT_DIR}/default.env"
-  set -u
+  set -euo pipefail
 fi
+
+if [[ -f "${SCRIPT_DIR}/../.env" ]]; then
+  set +eu +o pipefail
+  # shellcheck source=/dev/null
+  source "${SCRIPT_DIR}/../.env"
+  set -euo pipefail
+elif [[ -f "${SCRIPT_DIR}/.env" ]]; then
+  set +eu +o pipefail
+  # shellcheck source=/dev/null
+  source "${SCRIPT_DIR}/.env"
+  set -euo pipefail
+fi
+
+persist_env_var() {
+  local key="$1"
+  local val="$2"
+  local env_file="${SCRIPT_DIR}/../.env"
+  if [[ ! -f "${env_file}" && -f "${SCRIPT_DIR}/.env" ]]; then
+    env_file="${SCRIPT_DIR}/.env"
+  fi
+  if [[ -f "${env_file}" ]]; then
+    if grep -q "^${key}=" "${env_file}"; then
+      sed -i "s|^${key}=.*|${key}=\"${val}\"|" "${env_file}"
+    else
+      echo "${key}=\"${val}\"" >> "${env_file}"
+    fi
+  fi
+}
+
+persist_storage_env() {
+  persist_env_var "THIS_LVM_VG" "${LVM_VG}"
+  if [[ -n "${THIS_LVM_FSTYPE:-}" ]]; then persist_env_var "THIS_LVM_FSTYPE" "${THIS_LVM_FSTYPE}"; fi
+  persist_env_var "THIS_LVM_THIN_PROVISION" "${THIN_PROVISION}"
+  persist_env_var "THIS_LVM_SHARED" "${SHARED_VOL}"
+  if [[ -n "${THIS_OPENEBS_ENGINE_LVM:-}" ]]; then persist_env_var "THIS_OPENEBS_ENGINE_LVM" "${THIS_OPENEBS_ENGINE_LVM}"; fi
+  if [[ -n "${THIS_OPENEBS_ENGINE_HOSTPATH:-}" ]]; then persist_env_var "THIS_OPENEBS_ENGINE_HOSTPATH" "${THIS_OPENEBS_ENGINE_HOSTPATH}"; fi
+  if [[ -n "${THIS_OPENEBS_ENGINE_ZFS:-}" ]]; then persist_env_var "THIS_OPENEBS_ENGINE_ZFS" "${THIS_OPENEBS_ENGINE_ZFS}"; fi
+  if [[ -n "${THIS_OPENEBS_ENGINE_RAWFILE:-}" ]]; then persist_env_var "THIS_OPENEBS_ENGINE_RAWFILE" "${THIS_OPENEBS_ENGINE_RAWFILE}"; fi
+  if [[ -n "${THIS_OPENEBS_ENGINE_MAYASTOR:-}" ]]; then persist_env_var "THIS_OPENEBS_ENGINE_MAYASTOR" "${THIS_OPENEBS_ENGINE_MAYASTOR}"; fi
+  if [[ -n "${THIS_OPENEBS_ENABLE_NATS:-}" ]]; then persist_env_var "THIS_OPENEBS_ENABLE_NATS" "${THIS_OPENEBS_ENABLE_NATS}"; fi
+  if [[ -n "${THIS_OPENEBS_ENABLE_MINIO:-}" ]]; then persist_env_var "THIS_OPENEBS_ENABLE_MINIO" "${THIS_OPENEBS_ENABLE_MINIO}"; fi
+  if [[ -n "${THIS_OPENEBS_ENABLE_LOKI:-}" ]]; then persist_env_var "THIS_OPENEBS_ENABLE_LOKI" "${THIS_OPENEBS_ENABLE_LOKI}"; fi
+  if [[ -n "${THIS_OPENEBS_ENABLE_ALLOY:-}" ]]; then persist_env_var "THIS_OPENEBS_ENABLE_ALLOY" "${THIS_OPENEBS_ENABLE_ALLOY}"; fi
+  if [[ -n "${THIS_OPENEBS_INSTALL_NFS:-}" ]]; then persist_env_var "THIS_OPENEBS_INSTALL_NFS" "${THIS_OPENEBS_INSTALL_NFS}"; fi
+  if [[ -n "${THIS_LVM_IS_DEFAULT_SC:-}" ]]; then persist_env_var "THIS_LVM_IS_DEFAULT_SC" "${THIS_LVM_IS_DEFAULT_SC}"; fi
+}
 
 LONGHORN_VERSION="${LONGHORN_VERSION:-v1.7.1}"
 DEFAULT_REPLICAS="${STORAGE_REPLICAS:-2}"
@@ -335,37 +381,106 @@ cmd_status() {
     local alloy_active=false
     local nfs_active=false
 
+    local hostpath_state="stopped"
+    local lvm_state="stopped"
+    local zfs_state="stopped"
+    local rawfile_state="stopped"
+    local mayastor_state="stopped"
+    local minio_state="stopped"
+    local nats_state="stopped"
+    local loki_state="stopped"
+    local alloy_state="stopped"
+    local nfs_state="stopped"
+
     if kubectl get deployment -n openebs openebs-localpv-provisioner --no-headers 2>/dev/null | grep -q "1/1"; then
       hostpath_active=true
+      hostpath_state="running"
+    elif kubectl get deployment -n openebs openebs-localpv-provisioner >/dev/null 2>&1; then
+      hostpath_state="error"
     fi
+
     if kubectl get pods -n openebs -l app=openebs-lvm-node --no-headers 2>/dev/null | grep -q "Running" || kubectl get csidriver local.csi.openebs.io >/dev/null 2>&1; then
       lvm_active=true
+      lvm_state="running"
+    elif kubectl get pods -n openebs -l app=openebs-lvm-node --no-headers 2>/dev/null | grep -q .; then
+      lvm_state="error"
     fi
+
     if kubectl get pods -n openebs -l app=openebs-zfs-node --no-headers 2>/dev/null | grep -q "Running" || kubectl get csidriver zfs.csi.openebs.io >/dev/null 2>&1; then
       zfs_active=true
+      zfs_state="running"
+    elif kubectl get pods -n openebs -l app=openebs-zfs-node --no-headers 2>/dev/null | grep -q .; then
+      zfs_state="error"
     fi
+
     if kubectl get csidriver rawfile.csi.openebs.io >/dev/null 2>&1; then
       rawfile_active=true
+      rawfile_state="running"
     fi
+
     if kubectl get csidriver io.openebs.csi-mayastor >/dev/null 2>&1; then
       mayastor_active=true
+      mayastor_state="running"
+    elif kubectl get pods -n openebs -l openebs.io/engine=mayastor --no-headers 2>/dev/null | grep -q .; then
+      mayastor_state="error"
     fi
+
     if kubectl get pods -n openebs -l app.kubernetes.io/name=minio --no-headers 2>/dev/null | grep -q "Running" || kubectl get pods -n minio --no-headers 2>/dev/null | grep -q "Running"; then
       minio_active=true
+      minio_state="running"
+    elif kubectl get pods -n openebs -l app.kubernetes.io/name=minio --no-headers 2>/dev/null | grep -q . || kubectl get statefulset -n openebs openebs-minio >/dev/null 2>&1 || kubectl get statefulset -n minio minio >/dev/null 2>&1; then
+      minio_state="error"
     fi
+
     if kubectl get pods -n openebs -l app.kubernetes.io/name=nats --no-headers 2>/dev/null | grep -q "Running"; then
       nats_active=true
+      nats_state="running"
+    elif kubectl get pods -n openebs -l app.kubernetes.io/name=nats --no-headers 2>/dev/null | grep -q . || kubectl get statefulset -n openebs openebs-nats >/dev/null 2>&1; then
+      nats_state="error"
     fi
+
     if kubectl get pods -n openebs -l app=loki --no-headers 2>/dev/null | grep -q "Running"; then
       loki_active=true
+      loki_state="running"
+    elif kubectl get pods -n openebs -l app=loki --no-headers 2>/dev/null | grep -q . || kubectl get statefulset -n openebs openebs-loki >/dev/null 2>&1; then
+      loki_state="error"
     fi
+
     if kubectl get pods -n openebs -l app.kubernetes.io/name=alloy --no-headers 2>/dev/null | grep -q "Running"; then
       alloy_active=true
+      alloy_state="running"
+    elif kubectl get pods -n openebs -l app.kubernetes.io/name=alloy --no-headers 2>/dev/null | grep -q . || kubectl get daemonset -n openebs openebs-alloy >/dev/null 2>&1; then
+      alloy_state="error"
     fi
+
     if kubectl get pods -n nfs-server --no-headers 2>/dev/null | grep -q "Running"; then
       nfs_active=true
+      nfs_state="running"
+    elif kubectl get pods -n nfs-server --no-headers 2>/dev/null | grep -q .; then
+      nfs_state="error"
     fi
   fi
+
+  local cfg_hostpath="true"
+  [[ "${THIS_OPENEBS_ENGINE_HOSTPATH:-true}" == "false" ]] && cfg_hostpath="false"
+  local cfg_lvm="true"
+  [[ "${THIS_OPENEBS_ENGINE_LVM:-true}" == "false" ]] && cfg_lvm="false"
+  local cfg_zfs="false"
+  [[ "${THIS_OPENEBS_ENGINE_ZFS:-false}" == "true" ]] && cfg_zfs="true"
+  local cfg_rawfile="false"
+  [[ "${THIS_OPENEBS_ENGINE_RAWFILE:-false}" == "true" ]] && cfg_rawfile="true"
+  local cfg_mayastor="false"
+  [[ "${THIS_OPENEBS_ENGINE_MAYASTOR:-false}" == "true" ]] && cfg_mayastor="true"
+  local cfg_nats="false"
+  [[ "${THIS_OPENEBS_ENABLE_NATS:-false}" == "true" ]] && cfg_nats="true"
+  local cfg_minio="false"
+  [[ "${THIS_OPENEBS_ENABLE_MINIO:-false}" == "true" ]] && cfg_minio="true"
+  local cfg_loki="false"
+  [[ "${THIS_OPENEBS_ENABLE_LOKI:-false}" == "true" ]] && cfg_loki="true"
+  local cfg_alloy="false"
+  [[ "${THIS_OPENEBS_ENABLE_ALLOY:-false}" == "true" ]] && cfg_alloy="true"
+  local cfg_nfs="false"
+  [[ "${THIS_OPENEBS_INSTALL_NFS:-false}" == "true" ]] && cfg_nfs="true"
 
   local vgs_json="[]"
   if command -v vgs >/dev/null 2>&1; then
@@ -418,6 +533,30 @@ cmd_status() {
     "loki": ${loki_active},
     "alloy": ${alloy_active},
     "nfs": ${nfs_active}
+  },
+  "engineStates": {
+    "hostpath": "${hostpath_state}",
+    "lvm": "${lvm_state}",
+    "zfs": "${zfs_state}",
+    "rawfile": "${rawfile_state}",
+    "mayastor": "${mayastor_state}",
+    "nats": "${nats_state}",
+    "minio": "${minio_state}",
+    "loki": "${loki_state}",
+    "alloy": "${alloy_state}",
+    "nfs": "${nfs_state}"
+  },
+  "configuredEngines": {
+    "hostpath": ${cfg_hostpath},
+    "lvm": ${cfg_lvm},
+    "zfs": ${cfg_zfs},
+    "rawfile": ${cfg_rawfile},
+    "mayastor": ${cfg_mayastor},
+    "nats": ${cfg_nats},
+    "minio": ${cfg_minio},
+    "loki": ${cfg_loki},
+    "alloy": ${cfg_alloy},
+    "nfs": ${cfg_nfs}
   },
   "hostVolumeGroups": ${vgs_json},
   "config": {
@@ -655,6 +794,7 @@ case "${ACTION}" in
     cmd_check_prereqs
     ;;
   install)
+    persist_storage_env
     if [[ "${ENGINE}" == "longhorn" ]]; then
       cmd_install_longhorn
     else
