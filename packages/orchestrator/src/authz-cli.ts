@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import * as readline from 'node:readline/promises';
 import {
   PERMISSIONS,
   ROLES,
@@ -22,6 +23,7 @@ import {
   type Role,
 } from './authz.js';
 import { findProjectRoot } from './config.js';
+import { ensureDevCertificate } from './tls.js';
 
 /**
  * `vow authz` — management CLI for the authorization store (plan §8).
@@ -53,7 +55,8 @@ const defaultIo: AuthzCliIo = {
 const USAGE = `Usage: vow authz <command>
 
 Commands:
-  init [--name <name>]            Create the store and its first owner principal
+  init [--name <name>] [--password <password>] [--token <token>]
+                                  Create the store and its first owner principal
   add <name> [options]            Add a principal (token printed once)
     --role <role>                 ${ROLES.join(' | ')} (default: operator)
     --kind <kind>                 human | service (default: human)
@@ -134,7 +137,19 @@ async function cmdInit(root: string, args: string[], io: AuthzCliIo): Promise<nu
   }
 
   const name = flag(flags, 'name') ?? 'Owner';
-  const token = generatePrincipalToken();
+  let customPassword = flag(flags, 'password') ?? flag(flags, 'token');
+  if (customPassword === 'true') {
+    if (process.stdin.isTTY) {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      customPassword = await rl.question('Enter initial admin password: ');
+      rl.close();
+    } else {
+      io.err('Error: --password requires a value when run non-interactively.');
+      return 1;
+    }
+  }
+
+  const token = customPassword && customPassword.trim() ? customPassword.trim() : generatePrincipalToken();
   const owner: Principal = {
     id: newPrincipalId(createEmptyStore(), name),
     name,
@@ -144,7 +159,18 @@ async function cmdInit(root: string, args: string[], io: AuthzCliIo): Promise<nu
   };
   saveAuthzStore(root, { version: 1, principals: [owner] });
   io.out(`Created authorization store at ${file}`);
-  printTokenOnce(io, owner, token);
+  try {
+    await ensureDevCertificate(root);
+    io.out(`Generated mkcert TLS development certificate in .vow/certs/`);
+  } catch (err: any) {
+    io.out(`Note: TLS dev certificate setup deferred: ${err?.message ?? err}`);
+  }
+  if (customPassword && customPassword.trim()) {
+    io.out(`Principal: ${owner.id} (${owner.name}, role: ${owner.role})`);
+    io.out(`Initial owner password configured successfully.`);
+  } else {
+    printTokenOnce(io, owner, token);
+  }
   return 0;
 }
 

@@ -88,7 +88,19 @@ export const PRINCIPAL_TOKEN_KEY = 'vow_token';
 
 export function readStoredToken(): string | null {
   try {
-    return window.localStorage.getItem(PRINCIPAL_TOKEN_KEY);
+    if (typeof window === 'undefined') return null;
+    const local = window.localStorage.getItem(PRINCIPAL_TOKEN_KEY);
+    if (local && local.trim()) return local.trim();
+    const session = window.sessionStorage.getItem(PRINCIPAL_TOKEN_KEY);
+    if (session && session.trim()) return session.trim();
+    if (typeof document !== 'undefined') {
+      const match = document.cookie.match(/(?:^|;\s*)vow_token=([^;]+)/);
+      if (match && match[1]) {
+        const decoded = decodeURIComponent(match[1]).trim();
+        if (decoded) return decoded;
+      }
+    }
+    return null;
   } catch {
     return null;
   }
@@ -96,8 +108,19 @@ export function readStoredToken(): string | null {
 
 export function storeToken(token: string | null): void {
   try {
-    if (token) window.localStorage.setItem(PRINCIPAL_TOKEN_KEY, token);
-    else window.localStorage.removeItem(PRINCIPAL_TOKEN_KEY);
+    if (token) {
+      window.localStorage.setItem(PRINCIPAL_TOKEN_KEY, token);
+      window.sessionStorage.setItem(PRINCIPAL_TOKEN_KEY, token);
+      if (typeof document !== 'undefined') {
+        document.cookie = `vow_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+      }
+    } else {
+      window.localStorage.removeItem(PRINCIPAL_TOKEN_KEY);
+      window.sessionStorage.removeItem(PRINCIPAL_TOKEN_KEY);
+      if (typeof document !== 'undefined') {
+        document.cookie = `vow_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+      }
+    }
   } catch {
     // Storage unavailable (private mode); the session simply won't persist.
   }

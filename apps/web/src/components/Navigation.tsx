@@ -33,6 +33,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
+import { useAbilityContext } from '@/lib/ability';
 import { AudioToggle } from '@/components/ui/AudioToggle';
 
 const navItems = [
@@ -125,6 +126,7 @@ export function Header() {
   const [currentContext, setCurrentContext] = useState<string>('');
   const [switching, setSwitching] = useState(false);
   const { runningTaskCount, activeTaskId, isMinimized, openTerminal, restoreTerminal } = useTerminal();
+  const { status, principal, openSignInPrompt, signOut } = useAbilityContext();
 
   useEffect(() => {
     fetch('/api/cluster/contexts')
@@ -230,6 +232,33 @@ export function Header() {
           <span>Catalog & Enablers</span>
           <ExternalLink className="w-3 h-3" suppressHydrationWarning />
         </Link>
+
+        {/* Auth State / Sign In Widget */}
+        {status === 'ready' && principal ? (
+          <div className="flex items-center space-x-2 text-xs bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-slate-200 font-medium">{principal.name}</span>
+            <span className="text-[10px] text-sky-400 bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-800/40 uppercase font-mono">
+              {principal.role}
+            </span>
+            <button
+              onClick={() => void signOut()}
+              title="Sign out of this browser"
+              className="text-slate-500 hover:text-rose-400 ml-1 text-[11px] transition-colors cursor-pointer"
+            >
+              Sign out
+            </button>
+          </div>
+        ) : (status === 'unauthenticated' || status === 'unknown-principal') ? (
+          <button
+            onClick={openSignInPrompt}
+            className="text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1.5 rounded-md flex items-center space-x-1.5 transition-colors cursor-pointer"
+            title="Sign in with principal token"
+          >
+            <Key className="w-3.5 h-3.5 text-amber-400" />
+            <span>Sign In</span>
+          </button>
+        ) : null}
       </div>
     </header>
   );

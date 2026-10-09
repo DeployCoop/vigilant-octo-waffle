@@ -29,6 +29,7 @@ interface AbilityContextValue {
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
+  openSignInPrompt: () => void;
 }
 
 const AbilityContext = createContext<AbilityContextValue>({
@@ -38,6 +39,7 @@ const AbilityContext = createContext<AbilityContextValue>({
   signIn: async () => {},
   signOut: async () => {},
   refresh: async () => {},
+  openSignInPrompt: () => {},
 });
 
 export function useAbilityContext(): AbilityContextValue {
@@ -76,6 +78,7 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
   const [principal, setPrincipal] = useState<MePrincipal | null>(null);
   const [ability, setAbility] = useState<ClientAbility>(() => emptyAbility());
   const [promptDismissed, setPromptDismissed] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
   const [tokenDraft, setTokenDraft] = useState('');
   const [signingIn, setSigningIn] = useState(false);
 
@@ -104,9 +107,14 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  const openSignInPrompt = useCallback(() => {
+    setPromptOpen(true);
+  }, []);
+
   const signIn = useCallback(
     async (token: string) => {
       storeToken(token.trim());
+      setPromptOpen(false);
       await refresh();
     },
     [refresh]
@@ -124,12 +132,13 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AbilityContextValue>(
-    () => ({ status, principal, can, signIn, signOut, refresh }),
-    [status, principal, can, signIn, signOut, refresh]
+    () => ({ status, principal, can, signIn, signOut, refresh, openSignInPrompt }),
+    [status, principal, can, signIn, signOut, refresh, openSignInPrompt]
   );
 
   const dismissPrompt = () => {
     setPromptDismissed(true);
+    setPromptOpen(false);
     try {
       window.sessionStorage.setItem(PROMPT_DISMISSED_KEY, '1');
     } catch {
@@ -138,7 +147,7 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
   };
 
   const showPrompt =
-    (status === 'unauthenticated' || status === 'unknown-principal') && !promptDismissed;
+    promptOpen || ((status === 'unauthenticated' || status === 'unknown-principal') && !promptDismissed);
   const hasStoredToken = typeof window !== 'undefined' && readStoredToken() !== null;
 
   return (

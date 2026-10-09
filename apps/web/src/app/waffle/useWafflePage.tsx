@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { apiErrorMessage } from '@/lib/envelope';
+import { readStoredToken } from '@/lib/ability-core';
 
 export interface WafflePipelineMetadata {
   name: string;
@@ -212,7 +213,9 @@ export function useWafflePage() {
 
   // SSE event streaming listener
   useEffect(() => {
-    const eventSource = new EventSource('/api/waffle/stream');
+    const token = readStoredToken();
+    const streamUrl = token ? `/api/waffle/stream?token=${encodeURIComponent(token)}` : '/api/waffle/stream';
+    const eventSource = new EventSource(streamUrl);
 
     eventSource.addEventListener('init', (e: any) => {
       try {
@@ -268,10 +271,71 @@ export function useWafflePage() {
       } catch {}
     });
 
+    eventSource.onerror = () => {
+      // SSE connection error/reconnect: query state via polling
+      fetch('/api/waffle')
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.activeRun) {
+            setActiveRun(d.activeRun);
+            if (d.activeRun.status !== 'running') {
+              setExecuting(false);
+              if (d.activeRun.currentLogLine) {
+                setLiveLogs((prev) => {
+                  const last = prev[prev.length - 1];
+                  return last !== d.activeRun.currentLogLine
+                    ? [...prev.slice(-300), d.activeRun.currentLogLine]
+                    : prev;
+                });
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    };
+
     return () => {
       eventSource.close();
     };
   }, []);
+
+  // Polling heartbeat / fallback while a run is executing to prevent ever getting stuck
+  useEffect(() => {
+    if (!executing) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/waffle');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.activeRun) {
+          setActiveRun(data.activeRun);
+          if (data.activeRun.currentLogLine) {
+            setLiveLogs((prev) => {
+              const last = prev[prev.length - 1];
+              if (last !== data.activeRun.currentLogLine) {
+                return [...prev.slice(-300), data.activeRun.currentLogLine];
+              }
+              return prev;
+            });
+          }
+          if (data.activeRun.status !== 'running') {
+            setExecuting(false);
+            if (data.activeRun.status === 'completed') {
+              setShowCelebration(true);
+            }
+            if (data.history) {
+              setRunHistory(data.history);
+            }
+          }
+        } else {
+          setExecuting(false);
+        }
+      } catch {}
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [executing]);
 
   // Auto-scroll terminal
   useEffect(() => {
