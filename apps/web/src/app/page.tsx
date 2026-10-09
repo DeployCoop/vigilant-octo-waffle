@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Server,
   Play,
@@ -70,6 +71,7 @@ export default function DashboardPage() {
   const [message, setMessage] = useState<string | null>(null);
   const { openTerminal } = useTerminal();
   const { openSignInPrompt } = useAbilityContext();
+  const router = useRouter();
 
   const fetchData = async () => {
     try {
@@ -85,6 +87,10 @@ export default function DashboardPage() {
       setLatencyHistory((prev) => [...prev.slice(-14), latencyMs]);
 
       const clusterData = await clusterRes.json();
+      if (!clusterData?.isRunning && !localStorage.getItem('vow-setup-skipped')) {
+        router.push('/setup');
+        return;
+      }
       const appsData = await appsRes.json();
       setCluster(clusterData);
       setApps(appsData.apps || []);
@@ -532,6 +538,13 @@ export default function DashboardPage() {
             >
               <Play className="w-3 h-3 text-emerald-400" />
               <span>Create Cluster</span>
+            </button>
+            <button
+              onClick={() => router.push('/setup')}
+              className="text-xs px-3 py-1.5 bg-indigo-950/40 hover:bg-indigo-900/50 text-indigo-300 border border-indigo-800/40 rounded-md transition-colors flex items-center space-x-1.5"
+            >
+              <Sparkles className="w-3 h-3 text-indigo-400" />
+              <span>Setup Wizard</span>
             </button>
             <button
               onClick={handleStopCluster}
