@@ -137,7 +137,7 @@ load_remote_host() {
   echo "Configuring kernel modules on remote host: ${host}"
   echo "============================================================"
 
-  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
+  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10" -o "BatchMode=yes")
   if [[ -n "${SSH_KEY}" ]]; then
     ssh_opts+=(-i "${SSH_KEY}")
   fi

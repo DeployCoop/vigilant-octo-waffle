@@ -399,7 +399,7 @@ fi
 # Provision a single target over SSH
 provision_single_node() {
   local target_host="$1"
-  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
+  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10" -o "BatchMode=yes")
   if [[ -n "${SSH_KEY}" ]]; then
     ssh_opts+=(-i "${SSH_KEY}")
   fi
@@ -477,7 +477,7 @@ if [[ ${#TARGETS_LIST[@]} -gt 0 ]]; then
   export SCRIPT_DIR ROLE RESOLVED_SERVER_URL RESOLVED_TOKEN SSH_PORT SSH_KEY DO_TUNE COPY_REGISTRIES REGISTRIES_FILE COPY_KUBECONFIG DRY_RUN
 
   if [[ ${PARALLEL_JOBS} -gt 1 ]] && command -v parallel >/dev/null 2>&1; then
-    printf "%s\n" "${TARGETS_LIST[@]}" | parallel -j "${PARALLEL_JOBS}" run_single_target {}
+    printf "%s\n" "${TARGETS_LIST[@]}" | parallel --line-buffer -j "${PARALLEL_JOBS}" run_single_target {}
   else
     for target in "${TARGETS_LIST[@]}"; do
       run_single_target "${target}"
