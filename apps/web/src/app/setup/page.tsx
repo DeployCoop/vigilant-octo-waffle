@@ -63,7 +63,7 @@ export default function SetupWizard() {
         res = await fetch('/api/cluster/nodes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'scale_k3d', delta: 1 }),
+          body: JSON.stringify({ action: 'k3s_batch_join' }),
         });
       } else if (stepId === 'storage') {
         title = 'Storage Configuration';

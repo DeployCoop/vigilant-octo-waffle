@@ -5,6 +5,7 @@ import {
   getK3sJoinInfo,
   saveK3sJoinScript,
   provisionK3sNodeViaSsh,
+  provisionK3sBatchNodes,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 import { authorizeRequest } from '@/lib/authz';
@@ -72,6 +73,21 @@ export async function POST(req: Request) {
         taints: body.taints,
       }, body.fileName);
       return NextResponse.json({ success: true, ...saved });
+    }
+
+    
+    if (action === 'k3s_batch_join') {
+      const task = provisionK3sBatchNodes(root, {
+        role: body.role || 'agent',
+        targetsFile: body.targetsFile || 'targets',
+        serverUrl: body.serverUrl,
+        token: body.token,
+      });
+      return NextResponse.json({
+        success: true,
+        taskId: task.id,
+        message: `Batch SSH node provisioning dispatched (Task: ${task.id})`,
+      });
     }
 
     if (action === 'k3s_ssh_join') {
