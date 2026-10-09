@@ -21,6 +21,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
+import { useAbilityContext } from '@/lib/ability';
 import { soundFx } from '@/lib/audio';
 import { apiErrorMessage } from '@/lib/envelope';
 import { ClusterTopologyMap } from '@/components/ClusterTopologyMap';
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   const [actionLabel, setActionLabel] = useState<string>('Processing...');
   const [message, setMessage] = useState<string | null>(null);
   const { openTerminal } = useTerminal();
+  const { openSignInPrompt } = useAbilityContext();
 
   const fetchData = async () => {
     try {
@@ -156,6 +158,9 @@ export default function DashboardPage() {
         body: JSON.stringify({ action: 'start' }),
       });
       const data = await res.json();
+      if (res.status === 401 || res.status === 403) {
+        openSignInPrompt();
+      }
       if (data.success) {
         soundFx.playSuccess();
         setMessage(`Cluster creation started (Task ID: ${data.taskId})`);
@@ -182,6 +187,9 @@ export default function DashboardPage() {
     try {
       const res = await fetch('/api/cluster', { method: 'DELETE' });
       const data = await res.json();
+      if (res.status === 401 || res.status === 403) {
+        openSignInPrompt();
+      }
       if (data.success) {
         soundFx.playSuccess();
         setMessage(`Cluster deletion task started (Task ID: ${data.taskId})`);

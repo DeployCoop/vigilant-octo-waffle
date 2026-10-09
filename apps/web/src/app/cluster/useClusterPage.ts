@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { copyToClipboard as copyText } from '@/lib/clipboard';
 import { useTerminal } from '@/context/TerminalContext';
-import { useCan } from '@/lib/ability';
+import { useAbilityContext, useCan } from '@/lib/ability';
 import { apiErrorMessage } from '@/lib/envelope';
 
 interface ClusterData {
@@ -26,6 +26,7 @@ interface ClusterData {
 
 
 export function useClusterPage() {
+  const { openSignInPrompt } = useAbilityContext();
   const canManageCluster = useCan('cluster:manage');
   const canJoinNodes = useCan('cluster:nodes:join');
   const [cluster, setCluster] = useState<ClusterData | null>(null);
@@ -832,7 +833,7 @@ export function useClusterPage() {
   };
 
   return {
-    canManageCluster, canJoinNodes, cluster, setCluster, loading, setLoading, actionLoading, setActionLoading, scaling, setScaling, message, setMessage, nodeMetrics, setNodeMetrics, openTerminal, showK3sModal, setShowK3sModal, k3sRole, setK3sRole, k3sServerUrl, setK3sServerUrl, k3sToken, setK3sToken, k3sNodeName, setK3sNodeName, k3sNodeIp, setK3sNodeIp, k3sLabels, setK3sLabels, k3sSshHost, setK3sSshHost, k3sSshPort, setK3sSshPort, k3sSshKey, setK3sSshKey, k3sBatchTargets, setK3sBatchTargets, k3sTargetsFile, setK3sTargetsFile, k3sParallel, setK3sParallel, k3sTune, setK3sTune, k3sCopyRegistries, setK3sCopyRegistries, k3sCopyKubeconfig, setK3sCopyKubeconfig, k3sRegistriesFile, setK3sRegistriesFile, k3sActiveTab, setK3sActiveTab, k3sJoinInfo, setK3sJoinInfo, k3sLoading, setK3sLoading, copied, setCopied, k3sHealth, setK3sHealth, k3sEtcd, setK3sEtcd, k3sCerts, setK3sCerts, k3sCis, setK3sCis, upgradeVersion, setUpgradeVersion, upgradeDryRun, setUpgradeDryRun, snapshotName, setSnapshotName, k3sVip, setK3sVip, k3sCni, setK3sCni, k3sSecrets, setK3sSecrets, k3sSecurity, setK3sSecurity, k3sStorage, setK3sStorage, k3sMonitoring, setK3sMonitoring, k3sGpu, setK3sGpu, k3sModelCache, setK3sModelCache, k3sHealer, setK3sHealer, k3sDrDrill, setK3sDrDrill, k3sPool, setK3sPool, poolHypervisor, setPoolHypervisor, poolRole, setPoolRole, poolCpu, setPoolCpu, poolMem, setPoolMem, poolDisk, setPoolDisk, fetchK3sProductionData, fetchCluster, fetchNodeMetrics, handleScaleNodes, openK3sModal, copyToClipboard, handleSaveK3sScript, handleSshProvision, handleBatchJoin, handleK3sOp, handleDrainNode, handleCordonNode, handleUncordonNode, handleSnapshotOp, handleTakeSnapshot, handleRotateCerts, handleUpgrade, handleVipSetup, handleVipTeardown, handleCniInstall, handleSecretsRotate, handleSecurityScan, handleStorageInstall, handleMonitoringInstall, handleAlertTest, handleGpuSetup, handleModelCacheSetup, handleBackupSync, handleAirgapBundle, handleHealerRun, handleDrDrillRun, handlePoolProvision, handlePoolDrain, handleAction,
+    openSignInPrompt, canManageCluster, canJoinNodes, cluster, setCluster, loading, setLoading, actionLoading, setActionLoading, scaling, setScaling, message, setMessage, nodeMetrics, setNodeMetrics, openTerminal, showK3sModal, setShowK3sModal, k3sRole, setK3sRole, k3sServerUrl, setK3sServerUrl, k3sToken, setK3sToken, k3sNodeName, setK3sNodeName, k3sNodeIp, setK3sNodeIp, k3sLabels, setK3sLabels, k3sSshHost, setK3sSshHost, k3sSshPort, setK3sSshPort, k3sSshKey, setK3sSshKey, k3sBatchTargets, setK3sBatchTargets, k3sTargetsFile, setK3sTargetsFile, k3sParallel, setK3sParallel, k3sTune, setK3sTune, k3sCopyRegistries, setK3sCopyRegistries, k3sCopyKubeconfig, setK3sCopyKubeconfig, k3sRegistriesFile, setK3sRegistriesFile, k3sActiveTab, setK3sActiveTab, k3sJoinInfo, setK3sJoinInfo, k3sLoading, setK3sLoading, copied, setCopied, k3sHealth, setK3sHealth, k3sEtcd, setK3sEtcd, k3sCerts, setK3sCerts, k3sCis, setK3sCis, upgradeVersion, setUpgradeVersion, upgradeDryRun, setUpgradeDryRun, snapshotName, setSnapshotName, k3sVip, setK3sVip, k3sCni, setK3sCni, k3sSecrets, setK3sSecrets, k3sSecurity, setK3sSecurity, k3sStorage, setK3sStorage, k3sMonitoring, setK3sMonitoring, k3sGpu, setK3sGpu, k3sModelCache, setK3sModelCache, k3sHealer, setK3sHealer, k3sDrDrill, setK3sDrDrill, k3sPool, setK3sPool, poolHypervisor, setPoolHypervisor, poolRole, setPoolRole, poolCpu, setPoolCpu, poolMem, setPoolMem, poolDisk, setPoolDisk, fetchK3sProductionData, fetchCluster, fetchNodeMetrics, handleScaleNodes, openK3sModal, copyToClipboard, handleSaveK3sScript, handleSshProvision, handleBatchJoin, handleK3sOp, handleDrainNode, handleCordonNode, handleUncordonNode, handleSnapshotOp, handleTakeSnapshot, handleRotateCerts, handleUpgrade, handleVipSetup, handleVipTeardown, handleCniInstall, handleSecretsRotate, handleSecurityScan, handleStorageInstall, handleMonitoringInstall, handleAlertTest, handleGpuSetup, handleModelCacheSetup, handleBackupSync, handleAirgapBundle, handleHealerRun, handleDrDrillRun, handlePoolProvision, handlePoolDrain, handleAction,
   };
 }
 

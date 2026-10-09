@@ -255,7 +255,7 @@ export const WafflePipelineSchema = z.object({
   // through the schema so a missing settings block yields every field's
   // declared default (v3's .default({}) returned the sparse {} instead,
   // which only the consumers' || fallbacks papered over).
-  settings: WaffleSettingsSchema.optional().prefault({}),
+  settings: WaffleSettingsSchema.prefault({}),
   preflight: WafflePreflightSchema,
   keys: WaffleKeysConfigSchema.optional(),
   builds: WaffleBuildsSchema.optional(),

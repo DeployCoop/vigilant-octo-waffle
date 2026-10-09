@@ -49,3 +49,4 @@ export * from './ingress.js';
 export * from './storage.js';
 export * from './app-deployer.js';
 export * from './k3s-admin.js';
+export * from './tls.js';

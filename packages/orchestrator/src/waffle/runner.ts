@@ -9,6 +9,7 @@ import { EventEmitter } from 'node:events';
 import { createHmac } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { checkOpenEbsStatus } from '../storage.js';
+import { getChartsDirectory } from '../config.js';
 import { execAsync, getWaffleExecutionEnv } from './shared.js';
 import { type WaffleSecretKey, type WaffleGitSource, type WaffleStep, type WafflePipeline } from './schema.js';
 import { getWaffleRunHistory } from './registry.js';
@@ -676,9 +677,17 @@ spec:
 
         this.logToRun('[PREFLIGHT] OpenEBS not fully detected. Initiating dynamic provisioning...');
         // Check if local openebs chart exists
-        const localOpenEBSChart = path.join(baseDir, 'openebs');
-        if (fs.existsSync(localOpenEBSChart)) {
-          this.logToRun('[PREFLIGHT] Found local OpenEBS chart at ./openebs. Installing via Helm...');
+        const chartsDir = getChartsDirectory(this.projectRoot);
+        const localOpenEBSChart = fs.existsSync(path.join(baseDir, 'openebs'))
+          ? path.join(baseDir, 'openebs')
+          : chartsDir && fs.existsSync(path.join(chartsDir, 'openebs'))
+          ? path.join(chartsDir, 'openebs')
+          : fs.existsSync(path.join(this.projectRoot, 'charts', 'openebs'))
+          ? path.join(this.projectRoot, 'charts', 'openebs')
+          : null;
+
+        if (localOpenEBSChart) {
+          this.logToRun(`[PREFLIGHT] Found local OpenEBS chart at ${localOpenEBSChart}. Installing via Helm...`);
           try {
             await execAsync(`helm upgrade --install openebs ${JSON.stringify(localOpenEBSChart)} --namespace openebs --create-namespace --wait --timeout 5m`);
             this.logToRun('[PREFLIGHT] Successfully deployed OpenEBS Dynamic LocalPV provisioner.');
@@ -739,10 +748,19 @@ spec:
     try {
       // Resolve chart path
       let chartPath = step.chart;
-      if (step.chart.startsWith('.')) {
+      const configuredChartsDir = getChartsDirectory(this.projectRoot);
+      const cleanChartName = step.chart.replace(/^\.\//, '');
+
+      if (path.isAbsolute(step.chart) && fs.existsSync(step.chart)) {
+        chartPath = step.chart;
+      } else if (fs.existsSync(path.resolve(baseDir, step.chart))) {
         chartPath = path.resolve(baseDir, step.chart);
-      } else if (!step.chart.includes('/') && fs.existsSync(path.join(baseDir, step.chart))) {
-        chartPath = path.join(baseDir, step.chart);
+      } else if (configuredChartsDir && fs.existsSync(path.join(configuredChartsDir, cleanChartName))) {
+        chartPath = path.join(configuredChartsDir, cleanChartName);
+      } else if (fs.existsSync(path.join(this.projectRoot, 'charts', cleanChartName))) {
+        chartPath = path.join(this.projectRoot, 'charts', cleanChartName);
+      } else if (step.chart.startsWith('.')) {
+        chartPath = path.resolve(baseDir, step.chart);
       }
 
       const releaseName = step.releaseName || step.id;

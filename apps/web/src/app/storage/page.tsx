@@ -98,6 +98,8 @@ interface OpenEBSData {
   topologyKey?: string;
   topologyNodes?: string[];
   engines?: OpenEBSEngineStatus;
+  engineStates?: Record<string, 'running' | 'error' | 'stopped'>;
+  configuredEngines?: OpenEBSEngineStatus;
   hostVolumeGroups?: HostVolumeGroup[];
   config?: {
     vg: string;
@@ -158,10 +160,11 @@ export default function StoragePage() {
       setPvcs(data.persistentVolumeClaims || []);
       if (data.openEBS) {
         setOpenEBS(data.openEBS);
-        if (data.openEBS.engines) {
+        const enginesToDisplay = data.openEBS.configuredEngines || data.openEBS.engines;
+        if (enginesToDisplay) {
           setToggles((prev) => ({
             ...prev,
-            ...data.openEBS.engines,
+            ...enginesToDisplay,
           }));
         }
         if (data.openEBS.config?.vg) {
@@ -175,6 +178,9 @@ export default function StoragePage() {
         }
         if (data.openEBS.config?.shared) {
           setSharedAccess(data.openEBS.config.shared === 'yes');
+        }
+        if (data.openEBS.config?.isDefaultSc) {
+          setSetAsDefaultSc(data.openEBS.config.isDefaultSc === 'true');
         }
       }
     } catch {
@@ -248,6 +254,31 @@ export default function StoragePage() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const renderEngineBadge = (key: keyof OpenEBSEngineStatus) => {
+    const isRunning = Boolean(openEBS?.engines?.[key]);
+    const state = openEBS?.engineStates?.[key];
+
+    if (isRunning) {
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+          RUNNING
+        </span>
+      );
+    }
+    if (state === 'error') {
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/30 animate-pulse">
+          ERROR
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-slate-800 text-slate-400">
+        STANDBY
+      </span>
+    );
   };
 
   const handleBenchmark = async () => {
@@ -651,15 +682,7 @@ export default function StoragePage() {
                       </div>
                       <span className="text-xs font-bold text-white">LocalPV LVM</span>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
-                        openEBS?.engines?.lvm
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {openEBS?.engines?.lvm ? 'RUNNING' : 'INACTIVE'}
-                    </span>
+                    {renderEngineBadge('lvm')}
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
                     Provisions line-rate NVMe/SSD block storage directly out of Volume Group <strong>{targetVg}</strong>. Zero network latency.
@@ -699,15 +722,7 @@ export default function StoragePage() {
                       </div>
                       <span className="text-xs font-bold text-white">LocalPV Hostpath</span>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
-                        openEBS?.engines?.hostpath
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {openEBS?.engines?.hostpath ? 'RUNNING' : 'INACTIVE'}
-                    </span>
+                    {renderEngineBadge('hostpath')}
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
                     Directory-based local volumes (/var/openebs/local). Currently powers Redis, SeaweedFS, and Supabase.
@@ -747,15 +762,7 @@ export default function StoragePage() {
                       </div>
                       <span className="text-xs font-bold text-white">LocalPV ZFS</span>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
-                        openEBS?.engines?.zfs
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {openEBS?.engines?.zfs ? 'RUNNING' : 'STANDBY'}
-                    </span>
+                    {renderEngineBadge('zfs')}
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
                     Dynamic ZFS dataset provisioner with inline compression, ARC caching, instantaneous snapshots, and quota enforcement.
@@ -795,15 +802,7 @@ export default function StoragePage() {
                       </div>
                       <span className="text-xs font-bold text-white">MinIO Object Store</span>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
-                        openEBS?.engines?.minio
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {openEBS?.engines?.minio ? 'RUNNING' : 'STANDBY'}
-                    </span>
+                    {renderEngineBadge('minio')}
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
                     S3-compatible bucket backend for persistent storage chunking, backups, and app artifacts. Backed by LVM PVs.
@@ -843,15 +842,7 @@ export default function StoragePage() {
                       </div>
                       <span className="text-xs font-bold text-white">NATS Message Bus</span>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
-                        openEBS?.engines?.nats
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {openEBS?.engines?.nats ? 'RUNNING' : 'STANDBY'}
-                    </span>
+                    {renderEngineBadge('nats')}
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
                     High-speed distributed control plane message bus for Mayastor storage controllers and real-time state synchronization.
@@ -891,15 +882,7 @@ export default function StoragePage() {
                       </div>
                       <span className="text-xs font-bold text-white">RWX NFS Provisioner</span>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
-                        openEBS?.engines?.nfs
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {openEBS?.engines?.nfs ? 'RUNNING' : 'STANDBY'}
-                    </span>
+                    {renderEngineBadge('nfs')}
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
                     Multi-Pod ReadWriteMany (RWX) network filesystem server backed by underlying OpenEBS LVM persistent block storage.

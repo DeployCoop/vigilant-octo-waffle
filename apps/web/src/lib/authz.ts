@@ -79,7 +79,7 @@ export const BOOTSTRAP_OWNER_PRINCIPAL: Principal = {
 
 let warnedBootstrapToken = false;
 
-/** Tokens are accepted as `Authorization: Bearer <t>` or `x-vow-token: <t>`. */
+/** Tokens are accepted as `Authorization: Bearer <t>`, `x-vow-token: <t>`, cookie `vow_token=<t>`, or URL query `?token=<t>`. */
 export function extractRequestToken(req: Request): string | null {
   const custom = req.headers.get('x-vow-token');
   if (custom && custom.trim() !== '') return custom.trim();
@@ -88,6 +88,19 @@ export function extractRequestToken(req: Request): string | null {
     const token = auth.substring(7).trim();
     if (token !== '') return token;
   }
+  const cookieHeader = req.headers.get('cookie');
+  if (cookieHeader) {
+    const match = cookieHeader.match(/(?:^|;\s*)vow_token=([^;]+)/);
+    if (match && match[1]) {
+      const decoded = decodeURIComponent(match[1]).trim();
+      if (decoded !== '') return decoded;
+    }
+  }
+  try {
+    const url = new URL(req.url);
+    const queryToken = url.searchParams.get('token');
+    if (queryToken && queryToken.trim() !== '') return queryToken.trim();
+  } catch {}
   return null;
 }
 

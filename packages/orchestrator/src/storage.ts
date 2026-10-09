@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { loadProjectConfig } from './config.js';
+import { loadProjectConfig, getChartsDirectory } from './config.js';
 import { substituteVariables } from './template.js';
 import { applyInitializerDirectory } from './initializer.js';
 import { ensureNamespaceWithSecurity } from './namespaces.js';
@@ -317,18 +317,43 @@ export async function deployOpenEBS(
   const valuesFile = path.join(cacheDir, 'openebs-values.yaml');
   fs.writeFileSync(valuesFile, valuesYaml, 'utf-8');
 
-  // 5. Ensure Helm repository
-  await execAsync('helm repo add openebs https://openebs.github.io/openebs 2>/dev/null || true', { cwd: projectRoot });
-  await execAsync('helm repo update openebs 2>/dev/null || true', { cwd: projectRoot });
+  // 5. Ensure Helm chart target (prefer local curated OpenEBS chart)
+  const chartsDir = getChartsDirectory(projectRoot);
+  const localChart = fs.existsSync(path.join(chartsDir, 'openebs'))
+    ? path.join(chartsDir, 'openebs')
+    : fs.existsSync(path.join(projectRoot, 'charts', 'openebs'))
+    ? path.join(projectRoot, 'charts', 'openebs')
+    : null;
 
-  const releaseName = `openebs-${config.raw.THIS_NAME || 'default'}`;
+  const chartTarget = localChart || 'openebs/openebs';
+  if (!localChart) {
+    await execAsync('helm repo add openebs https://openebs.github.io/openebs 2>/dev/null || true', { cwd: projectRoot });
+    await execAsync('helm repo update openebs 2>/dev/null || true', { cwd: projectRoot });
+  }
+
+  const releaseName = 'openebs';
+  const localSetArgs = localChart ? [
+    `--set basePath=${JSON.stringify(config.raw.THIS_STORAGE_PATH || '/var/openebs/local')}`,
+    `--set hostpath.enabled=${config.raw.THIS_OPENEBS_ENGINE_HOSTPATH !== 'false'}`,
+    `--set hostpath.storageClass.create=${config.raw.THIS_OPENEBS_ENGINE_HOSTPATH !== 'false'}`,
+    `--set hostpath.storageClass.basePath=${JSON.stringify(config.raw.THIS_STORAGE_PATH || '/var/openebs/local')}`,
+    `--set lvm.enabled=${config.raw.THIS_OPENEBS_ENGINE_LVM !== 'false'}`,
+    `--set lvm.volgroup=${JSON.stringify(vg || 'AirVG')}`,
+    `--set lvm.fsType=${JSON.stringify(config.raw.THIS_LVM_FSTYPE || 'ext4')}`,
+    `--set lvm.thinProvision=${JSON.stringify(config.raw.THIS_LVM_THIN_PROVISION || 'no')}`,
+    `--set lvm.shared=${JSON.stringify(config.raw.THIS_LVM_SHARED || 'yes')}`,
+    `--set lvm.storageClass.create=${config.raw.THIS_OPENEBS_ENGINE_LVM !== 'false'}`,
+    `--set lvm.storageClass.name=${JSON.stringify(config.raw.THIS_LVM_STORAGECLASS || 'openebs-lvmpv')}`,
+    `--set lvm.storageClass.isDefaultClass=${config.raw.THIS_LVM_IS_DEFAULT_SC === 'true'}`,
+  ].join(' ') : '';
+
   const cmd = [
-    `helm upgrade --install ${JSON.stringify(releaseName)} openebs/openebs`,
+    `helm upgrade --install ${JSON.stringify(releaseName)} ${JSON.stringify(chartTarget)}`,
     `--namespace ${JSON.stringify(namespace)}`,
     '--create-namespace',
     `--timeout ${JSON.stringify(timeout)}`,
-    `-f ${JSON.stringify(valuesFile)}`,
-  ].join(' ');
+    localChart ? localSetArgs : `-f ${JSON.stringify(valuesFile)}`,
+  ].filter(Boolean).join(' ');
 
   const executionEnv: NodeJS.ProcessEnv = {
     ...process.env,
