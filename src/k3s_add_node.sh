@@ -95,8 +95,13 @@ resolve_server_url() {
     return 0
   fi
 
-  if [[ -f "${PROJECT_ROOT}/server_url" ]]; then
-    echo "https://$(cat "${PROJECT_ROOT}/server_url"):6443"
+    if [[ -f "${PROJECT_ROOT}/server_url" ]]; then
+    local SU=$(cat "${PROJECT_ROOT}/server_url")
+    if [[ ! "${SU}" =~ ^https?:// ]]; then
+      echo "https://${SU}:6443"
+    else
+      echo "${SU}"
+    fi
     return 0
   fi
 
