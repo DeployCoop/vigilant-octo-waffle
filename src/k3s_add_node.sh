@@ -95,6 +95,11 @@ resolve_server_url() {
     return 0
   fi
 
+  if [[ -f "${PROJECT_ROOT}/server_url" ]]; then
+    echo "https://$(cat "${PROJECT_ROOT}/server_url"):6443"
+    return 0
+  fi
+
   if [[ -n "${THIS_K3S_SERVER_IP:-}" ]]; then
     echo "https://${THIS_K3S_SERVER_IP}:6443"
     return 0

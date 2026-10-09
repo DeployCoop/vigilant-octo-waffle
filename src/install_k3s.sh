@@ -84,6 +84,9 @@ chmod 700 ${SERVER_FILE}
 echo "============================================================"
 echo "K3s Primary Server Initialized Successfully!"
 echo "Server Endpoint : https://${THIS_IP}:6443"
+
+# Save server IP for join operations
+echo "${THIS_IP}" > "${PROJECT_ROOT}/server_url"
 echo "Join Token Saved: ./.secrets/k3s_token"
 echo ""
 echo "To join worker nodes, run:"

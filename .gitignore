@@ -24,3 +24,4 @@ dist/
 # CI checkouts silently lack them and the golden comparisons drift.)
 !packages/orchestrator/src/__tests__/fixtures/parity/
 !packages/orchestrator/src/__tests__/fixtures/parity/**
+server_url
