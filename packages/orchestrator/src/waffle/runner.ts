@@ -263,7 +263,7 @@ export class WaffleRunner extends EventEmitter {
    */
   private deriveSupabaseJwt(envVar: string): string | undefined {
     const role = envVar === 'SUPABASE_ANON_KEY' ? 'anon' : envVar === 'SUPABASE_SERVICE_ROLE_KEY' ? 'service_role' : undefined;
-    const secret = process.env.SUPABASE_JWT_SECRET;
+    const secret = process.env.SUPABASE_JWT_SECRET || this.loadProjectEnvFiles()['SUPABASE_JWT_SECRET'];
     if (!role || !secret) return undefined;
     const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
     const now = Math.floor(Date.now() / 1000);
@@ -297,7 +297,13 @@ export class WaffleRunner extends EventEmitter {
           // (e.g. *_change_me) must not reach a cluster.
           secretData[k] = String(v).replace(/\$\{([a-zA-Z0-9_]+)\}/g, (_m, envVar: string) => {
             const fromEnv = process.env[envVar] ?? this.loadProjectEnvFiles()[envVar];
-            if (fromEnv !== undefined && fromEnv !== '') return fromEnv;
+            if (fromEnv !== undefined && fromEnv !== '') {
+              if (envVar === 'SUPABASE_ANON_KEY' || envVar === 'SUPABASE_SERVICE_ROLE_KEY') {
+                if (fromEnv.split('.').length === 3) return fromEnv;
+              } else {
+                return fromEnv;
+              }
+            }
             const derived = this.deriveSupabaseJwt(envVar);
             if (derived) return derived;
             missing.add(envVar);
@@ -552,6 +558,15 @@ spec:
       labels:
         app: registry
     spec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
       containers:
         - name: registry
           image: registry:2
