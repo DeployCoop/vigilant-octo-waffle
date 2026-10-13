@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { checkOpenEbsStatus } from '../storage.js';
 import { getChartsDirectory } from '../config.js';
 import { execAsync, getWaffleExecutionEnv } from './shared.js';
-import { type WaffleSecretKey, type WaffleGitSource, type WaffleStep, type WafflePipeline } from './schema.js';
+import { type WaffleSecretKey, type WaffleGitSource, type WaffleStep, type WafflePipeline, type WaffleBuildTarget } from './schema.js';
 import { getWaffleRunHistory } from './registry.js';
 
 // ============================================================================
@@ -410,111 +410,135 @@ export class WaffleRunner extends EventEmitter {
     await this.ensureLocalRegistry(registry);
 
     for (const target of pipeline.builds.targets) {
-      const contextPath = path.resolve(baseDir, target.context);
-
-      // 1. Auto-clone or pull from Git if target.git is defined
-      if (target.git) {
-        const gitConfig: WaffleGitSource =
-          typeof target.git === 'string' ? { repo: target.git } : target.git;
-        const cloneDir = gitConfig.dir ? path.resolve(baseDir, gitConfig.dir) : contextPath;
-
-        try {
-          const hasGit = fs.existsSync(path.join(cloneDir, '.git'));
-          const isEmpty = !fs.existsSync(cloneDir) || fs.readdirSync(cloneDir).length === 0;
-
-          if (isEmpty) {
-            let repoUrl = gitConfig.repo;
-            // Convert git@github.com:org/repo.git to https://github.com/org/repo.git if SSH key is absent
-            if (repoUrl.startsWith('git@github.com:')) {
-              repoUrl = repoUrl.replace('git@github.com:', 'https://github.com/');
-            }
-
-            this.logToRun(`[BUILDS] Target "${target.name}": Cloning repository from ${repoUrl}...`);
-            fs.mkdirSync(path.dirname(cloneDir), { recursive: true });
-
-            const branchArg = gitConfig.branch ? `-b ${JSON.stringify(gitConfig.branch)}` : '';
-            const depthArg = gitConfig.depth && !gitConfig.commit ? `--depth ${gitConfig.depth}` : '';
-            const submodulesArg = gitConfig.submodules ? '--recurse-submodules' : '';
-
-            const cloneCmd = `git clone ${branchArg} ${depthArg} ${submodulesArg} ${JSON.stringify(repoUrl)} ${JSON.stringify(cloneDir)}`.replace(/\s+/g, ' ');
-            await execAsync(cloneCmd);
-
-            if (gitConfig.commit) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.commit)}`);
-            } else if (gitConfig.tag) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout tags/${JSON.stringify(gitConfig.tag)}`);
-            }
-            this.logToRun(`[BUILDS] Target "${target.name}": Repository successfully cloned into ${cloneDir}.`);
-          } else if (hasGit) {
-            this.logToRun(`[BUILDS] Target "${target.name}": Existing repository detected at ${cloneDir}; fetching updates...`);
-            await execAsync(`git -C ${JSON.stringify(cloneDir)} fetch --tags`).catch(() => {});
-            if (gitConfig.branch) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.branch)}`).catch(() => {});
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} pull origin ${JSON.stringify(gitConfig.branch)}`).catch(() => {});
-            } else if (gitConfig.commit) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.commit)}`).catch(() => {});
-            } else if (gitConfig.tag) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout tags/${JSON.stringify(gitConfig.tag)}`).catch(() => {});
-            }
-          }
-        } catch (gitErr: any) {
-          this.logToRun(`[BUILDS] Warning: Git operation for target "${target.name}" failed: ${gitErr.message}`);
-        }
-      }
-
-      const dockerfilePath = target.dockerfile ? path.resolve(contextPath, target.dockerfile) : path.join(contextPath, 'Dockerfile');
-      const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
-
-      this.logToRun(`[BUILDS] Building target "${target.name}" -> ${fullTag}...`);
       try {
-        const buildArgs = ['build', '-t', fullTag];
-        if (target.dockerfile) {
-          buildArgs.push('-f', dockerfilePath);
-        }
-        buildArgs.push(contextPath);
-
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn('docker', buildArgs);
-          proc.stdout?.on('data', (d) => {
-            const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
-            for (const line of lines) {
-              this.logToRun(`[DOCKER] [${target.name}] ${line}`);
-            }
-          });
-          proc.stderr?.on('data', (d) => {
-            const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
-            for (const line of lines) {
-              this.logToRun(`[DOCKER] [${target.name}] ${line}`);
-            }
-          });
-          proc.on('close', (code) => {
-            if (code === 0) resolve();
-            else reject(new Error(`docker build exited with code ${code}`));
-          });
-          proc.on('error', reject);
-        });
-
-        // Push to the in-cluster/local registry when it is reachable (best effort; the
-        // containerd import below is what guarantees the cluster can run the image).
-        this.logToRun(`[BUILDS] Pushing image ${fullTag}...`);
-        await execAsync(`docker push --tls-verify=false ${JSON.stringify(fullTag)}`).catch(async () => {
-          await execAsync(`docker push ${JSON.stringify(fullTag)}`).catch((pushErr) => {
-            this.logToRun(`[BUILDS] Notice: Registry push to "${registry}" skipped or unavailable: ${String(pushErr.message).split('\n')[0]}`);
-          });
-        });
-
-        // MANDATORY: make the image available to every cluster node's containerd.
-        await this.importImageToCluster(target, fullTag);
-
-        this.logToRun(`[BUILDS] Target "${target.name}" successfully built and published.`);
-      } catch (err: any) {
+        await this.buildSingleTarget(target, baseDir, registry, dryRun);
+      } catch {
         failedTargets.push(target.name);
-        this.logToRun(`[BUILDS] ERROR: Build/import for target "${target.name}" failed: ${err.message}`);
       }
     }
 
     if (failedTargets.length > 0) {
       throw new Error(`Image build/import failed for target(s): ${failedTargets.join(', ')}`);
+    }
+  }
+
+  /**
+   * Builds, tags, pushes, and cluster-imports a single container image target
+   */
+  public async buildSingleTarget(
+    target: WaffleBuildTarget,
+    baseDir: string,
+    registry: string = 'localhost:5001',
+    dryRun?: boolean
+  ): Promise<void> {
+    const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
+    const contextPath = path.resolve(baseDir, target.context);
+
+    if (dryRun) {
+      const gitInfo = target.git ? ` (git: ${typeof target.git === 'string' ? target.git : target.git.repo})` : '';
+      this.logToRun(`[BUILDS] [DRY-RUN] Target "${target.name}" -> ${fullTag} (context: ${target.context})${gitInfo} simulated.`);
+      return;
+    }
+
+    await this.ensureLocalRegistry(registry);
+
+    // 1. Auto-clone or pull from Git if target.git is defined
+    if (target.git) {
+      const gitConfig: WaffleGitSource =
+        typeof target.git === 'string' ? { repo: target.git } : target.git;
+      const cloneDir = gitConfig.dir ? path.resolve(baseDir, gitConfig.dir) : contextPath;
+
+      try {
+        const hasGit = fs.existsSync(path.join(cloneDir, '.git'));
+        const isEmpty = !fs.existsSync(cloneDir) || fs.readdirSync(cloneDir).length === 0;
+
+        if (isEmpty) {
+          let repoUrl = gitConfig.repo;
+          // Convert git@github.com:org/repo.git to https://github.com/org/repo.git if SSH key is absent
+          if (repoUrl.startsWith('git@github.com:')) {
+            repoUrl = repoUrl.replace('git@github.com:', 'https://github.com/');
+          }
+
+          this.logToRun(`[BUILDS] Target "${target.name}": Cloning repository from ${repoUrl}...`);
+          fs.mkdirSync(path.dirname(cloneDir), { recursive: true });
+
+          const branchArg = gitConfig.branch ? `-b ${JSON.stringify(gitConfig.branch)}` : '';
+          const depthArg = gitConfig.depth && !gitConfig.commit ? `--depth ${gitConfig.depth}` : '';
+          const submodulesArg = gitConfig.submodules ? '--recurse-submodules' : '';
+
+          const cloneCmd = `git clone ${branchArg} ${depthArg} ${submodulesArg} ${JSON.stringify(repoUrl)} ${JSON.stringify(cloneDir)}`.replace(/\s+/g, ' ');
+          await execAsync(cloneCmd);
+
+          if (gitConfig.commit) {
+            await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.commit)}`);
+          } else if (gitConfig.tag) {
+            await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout tags/${JSON.stringify(gitConfig.tag)}`);
+          }
+          this.logToRun(`[BUILDS] Target "${target.name}": Repository successfully cloned into ${cloneDir}.`);
+        } else if (hasGit) {
+          this.logToRun(`[BUILDS] Target "${target.name}": Existing repository detected at ${cloneDir}; fetching updates...`);
+          await execAsync(`git -C ${JSON.stringify(cloneDir)} fetch --tags`).catch(() => {});
+          if (gitConfig.branch) {
+            await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.branch)}`).catch(() => {});
+            await execAsync(`git -C ${JSON.stringify(cloneDir)} pull origin ${JSON.stringify(gitConfig.branch)}`).catch(() => {});
+          } else if (gitConfig.commit) {
+            await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.commit)}`).catch(() => {});
+          } else if (gitConfig.tag) {
+            await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout tags/${JSON.stringify(gitConfig.tag)}`).catch(() => {});
+          }
+        }
+      } catch (gitErr: any) {
+        this.logToRun(`[BUILDS] Warning: Git operation for target "${target.name}" failed: ${gitErr.message}`);
+      }
+    }
+
+    const dockerfilePath = target.dockerfile ? path.resolve(contextPath, target.dockerfile) : path.join(contextPath, 'Dockerfile');
+
+    this.logToRun(`[BUILDS] Building target "${target.name}" -> ${fullTag}...`);
+    try {
+      const buildArgs = ['build', '-t', fullTag];
+      if (target.dockerfile) {
+        buildArgs.push('-f', dockerfilePath);
+      }
+      buildArgs.push(contextPath);
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn('docker', buildArgs);
+        proc.stdout?.on('data', (d) => {
+          const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
+          for (const line of lines) {
+            this.logToRun(`[DOCKER] [${target.name}] ${line}`);
+          }
+        });
+        proc.stderr?.on('data', (d) => {
+          const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
+          for (const line of lines) {
+            this.logToRun(`[DOCKER] [${target.name}] ${line}`);
+          }
+        });
+        proc.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`docker build exited with code ${code}`));
+        });
+        proc.on('error', reject);
+      });
+
+      // Push to the in-cluster/local registry when it is reachable (best effort; the
+      // containerd import below is what guarantees the cluster can run the image).
+      this.logToRun(`[BUILDS] Pushing image ${fullTag}...`);
+      await execAsync(`docker push --tls-verify=false ${JSON.stringify(fullTag)}`).catch(async () => {
+        await execAsync(`docker push ${JSON.stringify(fullTag)}`).catch((pushErr) => {
+          this.logToRun(`[BUILDS] Notice: Registry push to "${registry}" skipped or unavailable: ${String(pushErr.message).split('\n')[0]}`);
+        });
+      });
+
+      // MANDATORY: make the image available to every cluster node's containerd.
+      await this.importImageToCluster(target, fullTag);
+
+      this.logToRun(`[BUILDS] Target "${target.name}" successfully built and published.`);
+    } catch (err: any) {
+      this.logToRun(`[BUILDS] ERROR: Build/import for target "${target.name}" failed: ${err.message}`);
+      throw err;
     }
   }
 

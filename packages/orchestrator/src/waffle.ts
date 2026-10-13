@@ -9,4 +9,5 @@ export * from './waffle/runner.js';
 export * from './waffle/history.js';
 export * from './waffle/registry.js';
 export * from './waffle/instances.js';
+export * from './waffle/watcher.js';
 export { getWaffleExecutionEnv } from './waffle/shared.js';

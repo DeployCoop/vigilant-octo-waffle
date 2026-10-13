@@ -17,6 +17,12 @@ PIPELINE_FILE=""
 ENV_FILE=""
 DRY_RUN=false
 VERBOSE=false
+INTERVAL=""
+TARGETS=""
+ONCE=false
+FETCH=false
+NO_DEPLOY=false
+UMBRELLA=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,6 +37,30 @@ while [[ $# -gt 0 ]]; do
     --env-file)
       ENV_FILE="${2:-}"
       shift 2 || { echo "Error: --env-file requires a path" >&2; exit 1; }
+      ;;
+    --interval)
+      INTERVAL="${2:-}"
+      shift 2 || { echo "Error: --interval requires a number" >&2; exit 1; }
+      ;;
+    --targets)
+      TARGETS="${2:-}"
+      shift 2 || { echo "Error: --targets requires target names" >&2; exit 1; }
+      ;;
+    --once)
+      ONCE=true
+      shift
+      ;;
+    --fetch)
+      FETCH=true
+      shift
+      ;;
+    --no-deploy)
+      NO_DEPLOY=true
+      shift
+      ;;
+    --umbrella)
+      UMBRELLA=true
+      shift
       ;;
     -h|--help)
       ACTION="help"
@@ -48,15 +78,23 @@ done
 if [[ "${ACTION}" == "help" || -z "${ACTION}" ]]; then
   echo "Usage: ./up waffle:run <pipeline.yaml> [options]"
   echo "       ./up waffle:validate <pipeline.yaml>"
+  echo "       ./up waffle:watch [pipeline.yaml] [options]"
   echo "       ./up waffle:blueprints"
   echo ""
   echo "Commands:"
   echo "  waffle:run <file>         Execute a multi-stage Waffle meta-package pipeline"
   echo "  waffle:validate <file>    Validate pipeline syntax, dependencies, and parameters"
+  echo "  waffle:watch [file]       Watch repos for updates, sync charts, rebuild & deploy"
   echo "  waffle:blueprints         List built-in community blueprints"
   echo ""
   echo "Options:"
   echo "  --dry-run                 Simulate step execution without modifying cluster"
+  echo "  --interval <seconds>      Polling interval in seconds for watch mode (default: 5)"
+  echo "  --once                    Run a single check pass and exit"
+  echo "  --targets <names>         Comma-separated target names to watch (e.g. monitaur,fitdjinn)"
+  echo "  --fetch                   Fetch remote git changes during watch loop"
+  echo "  --no-deploy               Skip automatic rollout after rebuilding container images"
+  echo "  --umbrella                Update umbrella chart dependencies after builds"
   echo "  --env-file <path>         Load secrets from a dotenv file (default: .env.production,"
   echo "                            then .env, in the pipeline dir or current dir)"
   echo "  --verbose, -v             Display verbose step logs"
@@ -195,6 +233,17 @@ case "${ACTION}" in
         process.exit(1);
       });
     "
+    ;;
+  watch)
+    WATCH_ARGS=()
+    if [[ "${DRY_RUN}" == "true" ]]; then WATCH_ARGS+=(--dry-run); fi
+    if [[ -n "${INTERVAL}" ]]; then WATCH_ARGS+=(--interval "${INTERVAL}"); fi
+    if [[ -n "${TARGETS}" ]]; then WATCH_ARGS+=(--targets "${TARGETS}"); fi
+    if [[ "${ONCE}" == "true" ]]; then WATCH_ARGS+=(--once); fi
+    if [[ "${FETCH}" == "true" ]]; then WATCH_ARGS+=(--fetch); fi
+    if [[ "${NO_DEPLOY}" == "true" ]]; then WATCH_ARGS+=(--no-deploy); fi
+    if [[ "${UMBRELLA}" == "true" ]]; then WATCH_ARGS+=(--umbrella); fi
+    exec "${WORKSPACE_ROOT}/bin/vow" waffle watch "${PIPELINE_FILE}" "${WATCH_ARGS[@]}"
     ;;
   *)
     echo "Unknown waffle action: ${ACTION}" >&2
