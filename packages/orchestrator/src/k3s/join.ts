@@ -445,5 +445,18 @@ export function provisionK3sBatchNodes(projectRoot: string, options: K3sBatchPro
     }
   }
 
-  return processManager.runCommand('bash', args, { cwd: projectRoot });
+  let serverUrlEnv = process.env.SERVER_URL;
+  try {
+    const serverUrlFile = path.join(projectRoot, 'server_url');
+    if (fs.existsSync(serverUrlFile)) {
+      serverUrlEnv = fs.readFileSync(serverUrlFile, 'utf8').trim();
+    }
+  } catch {
+    // ignore read errors
+  }
+
+  return processManager.runCommand('bash', args, { 
+    cwd: projectRoot,
+    env: { ...process.env, ...(serverUrlEnv ? { SERVER_URL: serverUrlEnv } : {}) }
+  });
 }

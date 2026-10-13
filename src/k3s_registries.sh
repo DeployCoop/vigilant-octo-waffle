@@ -161,7 +161,7 @@ deploy_remote() {
   echo "Deploying registries.yaml to remote host: ${host}"
   echo "============================================================"
 
-  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
+  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10" -o "BatchMode=yes")
   if [[ -n "${SSH_KEY}" ]]; then
     ssh_opts+=(-i "${SSH_KEY}")
   fi
