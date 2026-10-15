@@ -12,6 +12,7 @@ import {
   upsertPrincipal,
   removePrincipal,
   generatePrincipalToken,
+  hashPassword,
   hashToken,
   findPrincipalByToken,
   decide,
@@ -149,13 +150,15 @@ async function cmdInit(root: string, args: string[], io: AuthzCliIo): Promise<nu
     }
   }
 
-  const token = customPassword && customPassword.trim() ? customPassword.trim() : generatePrincipalToken();
+  const hasCustomPassword = Boolean(customPassword && customPassword.trim());
+  const token = hasCustomPassword ? customPassword!.trim() : generatePrincipalToken();
   const owner: Principal = {
     id: newPrincipalId(createEmptyStore(), name),
     name,
     kind: 'human',
     role: 'owner',
-    tokenHash: hashToken(token),
+    // A human-chosen password gets the scrypt scheme; a generated token sha256.
+    tokenHash: hasCustomPassword ? hashPassword(token) : hashToken(token),
   };
   saveAuthzStore(root, { version: 1, principals: [owner] });
   io.out(`Created authorization store at ${file}`);

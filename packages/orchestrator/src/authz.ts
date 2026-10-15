@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AbilityBuilder, createMongoAbility, type MongoAbility } from '@casl/ability';
@@ -498,8 +498,35 @@ export function hashToken(token: string): string {
   return TOKEN_HASH_PREFIX + createHash('sha256').update(token).digest('hex');
 }
 
+export const PASSWORD_HASH_PREFIX = 'scrypt:';
+const SCRYPT_KEYLEN = 32;
+
+/**
+ * Hashes a human-chosen password for storage (`scrypt:<saltHex>:<hashHex>`).
+ * Passwords are low-entropy, so they get a memory-hard KDF; generated
+ * principal tokens are 256-bit random and keep the fast sha256 scheme
+ * (see hashToken). verifyTokenHash dispatches on the stored prefix, so
+ * existing sha256-stored credentials keep verifying.
+ */
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const derived = scryptSync(password, salt, SCRYPT_KEYLEN);
+  return PASSWORD_HASH_PREFIX + salt.toString('hex') + ':' + derived.toString('hex');
+}
+
+function verifyPasswordHash(password: string, stored: string): boolean {
+  const parts = stored.slice(PASSWORD_HASH_PREFIX.length).split(':');
+  if (parts.length !== 2) return false;
+  const salt = Buffer.from(parts[0], 'hex');
+  const expected = Buffer.from(parts[1], 'hex');
+  if (salt.length === 0 || expected.length !== SCRYPT_KEYLEN) return false;
+  const actual = scryptSync(password, salt, SCRYPT_KEYLEN);
+  return timingSafeEqual(expected, actual);
+}
+
 /** Constant-time check of a presented token against a stored hash. */
 export function verifyTokenHash(token: string, tokenHash: string): boolean {
+  if (tokenHash.startsWith(PASSWORD_HASH_PREFIX)) return verifyPasswordHash(token, tokenHash);
   if (!tokenHash.startsWith(TOKEN_HASH_PREFIX)) return false;
   const expected = Buffer.from(tokenHash.slice(TOKEN_HASH_PREFIX.length), 'hex');
   const actual = createHash('sha256').update(token).digest();

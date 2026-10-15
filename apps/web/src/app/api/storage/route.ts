@@ -7,14 +7,21 @@ import {
   snapshotK3sVolume,
   loadProjectConfig,
   saveEnvFile,
+  execFileAsync,
+  isK8sLabel,
+  isK8sObjectName,
 } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+/** Kubernetes label key: optional DNS-subdomain prefix + '/' + label name. */
+function isValidLabelKey(key: string): boolean {
+  const parts = key.split('/');
+  if (parts.length === 1) return isK8sLabel(parts[0]);
+  if (parts.length === 2) return isK8sObjectName(parts[0]) && isK8sLabel(parts[1]);
+  return false;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -157,7 +164,10 @@ export async function POST(req: Request) {
     if (action === 'label-nodes') {
       const key = body.key || 'openebs.io/lvm';
       const val = body.value || 'true';
-      await execAsync(`kubectl label nodes --all ${key}=${val} --overwrite`);
+      if (!isValidLabelKey(String(key)) || !isK8sLabel(String(val))) {
+        return apiError(400, 'Invalid label key or value');
+      }
+      await execFileAsync('kubectl', ['label', 'nodes', '--all', `${key}=${val}`, '--overwrite']);
       return NextResponse.json({
         success: true,
         message: `Cluster nodes successfully labeled with ${key}=${val}`,
@@ -169,14 +179,30 @@ export async function POST(req: Request) {
       if (!targetSc) {
         return apiError(400, 'StorageClass name required');
       }
-      // Remove default annotation from any existing default SCs
-      await execAsync(
-        `kubectl get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\\.kubernetes\\.io/is-default-class=="true")].metadata.name}' | xargs -r -n1 kubectl annotate sc --overwrite storageclass.kubernetes.io/is-default-class=false`
-      ).catch(() => {});
+      if (!isK8sObjectName(String(targetSc))) {
+        return apiError(400, 'Invalid StorageClass name');
+      }
+      // Remove default annotation from any existing default SCs (best effort)
+      try {
+        const { stdout } = await execFileAsync('kubectl', ['get', 'sc', '-o', 'json']);
+        const parsed = JSON.parse(stdout);
+        for (const item of parsed.items ?? []) {
+          const name = item?.metadata?.name;
+          const isDefault =
+            item?.metadata?.annotations?.['storageclass.kubernetes.io/is-default-class'] === 'true';
+          if (name && isDefault && name !== targetSc) {
+            await execFileAsync('kubectl', [
+              'annotate', 'sc', name, '--overwrite',
+              'storageclass.kubernetes.io/is-default-class=false',
+            ]).catch(() => {});
+          }
+        }
+      } catch {}
       // Set default on the target SC
-      await execAsync(
-        `kubectl annotate sc ${targetSc} --overwrite storageclass.kubernetes.io/is-default-class=true`
-      );
+      await execFileAsync('kubectl', [
+        'annotate', 'sc', targetSc, '--overwrite',
+        'storageclass.kubernetes.io/is-default-class=true',
+      ]);
       const cfg = loadProjectConfig(root);
       const isLvmDefault = targetSc === (cfg.raw['THIS_LVM_STORAGECLASS'] || 'openebs-lvmpv');
       saveEnvFile(root, {

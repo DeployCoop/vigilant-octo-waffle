@@ -5,6 +5,7 @@ import {
   upsertPrincipal,
   createEmptyStore,
   generatePrincipalToken,
+  hashPassword,
   hashToken,
   ensureDevCertificate,
   type Principal,
@@ -75,7 +76,8 @@ export async function POST(req: Request) {
     name,
     kind: 'human',
     role: 'owner',
-    tokenHash: hashToken(token),
+    // A human-chosen password gets the scrypt scheme; a generated token sha256.
+    tokenHash: customPassword ? hashPassword(customPassword) : hashToken(token),
   };
 
   const next = upsertPrincipal(store, owner);

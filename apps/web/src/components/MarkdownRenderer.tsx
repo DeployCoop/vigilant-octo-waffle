@@ -4,6 +4,27 @@ import React, { useState } from 'react';
 import { Copy, Check, Play, Terminal, GitCompare } from 'lucide-react';
 import { copyToClipboard } from '@/lib/clipboard';
 
+/**
+ * Whether a markdown link target is safe to render as an href. Allows
+ * http/https/mailto and scheme-less (relative, anchor, query) targets;
+ * blocks script-bearing schemes (javascript:, data:, vbscript:, ...).
+ */
+function isSafeMarkdownHref(url: string): boolean {
+  const trimmed = url.trim();
+  if (
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('./') ||
+    trimmed.startsWith('../') ||
+    trimmed.startsWith('?')
+  ) {
+    return true;
+  }
+  const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed);
+  if (!scheme) return true;
+  return ['http', 'https', 'mailto'].includes(scheme[1].toLowerCase());
+}
+
 interface MarkdownRendererProps {
   content: string;
   onExecuteCommand?: (cmd: string) => void;
@@ -326,6 +347,11 @@ function renderInlineText(text: string): React.ReactNode[] {
     // Links: [label](url)
     const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
+      if (!isSafeMarkdownHref(linkMatch[2])) {
+        // javascript:/data:/etc. from model or user markdown must never
+        // become a clickable script URL — render the label as plain text.
+        return <React.Fragment key={index}>{linkMatch[1]}</React.Fragment>;
+      }
       return (
         <a
           key={index}
