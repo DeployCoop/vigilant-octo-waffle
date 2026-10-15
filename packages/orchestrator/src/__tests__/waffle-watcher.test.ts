@@ -245,14 +245,11 @@ stages:
     const targets = watcher.getTargets();
     assert.ok(targets.length > 0);
 
-    // Check known targets from waffle.yaml
-    for (const name of ['billama', 'bokbot', 'fitdjinn', 'monitaur']) {
-      if (watcher.hasTarget(name)) {
-        const t = watcher.getTarget(name)!;
-        assert.ok(t.context, `Target ${name} should have a context path`);
-        assert.ok(t.image, `Target ${name} should have an image name`);
-        assert.ok(t.tag, `Target ${name} should have a tag`);
-      }
+    // Check targets from waffle.yaml dynamically
+    for (const t of targets) {
+      assert.ok(t.context, `Target ${t.name} should have a context path`);
+      assert.ok(t.image, `Target ${t.name} should have an image name`);
+      assert.ok(t.tag, `Target ${t.name} should have a tag`);
     }
   });
 });

@@ -283,7 +283,7 @@ Preserve custom values.yaml                   sudo k3s ctr images import to all 
 vow waffle watch charts/waffle.yaml
 
 # Target filtering
-vow waffle watch charts/waffle.yaml --targets fitdjinn,monitaur-web
+vow waffle watch charts/waffle.yaml --targets web-app,api-gateway
 
 # Single-pass inspection / pre-commit check
 vow waffle watch charts/waffle.yaml --once

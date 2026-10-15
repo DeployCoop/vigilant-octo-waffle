@@ -14,7 +14,7 @@ describe('TLS & mkcert helper', () => {
     const names = discoverLocalHostnames();
     assert.ok(names.includes('localhost'));
     assert.ok(names.includes('127.0.0.1'));
-    assert.ok(names.includes('monitaur.net'));
+    assert.ok(names.includes(process.env.THIS_DOMAIN || 'example.com'));
   });
 
   it('reports hasDevCertificate false on empty directory', () => {

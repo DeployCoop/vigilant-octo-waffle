@@ -127,7 +127,7 @@ export default function WafflePage() {
 vow waffle watch charts/waffle.yaml
 
 # Filter specific targets
-vow waffle watch charts/waffle.yaml --targets monitaur-web,fitdjinn
+vow waffle watch charts/waffle.yaml --targets web-app,api-gateway
 
 # Single-pass inspection / pre-commit check (exits 0 after 1 pass)
 vow waffle watch charts/waffle.yaml --once
@@ -178,7 +178,7 @@ vow waffle watch charts/waffle.yaml --umbrella`}</code>
             <td><code>--targets &lt;list&gt;</code></td>
             <td>string</td>
             <td>all</td>
-            <td>Comma-separated list of build target names to monitor (e.g. <code>fitdjinn,monitaur-web</code>).</td>
+            <td>Comma-separated list of build target names to monitor (e.g. <code>web-app,api-gateway</code>).</td>
           </tr>
           <tr>
             <td><code>--fetch</code></td>
@@ -217,27 +217,21 @@ vow waffle watch charts/waffle.yaml --umbrella`}</code>
         <code>{`apiVersion: waffle.dev/v1
 kind: WafflePipeline
 metadata:
-  name: billama-datacenter-ecosystem
+  name: example-ecosystem
   version: 1.0.0
 
 builds:
   registry: "localhost:5001"
   targets:
-    - name: fitdjinn
-      context: ../fitdjinn_main
-      image: fitdjinn/app
+    - name: web-app
+      context: ../web-app
+      image: example/web
       tag: latest
       dockerfile: Dockerfile
 
-    - name: monitaur-web
-      context: ../monitaur_monorepo
-      image: monitaur/web
-      tag: latest
-      dockerfile: apps/web/Dockerfile
-
-    - name: monitaur-gateway
-      context: ../monitaur_monorepo
-      image: monitaur/gateway
+    - name: api-gateway
+      context: ../api-gateway
+      image: example/gateway
       tag: latest
       dockerfile: apps/gateway/Dockerfile
 
@@ -246,17 +240,16 @@ stages:
     name: "Application Services"
     mode: parallel
     steps:
-      - id: fitdjinn
-        name: "FitDjinn SaaS App"
-        chart: ./charts/fitdjinn
-        namespace: fitdjinn
-        releaseName: fitdjinn`}</code>
+      - id: web-app
+        name: "Web Application"
+        chart: ./charts/web-app
+        namespace: default
+        releaseName: web-app`}</code>
       </pre>
 
-      <h2>Discovered Ecosystem Target Mappings</h2>
+      <h2>Build Target Mappings</h2>
       <p>
-        The canonical ecosystem pipeline maps target services across the host
-        environment:
+        The pipeline maps target build contexts and charts across your workspace:
       </p>
 
       <table>
@@ -271,53 +264,25 @@ stages:
         </thead>
         <tbody>
           <tr>
-            <td><code>billama</code></td>
-            <td><code>/root/billama</code></td>
-            <td><code>billama/app:latest</code></td>
-            <td><code>charts/billama</code></td>
-            <td><code>helm/billama</code></td>
+            <td><code>web-app</code></td>
+            <td><code>../web-app</code></td>
+            <td><code>example/web:latest</code></td>
+            <td><code>charts/web-app</code></td>
+            <td><code>helm/web-app</code></td>
           </tr>
           <tr>
-            <td><code>bokbot</code></td>
-            <td><code>/root/bokbot-nextjs-app</code></td>
-            <td><code>bokbot/app:latest</code></td>
-            <td><code>charts/bokbot</code></td>
-            <td><code>charts/bokbot</code></td>
+            <td><code>api-gateway</code></td>
+            <td><code>../api-gateway</code></td>
+            <td><code>example/gateway:latest</code></td>
+            <td><code>charts/api-gateway</code></td>
+            <td><code>helm/api-gateway</code></td>
           </tr>
           <tr>
-            <td><code>fitdjinn</code></td>
-            <td><code>/root/fitdjinn_main</code></td>
-            <td><code>fitdjinn/app:latest</code></td>
-            <td><code>charts/fitdjinn</code></td>
-            <td><code>helm/fitdjinn</code></td>
-          </tr>
-          <tr>
-            <td><code>ironcladgrants</code></td>
-            <td><code>/root/IroncladGrants</code></td>
-            <td><code>ironcladgrants/app:latest</code></td>
-            <td><code>charts/ironcladgrants</code></td>
-            <td><code>helm/ironclad-grants</code></td>
-          </tr>
-          <tr>
-            <td><code>monitaur-web</code></td>
-            <td><code>/root/monitaur_monorepo</code></td>
-            <td><code>monitaur/web:latest</code></td>
-            <td><code>charts/monitaur</code></td>
-            <td><code>helm/monitaur</code></td>
-          </tr>
-          <tr>
-            <td><code>monitaur-gateway</code></td>
-            <td><code>/root/monitaur_monorepo</code></td>
-            <td><code>monitaur/gateway:latest</code></td>
-            <td><code>charts/monitaur</code></td>
-            <td><code>helm/monitaur</code></td>
-          </tr>
-          <tr>
-            <td><code>syncromancer</code></td>
-            <td><code>/root/syncromancer/syncromancer_main</code></td>
-            <td><code>syncromancer/app:latest</code></td>
-            <td><code>charts/syncromancer</code></td>
-            <td><code>apps/saas/helm</code></td>
+            <td><code>data-worker</code></td>
+            <td><code>../data-worker</code></td>
+            <td><code>example/worker:latest</code></td>
+            <td><code>charts/data-worker</code></td>
+            <td><code>helm/data-worker</code></td>
           </tr>
         </tbody>
       </table>

@@ -130,7 +130,7 @@ export function createProgram(): Command {
     .option('--interval <seconds>', 'Polling interval in seconds for watch mode', '5')
     .option('--fetch', 'Fetch remote git origin during watch loop', false)
     .option('--once', 'Run a single watch check/rebuild pass and exit', false)
-    .option('--targets <targets>', 'Comma-separated target names to filter (e.g. fitdjinn,monitaur)')
+    .option('--targets <targets>', 'Comma-separated target names to filter (e.g. web,api)')
     .option('--no-deploy', 'Skip automatic helm upgrade/rollout after image rebuild')
     .option('--umbrella', 'Rebuild umbrella chart dependencies after updates', false)
     .action(async (subaction, pipelineFile, opts) => {

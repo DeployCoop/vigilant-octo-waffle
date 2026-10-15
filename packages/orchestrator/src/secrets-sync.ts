@@ -159,7 +159,7 @@ data:
 export function discoverTargetNamespaces(projectRoot: string): string[] {
   const config = loadProjectConfig(projectRoot);
   const primaryNs = config.cluster.namespace || config.raw['THIS_NAME'] || 'default';
-  const nameNs = config.raw['THIS_NAME'] || 'monitaur';
+  const nameNs = config.raw['THIS_NAME'] || 'default';
 
   const set = new Set<string>();
   set.add(primaryNs);
@@ -194,8 +194,8 @@ export function generateModularSecretBundles(projectRoot: string): {
   monolithicManifest: string;
 } {
   const config = loadProjectConfig(projectRoot);
-  const primaryNs = config.cluster.namespace || config.raw['THIS_NAME'] || 'monitaur';
-  const secretBaseName = config.raw['THIS_SECRETS'] || `${config.raw['THIS_NAME'] || 'monitaur'}-secrets`;
+  const primaryNs = config.cluster.namespace || config.raw['THIS_NAME'] || 'default';
+  const secretBaseName = config.raw['THIS_SECRETS'] || `${config.raw['THIS_NAME'] || 'vow'}-secrets`;
 
   const secretsDir = path.join(projectRoot, '.secrets');
   const monolithicPath = path.join(secretsDir, `${secretBaseName}.yaml`);
@@ -206,14 +206,14 @@ export function generateModularSecretBundles(projectRoot: string): {
   if (parsed) {
     masterData = parsed.data;
   } else {
-    // fallback check for example-secrets.yaml or monitaur-secrets.yaml
-    const altPath = path.join(secretsDir, 'monitaur-secrets.yaml');
+    // fallback check for example-secrets.yaml or vow-secrets.yaml
+    const altPath = path.join(secretsDir, 'vow-secrets.yaml');
     const altParsed = parseSecretYaml(altPath);
     if (altParsed) masterData = altParsed.data;
   }
 
   const bundles = MODULAR_SECRET_BUNDLES.map((bundleDef) => {
-    const bundleSecretName = `${config.raw['THIS_NAME'] || 'monitaur'}-${bundleDef.name}`;
+    const bundleSecretName = `${config.raw['THIS_NAME'] || 'vow'}-${bundleDef.name}`;
     const bundleData: Record<string, string> = {};
     for (const key of bundleDef.keys) {
       if (masterData[key]) {
@@ -261,8 +261,8 @@ export async function syncSecretsAcrossNamespaces(
   } = {}
 ): Promise<SecretSyncResult> {
   const config = loadProjectConfig(projectRoot);
-  const primaryNs = config.cluster.namespace || config.raw['THIS_NAME'] || 'monitaur';
-  const secretBaseName = config.raw['THIS_SECRETS'] || `${config.raw['THIS_NAME'] || 'monitaur'}-secrets`;
+  const primaryNs = config.cluster.namespace || config.raw['THIS_NAME'] || 'default';
+  const secretBaseName = config.raw['THIS_SECRETS'] || `${config.raw['THIS_NAME'] || 'vow'}-secrets`;
 
   const secretsDir = path.join(projectRoot, '.secrets');
   const sourceSecretPath = options.secretFile

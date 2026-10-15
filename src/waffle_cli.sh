@@ -91,7 +91,7 @@ if [[ "${ACTION}" == "help" || -z "${ACTION}" ]]; then
   echo "  --dry-run                 Simulate step execution without modifying cluster"
   echo "  --interval <seconds>      Polling interval in seconds for watch mode (default: 5)"
   echo "  --once                    Run a single check pass and exit"
-  echo "  --targets <names>         Comma-separated target names to watch (e.g. monitaur,fitdjinn)"
+  echo "  --targets <names>         Comma-separated target names to watch (e.g. web,api)"
   echo "  --fetch                   Fetch remote git changes during watch loop"
   echo "  --no-deploy               Skip automatic rollout after rebuilding container images"
   echo "  --umbrella                Update umbrella chart dependencies after builds"

@@ -286,6 +286,7 @@ export function installLocalChart(
     timeout?: string;
     set?: Record<string, string>;
     domain?: string;
+    ingressHostKey?: string;
     customDir?: string;
   } = {}
 ): TaskRun {
@@ -328,14 +329,9 @@ export function installLocalChart(
   // Domain injection for ingress routing
   const targetDomain = options.domain || config.cluster.appDomains?.[chartId] || config.cluster.appDomains?.[releaseName];
   if (targetDomain) {
-    if (!options.set || (!options.set['ingress.host'] && !options.set['web.ingress.hosts[0].host'] && !options.set['ingress.hosts[0].host'])) {
-      if (chartId === 'ironcladgrants' || chartId === 'ironclad-grants') {
-        args.push('--set', `web.ingress.hosts[0].host=${targetDomain}`);
-      } else if (chartId === 'fitdjinn') {
-        args.push('--set', `ingress.hosts[0].host=${targetDomain}`);
-      } else {
-        args.push('--set', `ingress.host=${targetDomain}`);
-      }
+    const hostKey = options.ingressHostKey || 'ingress.host';
+    if (!options.set || (!options.set[hostKey] && !options.set['ingress.host'] && !options.set['ingress.hosts[0].host'])) {
+      args.push('--set', `${hostKey}=${targetDomain}`);
     }
   }
 
@@ -409,6 +405,7 @@ export async function templateLocalChart(
     valuesYaml?: string;
     customDir?: string;
     domain?: string;
+    ingressHostKey?: string;
     set?: Record<string, string>;
   } = {}
 ): Promise<string> {
@@ -436,14 +433,9 @@ export async function templateLocalChart(
   const pushSet = (kv: string) => setArgs.push('--set', kv);
   const targetDomain = options.domain || config.cluster.appDomains?.[chartId] || config.cluster.appDomains?.[releaseName];
   if (targetDomain) {
-    if (!options.set || (!options.set['ingress.host'] && !options.set['web.ingress.hosts[0].host'] && !options.set['ingress.hosts[0].host'])) {
-      if (chartId === 'ironcladgrants' || chartId === 'ironclad-grants') {
-        pushSet(`web.ingress.hosts[0].host=${targetDomain}`);
-      } else if (chartId === 'fitdjinn') {
-        pushSet(`ingress.hosts[0].host=${targetDomain}`);
-      } else {
-        pushSet(`ingress.host=${targetDomain}`);
-      }
+    const hostKey = options.ingressHostKey || 'ingress.host';
+    if (!options.set || (!options.set[hostKey] && !options.set['ingress.host'] && !options.set['ingress.hosts[0].host'])) {
+      pushSet(`${hostKey}=${targetDomain}`);
     }
   }
 

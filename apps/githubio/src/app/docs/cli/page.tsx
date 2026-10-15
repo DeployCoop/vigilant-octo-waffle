@@ -74,7 +74,7 @@ vow waffle blueprints
 vow waffle watch charts/waffle.yaml
 
 # Watch specific targets with single-pass scan
-vow waffle watch charts/waffle.yaml --targets fitdjinn,monitaur-web --once
+vow waffle watch charts/waffle.yaml --targets web-app,api-gateway --once
 
 # Or use the ./up runner directly
 ./up waffle:watch charts/waffle.yaml --interval 5`}</code>

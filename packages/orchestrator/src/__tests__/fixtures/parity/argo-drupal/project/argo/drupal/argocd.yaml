@@ -356,7 +356,7 @@ spec:
             starttls: true
             auth:
               enabled: true
-              user: "townhall@bokbot.com"
+              user: "admin@example.com"
               password: "POmF$ON=XXcp@5p=Zc"
               # Note: sSMTP only supports LOGIN and CRAM-MD5
               method: LOGIN
