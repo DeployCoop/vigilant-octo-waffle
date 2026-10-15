@@ -70,8 +70,15 @@ export function routeError(err: unknown, opts: RouteErrorOptions): NextResponse 
       ? `${first.path.join('.') || 'body'}: ${first.message}`
       : 'Invalid request body';
   } else {
+    // BUG FIX (2026-10-14 sweep): the raw error message used to be
+    // returned verbatim — orchestrator exec failures carry full command
+    // lines, internal paths and cluster stderr, disclosed to any caller
+    // who passed the route guard. The full error is still logged above.
+    // Call sites that deliberately classify a failure as a client error
+    // (status < 500) keep their message; server errors get the generic
+    // fallback.
     message =
-      err instanceof Error && err.message
+      status < 500 && err instanceof Error && err.message
         ? err.message
         : (opts.fallbackMessage ?? 'Internal error');
     code = opts.code ?? codeForStatus(status);

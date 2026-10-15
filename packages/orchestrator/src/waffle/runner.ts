@@ -10,7 +10,8 @@ import { createHmac } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { checkOpenEbsStatus } from '../storage.js';
 import { getChartsDirectory } from '../config.js';
-import { execAsync, getWaffleExecutionEnv } from './shared.js';
+import { getWaffleExecutionEnv } from './shared.js';
+import { execFileAsync, pipeExecs, killActiveChildren } from '../exec-argv.js';
 import { type WaffleSecretKey, type WaffleGitSource, type WaffleStep, type WafflePipeline } from './schema.js';
 import { getWaffleRunHistory } from './registry.js';
 
@@ -84,6 +85,10 @@ export class WaffleRunner extends EventEmitter {
 
   public abort(): void {
     this.aborted = true;
+    // Kill in-flight step processes: the flag alone was only checked
+    // between steps, so a hung helm/kubectl ran on indefinitely and the
+    // run stayed 'running' (blocking new runs behind the route's 409).
+    killActiveChildren();
     if (this.activeRun) {
       this.activeRun.status = 'cancelled';
       this.emit('progress', this.activeRun);
@@ -158,7 +163,7 @@ export class WaffleRunner extends EventEmitter {
           await this.buildImages(pipeline, baseDir, Boolean(dryRun));
           this.logToRun(`[BUILDS] All ${pipeline.builds.targets.length} target image(s) processed successfully.`);
         }
-        runProgress.status = 'completed';
+        runProgress.status = this.aborted ? 'cancelled' : 'completed';
         return runProgress;
       }
 
@@ -242,16 +247,25 @@ export class WaffleRunner extends EventEmitter {
         this.emit('progress', runProgress);
       }
 
-      runProgress.status = runProgress.failedSteps > 0 ? 'failed' : 'completed';
+      runProgress.status = this.aborted ? 'cancelled' : runProgress.failedSteps > 0 ? 'failed' : 'completed';
     } catch (err: any) {
-      runProgress.status = 'failed';
-      runProgress.error = err.message;
-      this.logToRun(`[FATAL] Pipeline halted: ${err.message}`);
+      if (this.aborted) {
+        runProgress.status = 'cancelled';
+      } else {
+        runProgress.status = 'failed';
+        runProgress.error = err.message;
+        this.logToRun(`[FATAL] Pipeline halted: ${err.message}`);
+      }
     } finally {
       runProgress.finishedAt = new Date().toISOString();
       this.emit('finish', runProgress);
       this.emit('progress', runProgress);
-      await getWaffleRunHistory().recordRun(runProgress);
+      // Recording history must not turn a finished run into a rejection.
+      try {
+        await getWaffleRunHistory().recordRun(runProgress);
+      } catch (recErr: any) {
+        console.error('[waffle] failed to record run history:', recErr?.message ?? recErr);
+      }
     }
 
     return runProgress;
@@ -291,6 +305,7 @@ export class WaffleRunner extends EventEmitter {
       const secretData: Record<string, string> = {};
       if (sec.literals) {
         const missing = new Set<string>();
+        const malformed = new Set<string>();
         for (const [k, v] of Object.entries(sec.literals)) {
           // Interpolate every ${VAR} occurrence (whole-value or embedded in a URL).
           // Never fall back to a built-in default: published placeholder secrets
@@ -300,19 +315,32 @@ export class WaffleRunner extends EventEmitter {
             if (fromEnv !== undefined && fromEnv !== '') {
               if (envVar === 'SUPABASE_ANON_KEY' || envVar === 'SUPABASE_SERVICE_ROLE_KEY') {
                 if (fromEnv.split('.').length === 3) return fromEnv;
+                // Set but not JWT-shaped (e.g. a modern sb_publishable_ key):
+                // remember the distinction so the error below does not
+                // claim a set variable is "unset".
+                malformed.add(envVar);
               } else {
                 return fromEnv;
               }
             }
             const derived = this.deriveSupabaseJwt(envVar);
             if (derived) return derived;
-            missing.add(envVar);
+            if (!malformed.has(envVar)) missing.add(envVar);
             return '';
           });
         }
-        if (missing.size > 0) {
+        if (missing.size > 0 || malformed.size > 0) {
+          const parts: string[] = [];
+          if (missing.size > 0) {
+            parts.push(`unset environment variable(s): ${[...missing].sort().join(', ')}`);
+          }
+          if (malformed.size > 0) {
+            parts.push(
+              `variable(s) set but not JWT-shaped (expected 3 dot-separated parts) and no SUPABASE_JWT_SECRET available to derive a JWT from: ${[...malformed].sort().join(', ')}`
+            );
+          }
           throw new Error(
-            `Secret "${sec.name}" requires unset environment variable(s): ${[...missing].sort().join(', ')}. ` +
+            `Secret "${sec.name}" requires ${parts.join('; ')}. ` +
               `Export them (see charts/production-prep.md) before running the pipeline.`
           );
         }
@@ -331,7 +359,15 @@ export class WaffleRunner extends EventEmitter {
 
       if (Object.keys(secretData).length > 0) {
         try {
-          await execAsync(`kubectl create namespace ${JSON.stringify(ns)} --dry-run=client -o yaml | kubectl apply -f -`, { env: getWaffleExecutionEnv() });
+          const nsManifest = await execFileAsync(
+            'kubectl',
+            ['create', 'namespace', ns, '--dry-run=client', '-o', 'yaml'],
+            { env: getWaffleExecutionEnv() }
+          );
+          await execFileAsync('kubectl', ['apply', '-f', '-'], {
+            env: getWaffleExecutionEnv(),
+            input: nsManifest.stdout,
+          });
           const manifestObj = {
             apiVersion: 'v1',
             kind: 'Secret',
@@ -350,7 +386,10 @@ export class WaffleRunner extends EventEmitter {
             stringData: secretData,
           };
           const manifestJson = JSON.stringify(manifestObj);
-          await execAsync(`cat << 'EOF' | kubectl apply -f -\n${manifestJson}\nEOF`, { env: getWaffleExecutionEnv() });
+          await execFileAsync('kubectl', ['apply', '-f', '-'], {
+            env: getWaffleExecutionEnv(),
+            input: manifestJson,
+          });
           this.logToRun(`[KEYS] Secret "${sec.name}" synchronized in namespace "${ns}".`);
         } catch (err: any) {
           this.logToRun(`[KEYS] Notice: Secret sync encountered: ${err.message}`);
@@ -432,29 +471,29 @@ export class WaffleRunner extends EventEmitter {
             this.logToRun(`[BUILDS] Target "${target.name}": Cloning repository from ${repoUrl}...`);
             fs.mkdirSync(path.dirname(cloneDir), { recursive: true });
 
-            const branchArg = gitConfig.branch ? `-b ${JSON.stringify(gitConfig.branch)}` : '';
-            const depthArg = gitConfig.depth && !gitConfig.commit ? `--depth ${gitConfig.depth}` : '';
-            const submodulesArg = gitConfig.submodules ? '--recurse-submodules' : '';
-
-            const cloneCmd = `git clone ${branchArg} ${depthArg} ${submodulesArg} ${JSON.stringify(repoUrl)} ${JSON.stringify(cloneDir)}`.replace(/\s+/g, ' ');
-            await execAsync(cloneCmd);
+            const cloneArgs = ['clone'];
+            if (gitConfig.branch) cloneArgs.push('-b', gitConfig.branch);
+            if (gitConfig.depth && !gitConfig.commit) cloneArgs.push('--depth', String(gitConfig.depth));
+            if (gitConfig.submodules) cloneArgs.push('--recurse-submodules');
+            cloneArgs.push(repoUrl, cloneDir);
+            await execFileAsync('git', cloneArgs);
 
             if (gitConfig.commit) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.commit)}`);
+              await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.commit]);
             } else if (gitConfig.tag) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout tags/${JSON.stringify(gitConfig.tag)}`);
+              await execFileAsync('git', ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`]);
             }
             this.logToRun(`[BUILDS] Target "${target.name}": Repository successfully cloned into ${cloneDir}.`);
           } else if (hasGit) {
             this.logToRun(`[BUILDS] Target "${target.name}": Existing repository detected at ${cloneDir}; fetching updates...`);
-            await execAsync(`git -C ${JSON.stringify(cloneDir)} fetch --tags`).catch(() => {});
+            await execFileAsync('git', ['-C', cloneDir, 'fetch', '--tags']).catch(() => {});
             if (gitConfig.branch) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.branch)}`).catch(() => {});
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} pull origin ${JSON.stringify(gitConfig.branch)}`).catch(() => {});
+              await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.branch]).catch(() => {});
+              await execFileAsync('git', ['-C', cloneDir, 'pull', 'origin', gitConfig.branch]).catch(() => {});
             } else if (gitConfig.commit) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout ${JSON.stringify(gitConfig.commit)}`).catch(() => {});
+              await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.commit]).catch(() => {});
             } else if (gitConfig.tag) {
-              await execAsync(`git -C ${JSON.stringify(cloneDir)} checkout tags/${JSON.stringify(gitConfig.tag)}`).catch(() => {});
+              await execFileAsync('git', ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`]).catch(() => {});
             }
           }
         } catch (gitErr: any) {
@@ -497,8 +536,8 @@ export class WaffleRunner extends EventEmitter {
         // Push to the in-cluster/local registry when it is reachable (best effort; the
         // containerd import below is what guarantees the cluster can run the image).
         this.logToRun(`[BUILDS] Pushing image ${fullTag}...`);
-        await execAsync(`docker push --tls-verify=false ${JSON.stringify(fullTag)}`).catch(async () => {
-          await execAsync(`docker push ${JSON.stringify(fullTag)}`).catch((pushErr) => {
+        await execFileAsync('docker', ['push', '--tls-verify=false', fullTag]).catch(async () => {
+          await execFileAsync('docker', ['push', fullTag]).catch((pushErr) => {
             this.logToRun(`[BUILDS] Notice: Registry push to "${registry}" skipped or unavailable: ${String(pushErr.message).split('\n')[0]}`);
           });
         });
@@ -528,7 +567,7 @@ export class WaffleRunner extends EventEmitter {
     const port = m[2];
     const env = getWaffleExecutionEnv();
     try {
-      await execAsync(`curl -fsS -m 3 http://localhost:${port}/v2/`);
+      await execFileAsync('curl', ['-fsS', '-m', '3', `http://localhost:${port}/v2/`]);
       return;
     } catch {
       // not reachable yet; deploy it
@@ -558,8 +597,17 @@ spec:
       labels:
         app: registry
     spec:
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: "true"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  # k3s/k3d set this label to "true"; kubeadm sets it to "".
+                  # A nodeSelector can only express one value, so use an
+                  # affinity In-list covering both (registry portability).
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: In
+                    values: ["true", ""]
       tolerations:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"
@@ -599,15 +647,19 @@ spec:
       await new Promise<void>((resolve, reject) => {
         const proc = spawn('kubectl', ['apply', '-f', '-'], { env });
         let err = '';
+        // Drain BOTH streams: an undrained stdout pipe fills its buffer
+        // (~64KB) and blocks kubectl forever, hanging the pipeline.
+        proc.stdout?.on('data', () => {});
         proc.stderr?.on('data', (d) => (err += d.toString()));
+        proc.stdin?.on('error', () => {});
         proc.on('close', (c) => (c === 0 ? resolve() : reject(new Error(err || `kubectl apply exited ${c}`))));
         proc.on('error', reject);
         proc.stdin?.end(manifest);
       });
-      await execAsync(`kubectl rollout status deployment/registry -n registry --timeout=120s`, { env });
+      await execFileAsync('kubectl', ['rollout', 'status', 'deployment/registry', '-n', 'registry', '--timeout=120s'], { env });
       for (let i = 0; i < 15; i++) {
         try {
-          await execAsync(`curl -fsS -m 3 http://localhost:${port}/v2/`);
+          await execFileAsync('curl', ['-fsS', '-m', '3', `http://localhost:${port}/v2/`]);
           this.logToRun(`[BUILDS] In-cluster registry is serving on ${registry}.`);
           return;
         } catch {
@@ -628,13 +680,17 @@ spec:
     const shortName = `${target.image}:${target.tag || 'latest'}`;
     const names = [fullTag, shortName, `docker.io/${shortName}`];
     for (const n of names.slice(1)) {
-      await execAsync(`docker tag ${JSON.stringify(fullTag)} ${JSON.stringify(n)}`);
+      await execFileAsync('docker', ['tag', fullTag, n]);
     }
-    const saveCmd = `docker save ${names.map((n) => JSON.stringify(n)).join(' ')}`;
     const env = getWaffleExecutionEnv();
 
-    // Local node (control plane / this host)
-    await execAsync(`${saveCmd} | sudo k3s ctr -n k8s.io images import -`, { maxBuffer: 1024 * 1024 * 64 });
+    // Local node (control plane / this host): stream docker save into
+    // containerd's importer — no shell, no buffering of the image stream.
+    await pipeExecs(
+      { file: 'docker', args: ['save', ...names] },
+      { file: 'sudo', args: ['k3s', 'ctr', '-n', 'k8s.io', 'images', 'import', '-'] },
+      { env }
+    );
     this.logToRun(`[BUILDS] Imported ${fullTag} into local containerd.`);
 
     // Peer nodes, discovered from the cluster (not hardcoded)
@@ -643,8 +699,9 @@ spec:
     );
     let peers: string[] = [];
     try {
-      const { stdout } = await execAsync(
-        `kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\\n"}{end}'`,
+      const { stdout } = await execFileAsync(
+        'kubectl',
+        ['get', 'nodes', '-o', 'jsonpath={range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\\n"}{end}'],
         { env }
       );
       peers = stdout.split('\n').map((l) => l.trim()).filter((ip) => ip && !localIps.has(ip));
@@ -653,9 +710,13 @@ spec:
     }
     for (const ip of peers) {
       try {
-        await execAsync(
-          `${saveCmd} | ssh -o BatchMode=yes -o ConnectTimeout=10 ${ip} "sudo k3s ctr -n k8s.io images import -"`,
-          { maxBuffer: 1024 * 1024 * 64 }
+        await pipeExecs(
+          { file: 'docker', args: ['save', ...names] },
+          {
+            file: 'ssh',
+            args: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', ip, 'sudo k3s ctr -n k8s.io images import -'],
+          },
+          { env }
         );
         this.logToRun(`[BUILDS] Imported ${fullTag} into node ${ip}.`);
       } catch (e: any) {
@@ -704,7 +765,7 @@ spec:
         if (localOpenEBSChart) {
           this.logToRun(`[PREFLIGHT] Found local OpenEBS chart at ${localOpenEBSChart}. Installing via Helm...`);
           try {
-            await execAsync(`helm upgrade --install openebs ${JSON.stringify(localOpenEBSChart)} --namespace openebs --create-namespace --wait --timeout 5m`);
+            await execFileAsync('helm', ['upgrade', '--install', 'openebs', localOpenEBSChart, '--namespace', 'openebs', '--create-namespace', '--wait', '--timeout', '5m']);
             this.logToRun('[PREFLIGHT] Successfully deployed OpenEBS Dynamic LocalPV provisioner.');
           } catch (err: any) {
             const recheck = await checkOpenEbsStatus(this.projectRoot);
@@ -719,7 +780,7 @@ spec:
           const storageScript = path.join(this.projectRoot, 'src', 'k3s_storage.sh');
           if (fs.existsSync(storageScript)) {
             this.logToRun('[PREFLIGHT] Running src/k3s_storage.sh install --engine openebs...');
-            await execAsync(`bash ${JSON.stringify(storageScript)} install --engine openebs`);
+            await execFileAsync('bash', [storageScript, 'install', '--engine', 'openebs']);
             this.logToRun('[PREFLIGHT] OpenEBS provisioned via cluster storage script.');
           } else {
             this.logToRun('[PREFLIGHT] Warning: OpenEBS provisioner script not available. Proceeding with deployment...');
@@ -755,6 +816,9 @@ spec:
     const log = (msg: string) => {
       const line = `[${new Date().toLocaleTimeString()}] [${step.id}] ${msg}`;
       stepProg.logs.push(line);
+      // Cap per-step logs like the task executor does (2,000 entries);
+      // a chatty helm run otherwise grows the run record without bound.
+      if (stepProg.logs.length > 2000) stepProg.logs.splice(0, stepProg.logs.length - 2000);
       runProgress.currentLogLine = line;
       this.emit('step_log', { stepId: step.id, line });
       this.emit('progress', runProgress);
@@ -874,12 +938,14 @@ spec:
         log(`Running in DRY-RUN mode: helm ${helmArgs.join(' ')}`);
       }
 
-      // Execute Helm command
-      const helmCmd = `helm ${helmArgs.map((a) => (a.includes(' ') || a.includes('=') ? JSON.stringify(a) : a)).join(' ')}`;
-      log(`Executing: ${helmCmd}`);
+      // Execute Helm command. The display string is for the log only;
+      // execution is argv-based (no shell), so step values such as the
+      // namespace, release name, chart and --set entries can never be
+      // reinterpreted as shell syntax.
+      log(`Executing: helm ${helmArgs.map((a) => (a.includes(' ') || a.includes('=') ? JSON.stringify(a) : a)).join(' ')}`);
 
       if (!dryRun) {
-        const { stdout, stderr } = await execAsync(helmCmd, { cwd: baseDir, env: getWaffleExecutionEnv() });
+        const { stdout, stderr } = await execFileAsync('helm', helmArgs, { cwd: baseDir, env: getWaffleExecutionEnv() });
         if (stdout) log(stdout.trim());
         if (stderr) log(stderr.trim());
 
@@ -965,8 +1031,11 @@ spec:
     if (!health) {
       // Default health check: wait for pods in namespace with app label
       try {
-        const cmd = `kubectl rollout status deployment/${step.releaseName || step.id} -n ${namespace} --timeout=60s`;
-        await execAsync(cmd, { env: getWaffleExecutionEnv() });
+        await execFileAsync(
+          'kubectl',
+          ['rollout', 'status', `deployment/${step.releaseName || step.id}`, '-n', namespace, '--timeout=60s'],
+          { env: getWaffleExecutionEnv() }
+        );
         log('Deployment rollout status confirmed ready.');
       } catch {
         // Rollout status is optional if chart has no matching single deployment name
@@ -976,13 +1045,17 @@ spec:
 
     if (health.type === 'storageClass' && health.name) {
       log(`Checking StorageClass: "${health.name}"...`);
-      await execAsync(`kubectl get sc ${health.name}`, { env: getWaffleExecutionEnv() });
+      await execFileAsync('kubectl', ['get', 'sc', health.name], { env: getWaffleExecutionEnv() });
       log(`StorageClass "${health.name}" is verified.`);
     } else if (health.type === 'podReady') {
       const releaseName = step.releaseName || step.id;
       log(`Waiting for pods associated with release "${releaseName}"...`);
       try {
-        await execAsync(`kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=${releaseName} -n ${namespace} --timeout=${health.timeout || '2m'}`, { env: getWaffleExecutionEnv() });
+        await execFileAsync(
+          'kubectl',
+          ['wait', '--for=condition=ready', 'pod', '-l', `app.kubernetes.io/instance=${releaseName}`, '-n', namespace, `--timeout=${health.timeout || '2m'}`],
+          { env: getWaffleExecutionEnv() }
+        );
         log('Pod readiness verified.');
       } catch {
         log('Warning: Pod readiness wait timed out or matched no pods; proceeding.');

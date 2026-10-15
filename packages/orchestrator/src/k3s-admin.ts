@@ -3,6 +3,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export type ClusterHealthGrade = 'OPTIMAL' | 'HEALTHY' | 'DEGRADED' | 'CRITICAL' | 'OFFLINE';
 
@@ -362,9 +363,8 @@ export async function drainK3sNodeLive(
   if (options.deleteEmptyDir ?? true) flags.push('--delete-emptydir-data');
   if (options.force ?? true) flags.push('--force');
 
-  const cmd = `kubectl drain ${JSON.stringify(nodeName)} ${flags.join(' ')}`;
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot });
+    const { stdout, stderr } = await execFileAsync('kubectl', ['drain', nodeName, ...flags], { cwd: projectRoot });
     return {
       success: true,
       output: (stdout + '\n' + stderr).trim(),
@@ -387,7 +387,7 @@ export async function cordonK3sNodeLive(
 ): Promise<{ success: boolean; message: string }> {
   const verb = uncordon ? 'uncordon' : 'cordon';
   try {
-    await execAsync(`kubectl ${verb} ${JSON.stringify(nodeName)}`, { cwd: projectRoot });
+    await execFileAsync('kubectl', [verb, nodeName], { cwd: projectRoot });
     return {
       success: true,
       message: `Node '${nodeName}' ${verb}ed successfully`,

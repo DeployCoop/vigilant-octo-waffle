@@ -1,9 +1,7 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const execAsync = promisify(exec);
+import { execFileAsync, assertImageRef } from './exec-argv.js';
 
 export interface LocalImage {
   repository: string;
@@ -26,7 +24,7 @@ export async function listLocalImages(): Promise<LocalImage[]> {
   const images: LocalImage[] = [];
 
   try {
-    const { stdout } = await execAsync('docker images --format "{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}" 2>/dev/null || true');
+    const { stdout } = await execFileAsync('docker', ['images', '--format', '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}']).catch(() => ({ stdout: '' }));
     const lines = stdout.trim().split('\n').filter(Boolean);
 
     for (const line of lines) {
@@ -95,12 +93,15 @@ export async function buildLocalContainerImage(options: {
 
   try {
     // Attempt building with docker
-    const { stdout, stderr } = await execAsync(`docker build -t ${fullTag} -f ${dockerfilePath} ${tmpDir} 2>&1 || true`);
-    logs += stdout || stderr || 'Image build finished successfully.\n';
+    assertImageRef(fullTag);
+    const buildRes = await execFileAsync('docker', ['build', '-t', fullTag, '-f', dockerfilePath, tmpDir]).catch(
+      (e: any) => ({ stdout: e?.stdout ?? '', stderr: e?.stderr ?? String(e?.message ?? e) })
+    );
+    logs += buildRes.stdout || buildRes.stderr || 'Image build finished successfully.\n';
 
     if (options.pushToLocalRegistry) {
       logs += `[registry] Pushing image ${fullTag} to local registry at localhost:5000...\n`;
-      await execAsync(`docker push ${fullTag} 2>&1 || true`);
+      await execFileAsync('docker', ['push', fullTag]).catch(() => {});
       logs += `[registry] Pushed digest for ${fullTag} successfully.\n`;
     }
 

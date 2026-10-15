@@ -1,5 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { randomBytes } from 'node:crypto';
+
+/** Sessions are killed after this long without input or output. */
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 export interface ExecSessionOptions {
   namespace: string;
@@ -14,10 +18,27 @@ export class ContainerExecSession extends EventEmitter {
   public id: string;
   private process?: ChildProcess;
   private isAlive = false;
+  private closeEmitted = false;
+  private lastActivity = Date.now();
+  private idleTimer?: NodeJS.Timeout;
 
   constructor(public options: ExecSessionOptions) {
     super();
-    this.id = Math.random().toString(36).substring(2, 10);
+    // Was 8 chars of Math.random: collisions silently overwrote a live
+    // session in the manager map, and ids were guessable by any other
+    // k8s:exec holder.
+    this.id = randomBytes(12).toString('hex');
+  }
+
+  private emitCloseOnce(code: number): void {
+    if (this.closeEmitted) return;
+    this.closeEmitted = true;
+    if (this.idleTimer) clearInterval(this.idleTimer);
+    this.emit('close', code);
+  }
+
+  private touch(): void {
+    this.lastActivity = Date.now();
   }
 
   public start(): void {
@@ -47,28 +68,48 @@ export class ContainerExecSession extends EventEmitter {
     });
 
     this.isAlive = true;
+    this.touch();
+    this.idleTimer = setInterval(() => {
+      if (this.isAlive && Date.now() - this.lastActivity > SESSION_IDLE_TIMEOUT_MS) {
+        this.kill();
+      }
+    }, 60_000);
+    this.idleTimer.unref?.();
+
+    // Writing to a dead kubectl raises EPIPE on stdin; without a handler
+    // that is an uncaught exception.
+    this.process.stdin?.on('error', () => {});
 
     this.process.stdout?.on('data', (chunk: Buffer) => {
+      this.touch();
       this.emit('data', chunk.toString('utf-8'));
     });
 
     this.process.stderr?.on('data', (chunk: Buffer) => {
+      this.touch();
       this.emit('data', chunk.toString('utf-8'));
     });
 
     this.process.on('close', (code) => {
       this.isAlive = false;
-      this.emit('close', code ?? 0);
+      this.emitCloseOnce(code ?? 0);
     });
 
     this.process.on('error', (err) => {
       this.isAlive = false;
-      this.emit('error', err);
+      // Same unlistened-'error' hazard as the task executor: re-emit
+      // only when someone is listening, and always surface a close so
+      // the manager does not leak the session in its map.
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', err);
+      }
+      this.emitCloseOnce(1);
     });
   }
 
   public write(data: string): void {
     if (this.process && this.isAlive && this.process.stdin?.writable) {
+      this.touch();
       this.process.stdin.write(data);
     }
   }

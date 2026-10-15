@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { execFileAsync, assertK8sLabel } from './exec-argv.js';
 
 export interface IncidentAnalysis {
   podName: string;
@@ -23,22 +20,28 @@ export async function gatherPodContext(
   let events = '';
   let describe = '';
 
-  const cFlag = containerName ? `-c ${containerName}` : '';
+  assertK8sLabel(namespace, 'namespace');
+  assertK8sLabel(podName, 'pod name');
+  if (containerName) assertK8sLabel(containerName, 'container name');
+  const cArgs = containerName ? ['-c', containerName] : [];
 
   try {
-    const { stdout } = await execAsync(`kubectl logs -n ${namespace} ${podName} ${cFlag} --tail=100 2>/dev/null || true`);
+    const { stdout } = await execFileAsync('kubectl', ['logs', '-n', namespace, podName, ...cArgs, '--tail=100']).catch(() => ({ stdout: '' }));
     logs = stdout;
   } catch {}
 
   try {
-    const { stdout } = await execAsync(
-      `kubectl get events -n ${namespace} --field-selector involvedObject.name=${podName} --sort-by='.metadata.creationTimestamp' -o custom-columns=TIME:.metadata.creationTimestamp,TYPE:.type,REASON:.reason,MESSAGE:.message 2>/dev/null || true`
-    );
+    const { stdout } = await execFileAsync('kubectl', [
+      'get', 'events', '-n', namespace,
+      '--field-selector', `involvedObject.name=${podName}`,
+      '--sort-by=.metadata.creationTimestamp',
+      '-o', 'custom-columns=TIME:.metadata.creationTimestamp,TYPE:.type,REASON:.reason,MESSAGE:.message',
+    ]).catch(() => ({ stdout: '' }));
     events = stdout;
   } catch {}
 
   try {
-    const { stdout } = await execAsync(`kubectl describe pod -n ${namespace} ${podName} 2>/dev/null || true`);
+    const { stdout } = await execFileAsync('kubectl', ['describe', 'pod', '-n', namespace, podName]).catch(() => ({ stdout: '' }));
     describe = stdout.slice(0, 2000); // limit size
   } catch {}
 

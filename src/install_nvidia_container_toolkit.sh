@@ -10,7 +10,7 @@ build_yay () {
   # 2. Clone the yay repository from the AUR
   git clone https://aur.archlinux.org/yay.git
   # 3. Navigate into the cloned yay directory
-  cd yay
+  cd yay || exit 1
   # 4. Build and install yay
   makepkg -si
 }

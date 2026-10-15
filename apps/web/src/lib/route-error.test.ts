@@ -59,20 +59,32 @@ describe('routeError classification', () => {
     expect(body.error.message).toBe('name: Required');
   });
 
-  it('generic errors → 500 internal, honoring a status override', async () => {
+  it('generic errors → 500 internal without leaking the raw message, honoring a status override', async () => {
+    // 2026-10-14 bug sweep: raw err.message (command lines, paths,
+    // cluster stderr) must not reach clients on server errors; it is
+    // still logged server-side.
     const res = routeError(new Error('kaput'), { route: 'GET /api/x' });
     expect(res.status).toBe(500);
     expect((await bodyOf(res)).error).toEqual({
       code: 'internal',
-      message: 'kaput',
+      message: 'Internal error',
     });
 
+    const resFb = routeError(new Error('kaput'), {
+      route: 'GET /api/x',
+      fallbackMessage: 'Failed to load the thing',
+    });
+    expect((await bodyOf(resFb)).error.message).toBe('Failed to load the thing');
+
+    // Deliberate client errors (status override < 500) keep their message.
     const res400 = routeError(new Error('bad input'), {
       route: 'POST /api/x',
       status: 400,
     });
     expect(res400.status).toBe(400);
-    expect((await bodyOf(res400)).error.code).toBe('bad_request');
+    const body400 = await bodyOf(res400);
+    expect(body400.error.code).toBe('bad_request');
+    expect(body400.error.message).toBe('bad input');
   });
 
   it('non-Error throwables → 500 with a generic message', async () => {

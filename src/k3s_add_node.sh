@@ -18,7 +18,7 @@ fi
 set -u
 
 ROLE="agent"
-SERVER_URL=""
+SERVER_URL="${SERVER_URL:-}"
 TOKEN=""
 NODE_NAME=""
 NODE_IP=""
@@ -84,25 +84,41 @@ Examples:
 EOF
 }
 
+# Normalize a server URL from any source: strip whitespace/CRLF and any
+# trailing slash, add the scheme when missing, and append :6443 only
+# when no port is present. Prints nothing for empty input.
+normalize_server_url() {
+  local u="$1"
+  u=$(printf '%s' "$u" | tr -d '[:space:]')
+  u="${u%/}"
+  [[ -z "$u" ]] && return 0
+  if [[ ! "$u" =~ ^https?:// ]]; then
+    u="https://${u}"
+  fi
+  if [[ ! "$u" =~ :[0-9]+$ ]]; then
+    u="${u}:6443"
+  fi
+  printf '%s' "$u"
+}
+
 # Auto-detect K3s server URL
 resolve_server_url() {
   if [[ -n "${SERVER_URL}" ]]; then
-    if [[ ! "${SERVER_URL}" =~ ^https?:// ]]; then
-      echo "https://${SERVER_URL}:6443"
-    else
-      echo "${SERVER_URL}"
+    local env_url
+    env_url=$(normalize_server_url "${SERVER_URL}")
+    if [[ -n "${env_url}" ]]; then
+      echo "${env_url}"
+      return 0
     fi
-    return 0
   fi
 
-    if [[ -f "${PROJECT_ROOT}/server_url" ]]; then
-    local SU=$(cat "${PROJECT_ROOT}/server_url")
-    if [[ ! "${SU}" =~ ^https?:// ]]; then
-      echo "https://${SU}:6443"
-    else
+  if [[ -s "${PROJECT_ROOT}/server_url" ]]; then
+    local SU
+    SU=$(normalize_server_url "$(cat "${PROJECT_ROOT}/server_url")")
+    if [[ -n "${SU}" ]]; then
       echo "${SU}"
+      return 0
     fi
-    return 0
   fi
 
   if [[ -n "${THIS_K3S_SERVER_IP:-}" ]]; then
@@ -120,8 +136,14 @@ resolve_server_url() {
   fi
 
   local detected_ip
-  detected_ip=$(curl -s --connect-timeout 2 icanhazip.com 2>/dev/null || ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
-  echo "https://${detected_ip}:6443"
+  detected_ip=$(curl -s --connect-timeout 2 icanhazip.com 2>/dev/null || true)
+  if [[ -z "${detected_ip}" ]]; then
+    detected_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}' || true)
+  fi
+  if [[ -z "${detected_ip}" ]]; then
+    detected_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+  fi
+  echo "https://${detected_ip:-127.0.0.1}:6443"
 }
 
 # Auto-detect K3s cluster join token
@@ -399,7 +421,10 @@ fi
 # Provision a single target over SSH
 provision_single_node() {
   local target_host="$1"
-  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10" -o "BatchMode=yes")
+  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
+  # BatchMode only without a terminal: #81 added it unconditionally,
+  # which broke password and passphrase-key auth for interactive CLI use.
+  [[ -t 0 ]] || ssh_opts+=(-o "BatchMode=yes")
   if [[ -n "${SSH_KEY}" ]]; then
     ssh_opts+=(-i "${SSH_KEY}")
   fi

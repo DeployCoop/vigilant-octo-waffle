@@ -7,21 +7,39 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Extracts the first parseable JSON value from command output. The old
+ * implementation regex-matched greedily from the first '{' to the LAST
+ * '}', over-capturing when the output contained trailing braces (log
+ * lines, a second JSON document) and failing the parse. This scans
+ * candidate end positions until one parses.
+ */
+function extractJson<T>(text: string): T | undefined {
+  const start = text.search(/[{[]/);
+  if (start === -1) return undefined;
+  const open = text[start];
+  const close = open === '{' ? '}' : ']';
+  for (let end = text.lastIndexOf(close); end > start; end = text.lastIndexOf(close, end - 1)) {
+    try {
+      return JSON.parse(text.slice(start, end + 1)) as T;
+    } catch {
+      // keep scanning for a shorter candidate
+    }
+  }
+  return undefined;
+}
+
 export async function runSilentJsonQuery<T>(cmd: string, args: string[], cwd: string, fallback: T): Promise<T> {
   try {
-    const { stdout } = await execFileAsync(cmd, args, { cwd, maxBuffer: 10 * 1024 * 1024 });
-    const jsonMatch = (stdout || '').match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as T;
-    }
+    // Was the only k3s helper without a timeout: a hung kubectl blocked
+    // the caller forever.
+    const { stdout } = await execFileAsync(cmd, args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30000 });
+    const parsed = extractJson<T>(stdout || '');
+    if (parsed !== undefined) return parsed;
   } catch (err: any) {
     if (err && typeof err.stdout === 'string') {
-      const jsonMatch = err.stdout.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      if (jsonMatch) {
-        try {
-          return JSON.parse(jsonMatch[0]) as T;
-        } catch {}
-      }
+      const parsed = extractJson<T>(err.stdout);
+      if (parsed !== undefined) return parsed;
     }
   }
   return fallback;

@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { execFileAsync, assertK8sLabel } from './exec-argv.js';
 
 export interface ChaosExperiment {
   id: string;
@@ -53,14 +50,18 @@ export async function injectPodKill(namespace: string, podName: string): Promise
 
   try {
     // Delete target pod
-    await execAsync(`kubectl delete pod ${podName} -n ${namespace} --grace-period=0 --force 2>/dev/null || kubectl delete pod ${podName} -n ${namespace} 2>/dev/null`);
+    assertK8sLabel(podName, 'pod name');
+    assertK8sLabel(namespace, 'namespace');
+    await execFileAsync('kubectl', ['delete', 'pod', podName, '-n', namespace, '--grace-period=0', '--force']).catch(
+      () => execFileAsync('kubectl', ['delete', 'pod', podName, '-n', namespace])
+    );
 
     // Poll for replacement replica up to 15 seconds
     let recovered = false;
     for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       try {
-        const { stdout } = await execAsync(`kubectl get pods -n ${namespace} --field-selector status.phase=Running --no-headers 2>/dev/null || true`);
+        const { stdout } = await execFileAsync('kubectl', ['get', 'pods', '-n', namespace, '--field-selector', 'status.phase=Running', '--no-headers']).catch(() => ({ stdout: '' }));
         if (stdout.trim().length > 0) {
           recovered = true;
           break;
@@ -102,8 +103,19 @@ export async function injectCpuStress(namespace: string, podName: string, durati
 
   try {
     // Spawn transient background CPU burner in container
-    const cmd = `kubectl exec -n ${namespace} ${podName} -- /bin/sh -c "(timeout ${durationSec} sha256sum /dev/urandom || sleep ${durationSec}) >/dev/null 2>&1 &" 2>/dev/null || true`;
-    await execAsync(cmd);
+    // Spawn transient background CPU burner in container. argv-only: the
+    // remote script is a fixed string and the duration reaches it as $0,
+    // never as interpolated shell text.
+    assertK8sLabel(podName, 'pod name');
+    assertK8sLabel(namespace, 'namespace');
+    if (!Number.isInteger(durationSec) || durationSec <= 0) {
+      throw new Error(`Invalid durationSec: ${durationSec}`);
+    }
+    await execFileAsync('kubectl', [
+      'exec', '-n', namespace, podName, '--', '/bin/sh', '-c',
+      '(timeout "$0" sha256sum /dev/urandom || sleep "$0") >/dev/null 2>&1 &',
+      String(durationSec),
+    ]).catch(() => {});
     exp.status = 'completed';
     exp.details = `Injected ${durationSec}s CPU workload into ${podName}. Metrics server and HPA notified.`;
   } catch (err: any) {
@@ -140,7 +152,7 @@ export async function measureResilienceScore(): Promise<ResilienceReport> {
   let highRestartPods = 0;
 
   try {
-    const { stdout } = await execAsync('kubectl get pods -A -o json 2>/dev/null');
+    const { stdout } = await execFileAsync('kubectl', ['get', 'pods', '-A', '-o', 'json']);
     const parsed = JSON.parse(stdout);
     const items = parsed.items || [];
     totalPods = items.length;

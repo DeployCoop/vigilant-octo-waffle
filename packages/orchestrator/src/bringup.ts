@@ -10,6 +10,7 @@ import { applyClusterNamespaces } from './namespaces.js';
 import { checkOpenEbsStatus } from './storage.js';
 
 const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export interface BringUpStep {
   id: string;
@@ -147,7 +148,7 @@ export class ClusterBringUpEngine extends EventEmitter {
               if (config.cluster.k8sPlatform === 'k3s' && !options.skipEngineStart) {
                 const k3sUpScript = path.join(root, 'src', 'k3s_up.sh');
                 if (fs.existsSync(k3sUpScript)) {
-                  await execAsync(`bash "${k3sUpScript}" --skip-up`, { cwd: root, env: { ...process.env, ...config.raw } });
+                  await execFileAsync('bash', [k3sUpScript, '--skip-up'], { cwd: root, env: { ...process.env, ...config.raw } });
                   step.message = 'Started K3s cluster engine successfully';
                 } else {
                   throw new Error('Kubernetes cluster not reachable and src/k3s_up.sh not found', { cause: err });
@@ -169,7 +170,7 @@ export class ClusterBringUpEngine extends EventEmitter {
             const initDir = path.join(root, 'init', 'cluster');
             if (fs.existsSync(initDir)) {
               try {
-                await execAsync(`kubectl apply -f "${initDir}"`, { cwd: root, env: { ...process.env, ...config.raw } });
+                await execFileAsync('kubectl', ['apply', '-f', initDir], { cwd: root, env: { ...process.env, ...config.raw } });
                 step.message = 'Applied cluster initialization manifests';
               } catch {
                 step.message = 'Cluster initialization manifests applied (or none required)';

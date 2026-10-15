@@ -8,6 +8,7 @@ import { applyInitializerDirectory } from './initializer.js';
 import { ensureNamespaceWithSecurity } from './namespaces.js';
 
 const execAsync = promisify(exec);
+import { execFileAsync, commandExists } from './exec-argv.js';
 
 export type StorageEngine = 'openebs' | 'longhorn' | 'nfs' | 'seaweedfs' | 'rook-ceph' | 'local-path';
 
@@ -85,7 +86,7 @@ export async function validateStorageHostPrereqs(): Promise<StoragePrereqCheck[]
 
   for (const t of tools) {
     try {
-      await execAsync(`command -v ${t.cmd}`);
+      if (!(await commandExists(t.cmd))) throw new Error(`${t.cmd} not found`);
       checks.push({
         name: t.name,
         category: t.category,
@@ -142,7 +143,7 @@ export async function labelNodesForStorage(
     const nodes = stdout.trim().split(/\s+/).filter(Boolean);
 
     for (const node of nodes) {
-      await execAsync(`kubectl label node ${JSON.stringify(node)} ${JSON.stringify(`${key}=${value}`)} --overwrite`, { cwd: projectRoot, env });
+      await execFileAsync('kubectl', ['label', 'node', node, `${key}=${value}`, '--overwrite'], { cwd: projectRoot, env });
       labeledNodes.push(node);
     }
   } catch {
@@ -327,33 +328,33 @@ export async function deployOpenEBS(
 
   const chartTarget = localChart || 'openebs/openebs';
   if (!localChart) {
-    await execAsync('helm repo add openebs https://openebs.github.io/openebs 2>/dev/null || true', { cwd: projectRoot });
-    await execAsync('helm repo update openebs 2>/dev/null || true', { cwd: projectRoot });
+    await execFileAsync('helm', ['repo', 'add', 'openebs', 'https://openebs.github.io/openebs'], { cwd: projectRoot }).catch(() => {});
+    await execFileAsync('helm', ['repo', 'update', 'openebs'], { cwd: projectRoot }).catch(() => {});
   }
 
   const releaseName = 'openebs';
-  const localSetArgs = localChart ? [
-    `--set basePath=${JSON.stringify(config.raw.THIS_STORAGE_PATH || '/var/openebs/local')}`,
-    `--set hostpath.enabled=${config.raw.THIS_OPENEBS_ENGINE_HOSTPATH !== 'false'}`,
-    `--set hostpath.storageClass.create=${config.raw.THIS_OPENEBS_ENGINE_HOSTPATH !== 'false'}`,
-    `--set hostpath.storageClass.basePath=${JSON.stringify(config.raw.THIS_STORAGE_PATH || '/var/openebs/local')}`,
-    `--set lvm.enabled=${config.raw.THIS_OPENEBS_ENGINE_LVM !== 'false'}`,
-    `--set lvm.volgroup=${JSON.stringify(vg || 'AirVG')}`,
-    `--set lvm.fsType=${JSON.stringify(config.raw.THIS_LVM_FSTYPE || 'ext4')}`,
-    `--set lvm.thinProvision=${JSON.stringify(config.raw.THIS_LVM_THIN_PROVISION || 'no')}`,
-    `--set lvm.shared=${JSON.stringify(config.raw.THIS_LVM_SHARED || 'yes')}`,
-    `--set lvm.storageClass.create=${config.raw.THIS_OPENEBS_ENGINE_LVM !== 'false'}`,
-    `--set lvm.storageClass.name=${JSON.stringify(config.raw.THIS_LVM_STORAGECLASS || 'openebs-lvmpv')}`,
-    `--set lvm.storageClass.isDefaultClass=${config.raw.THIS_LVM_IS_DEFAULT_SC === 'true'}`,
-  ].join(' ') : '';
+  const localSetArgs: string[] = localChart ? [
+    '--set', `basePath=${config.raw.THIS_STORAGE_PATH || '/var/openebs/local'}`,
+    '--set', `hostpath.enabled=${config.raw.THIS_OPENEBS_ENGINE_HOSTPATH !== 'false'}`,
+    '--set', `hostpath.storageClass.create=${config.raw.THIS_OPENEBS_ENGINE_HOSTPATH !== 'false'}`,
+    '--set', `hostpath.storageClass.basePath=${config.raw.THIS_STORAGE_PATH || '/var/openebs/local'}`,
+    '--set', `lvm.enabled=${config.raw.THIS_OPENEBS_ENGINE_LVM !== 'false'}`,
+    '--set', `lvm.volgroup=${vg || 'AirVG'}`,
+    '--set', `lvm.fsType=${config.raw.THIS_LVM_FSTYPE || 'ext4'}`,
+    '--set', `lvm.thinProvision=${config.raw.THIS_LVM_THIN_PROVISION || 'no'}`,
+    '--set', `lvm.shared=${config.raw.THIS_LVM_SHARED || 'yes'}`,
+    '--set', `lvm.storageClass.create=${config.raw.THIS_OPENEBS_ENGINE_LVM !== 'false'}`,
+    '--set', `lvm.storageClass.name=${config.raw.THIS_LVM_STORAGECLASS || 'openebs-lvmpv'}`,
+    '--set', `lvm.storageClass.isDefaultClass=${config.raw.THIS_LVM_IS_DEFAULT_SC === 'true'}`,
+  ] : [];
 
-  const cmd = [
-    `helm upgrade --install ${JSON.stringify(releaseName)} ${JSON.stringify(chartTarget)}`,
-    `--namespace ${JSON.stringify(namespace)}`,
+  const cmdArgs = [
+    'upgrade', '--install', releaseName, chartTarget,
+    '--namespace', namespace,
     '--create-namespace',
-    `--timeout ${JSON.stringify(timeout)}`,
-    localChart ? localSetArgs : `-f ${JSON.stringify(valuesFile)}`,
-  ].filter(Boolean).join(' ');
+    '--timeout', timeout,
+    ...(localChart ? localSetArgs : ['-f', valuesFile]),
+  ];
 
   const executionEnv: NodeJS.ProcessEnv = {
     ...process.env,
@@ -364,7 +365,7 @@ export async function deployOpenEBS(
   let stdout = '';
   let stderr: string;
   try {
-    const res = await execAsync(cmd, { cwd: projectRoot, env: executionEnv });
+    const res = await execFileAsync('helm', cmdArgs, { cwd: projectRoot, env: executionEnv });
     stdout = res.stdout;
     stderr = res.stderr;
   } catch (err: any) {
@@ -416,22 +417,22 @@ export async function deployCsiDriverNfs(
 
   await applyInitializerDirectory(projectRoot, 'init/pre-csi-nfs');
 
-  await execAsync('helm repo add csi-driver-nfs https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts 2>/dev/null || true', { cwd: projectRoot });
-  await execAsync('helm repo update csi-driver-nfs 2>/dev/null || true', { cwd: projectRoot });
+  await execFileAsync('helm', ['repo', 'add', 'csi-driver-nfs', 'https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts'], { cwd: projectRoot }).catch(() => {});
+  await execFileAsync('helm', ['repo', 'update', 'csi-driver-nfs'], { cwd: projectRoot }).catch(() => {});
 
-  const cmd = [
-    'helm upgrade --install csi-driver-nfs csi-driver-nfs/csi-driver-nfs',
-    '--namespace kube-system',
+  const cmdArgs = [
+    'upgrade', '--install', 'csi-driver-nfs', 'csi-driver-nfs/csi-driver-nfs',
+    '--namespace', 'kube-system',
     '--wait',
-    '--timeout 10m0s',
-  ].join(' ');
+    '--timeout', '10m0s',
+  ];
 
   const executionEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ...config.raw,
     KUBECONFIG: process.env.KUBECONFIG || (fs.existsSync('/etc/rancher/k3s/k3s.yaml') ? '/etc/rancher/k3s/k3s.yaml' : undefined),
   };
-  const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: executionEnv });
+  const { stdout, stderr } = await execFileAsync('helm', cmdArgs, { cwd: projectRoot, env: executionEnv });
   return {
     success: true,
     output: (stdout + '\n' + stderr).trim(),
@@ -497,8 +498,8 @@ spec:
 `;
 
   const cleanup = async () => {
-    await execAsync(`kubectl delete pod ${podName} -n ${namespace} --ignore-not-found --now`, { cwd: projectRoot }).catch(() => {});
-    await execAsync(`kubectl delete pvc ${pvcName} -n ${namespace} --ignore-not-found --now`, { cwd: projectRoot }).catch(() => {});
+    await execFileAsync('kubectl', ['delete', 'pod', podName, '-n', namespace, '--ignore-not-found', '--now'], { cwd: projectRoot }).catch(() => {});
+    await execFileAsync('kubectl', ['delete', 'pvc', pvcName, '-n', namespace, '--ignore-not-found', '--now'], { cwd: projectRoot }).catch(() => {});
   };
 
   try {
@@ -517,10 +518,10 @@ spec:
     });
 
     // 3. Wait for pod completion (up to 90s)
-    await execAsync(`kubectl wait --for=condition=Ready=false pod/${podName} -n ${namespace} --timeout=90s`, { cwd: projectRoot });
+    await execFileAsync('kubectl', ['wait', '--for=condition=Ready=false', `pod/${podName}`, '-n', namespace, '--timeout=90s'], { cwd: projectRoot });
 
     // 4. Fetch logs
-    const { stdout: logs } = await execAsync(`kubectl logs ${podName} -n ${namespace}`, { cwd: projectRoot });
+    const { stdout: logs } = await execFileAsync('kubectl', ['logs', podName, '-n', namespace], { cwd: projectRoot });
 
     // Parse dd output: e.g. "104857600 bytes (105 MB, 100 MiB) copied, 0.428781 s, 245 MB/s"
     let speed = 0;

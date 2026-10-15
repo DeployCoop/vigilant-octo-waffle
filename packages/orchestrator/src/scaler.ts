@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { execFileAsync, assertK8sObjectName } from './exec-argv.js';
 
 export interface NodeDetail {
   name: string;
@@ -15,7 +12,7 @@ export interface NodeDetail {
 
 export async function listClusterNodeDetails(): Promise<NodeDetail[]> {
   try {
-    const { stdout } = await execAsync('kubectl get nodes -o json 2>/dev/null');
+    const { stdout } = await execFileAsync('kubectl', ['get', 'nodes', '-o', 'json']);
     const parsed = JSON.parse(stdout);
     const items = parsed.items || [];
 
@@ -48,8 +45,9 @@ export async function listClusterNodeDetails(): Promise<NodeDetail[]> {
 
 export async function scaleK3dNodes(clusterName: string, targetAgentCount: number): Promise<{ success: boolean; message: string }> {
   try {
+    assertK8sObjectName(clusterName, 'cluster name');
     // 1. Get current nodes
-    const { stdout } = await execAsync(`k3d node list --output json 2>/dev/null || true`);
+    const { stdout } = await execFileAsync('k3d', ['node', 'list', '--output', 'json']).catch(() => ({ stdout: '' }));
     const parsed = stdout ? JSON.parse(stdout) : [];
     const currentAgents = parsed.filter((n: any) => n.cluster === clusterName && n.role === 'agent');
 
@@ -62,14 +60,14 @@ export async function scaleK3dNodes(clusterName: string, targetAgentCount: numbe
       // Add worker nodes
       for (let i = 0; i < diff; i++) {
         const nodeName = `${clusterName}-agent-${currentAgents.length + i}`;
-        await execAsync(`k3d node create ${nodeName} --cluster ${clusterName} --role agent`);
+        await execFileAsync('k3d', ['node', 'create', nodeName, '--cluster', clusterName, '--role', 'agent']);
       }
       return { success: true, message: `Added ${diff} worker node(s) to cluster ${clusterName}.` };
     } else {
       // Remove excess worker nodes
       const toRemove = currentAgents.slice(0, Math.abs(diff));
       for (const node of toRemove) {
-        await execAsync(`k3d node delete ${node.name}`);
+        await execFileAsync('k3d', ['node', 'delete', node.name]);
       }
       return { success: true, message: `Removed ${Math.abs(diff)} worker node(s) from cluster ${clusterName}.` };
     }

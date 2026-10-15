@@ -46,6 +46,11 @@ export class TaskStore {
       // Best effort: the file lives under the already-private .vow/.
     }
     this.db.exec('PRAGMA journal_mode = WAL');
+    // The same state.db is opened by the web server and the ink CLI;
+    // without a busy timeout, concurrent writes fail with SQLITE_BUSY —
+    // which ProcessManager.persist then silently swallowed, losing
+    // task records.
+    this.db.exec('PRAGMA busy_timeout = 5000');
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
@@ -60,7 +65,13 @@ export class TaskStore {
         meta TEXT NOT NULL DEFAULT '{}'
       )
     `);
-    this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    const currentVersion = Number(
+      (this.db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined)
+        ?.user_version ?? 0
+    );
+    if (currentVersion !== SCHEMA_VERSION) {
+      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    }
   }
 
   /** Insert or replace the record for a task (write-through). */
@@ -125,7 +136,21 @@ export class TaskStore {
     );
     for (const row of running) {
       const record = rowToRecord(row);
-      if (record.pid !== null && pidAlive(record.pid)) continue;
+      if (record.pid !== null && pidAlive(record.pid)) {
+        // PID-reuse guard: a live pid is only the same process when its
+        // start time matches the one recorded when the task spawned.
+        // Rows written before this was recorded keep the old behavior.
+        const recordedStart = record.meta?.pidStartMs;
+        if (typeof recordedStart === 'number') {
+          const currentStart = processStartMs(record.pid);
+          if (currentStart !== null && Math.abs(currentStart - recordedStart) > 2000) {
+            mark.run(now, record.id);
+            interrupted.push({ ...record, status: 'interrupted', endedAt: now });
+            continue;
+          }
+        }
+        continue;
+      }
       mark.run(now, record.id);
       interrupted.push({ ...record, status: 'interrupted', endedAt: now });
     }
@@ -134,6 +159,30 @@ export class TaskStore {
 
   close(): void {
     this.db.close();
+  }
+}
+
+/**
+ * Process start time (epoch ms) on Linux via /proc; null when it cannot
+ * be determined (other platforms, process already gone). Used to tell a
+ * genuinely-surviving task process apart from an unrelated process that
+ * later reused its pid.
+ */
+export function processStartMs(pid: number): number | null {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf-8');
+    // Field 22 (starttime, clock ticks since boot) follows the comm
+    // field, which may contain spaces/parens — parse after the last ')'.
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    const startTicks = Number(fields[19]); // field 22 overall
+    if (!Number.isFinite(startTicks)) return null;
+    const procStat = fs.readFileSync('/proc/stat', 'utf-8');
+    const btime = Number(/^btime (\d+)$/m.exec(procStat)?.[1]);
+    if (!Number.isFinite(btime) || btime <= 0) return null;
+    const ticksPerSecond = 100; // USER_HZ on Linux x86_64/arm64
+    return Math.round((btime + startTicks / ticksPerSecond) * 1000);
+  } catch {
+    return null;
   }
 }
 
@@ -147,6 +196,15 @@ function pidAlive(pid: number): boolean {
   }
 }
 
+function parseJsonOr<T>(value: unknown, fallback: T): T {
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function rowToRecord(row: Record<string, unknown>): TaskRecord {
   return {
     id: String(row.id),
@@ -157,8 +215,10 @@ function rowToRecord(row: Record<string, unknown>): TaskRecord {
     startedAt: String(row.started_at),
     endedAt: row.ended_at === null ? null : String(row.ended_at),
     exitCode: row.exit_code === null ? null : Number(row.exit_code),
-    logTail: JSON.parse(String(row.log_tail)) as TaskLogEntry[],
-    meta: JSON.parse(String(row.meta)) as Record<string, unknown>,
+    // A single corrupt row must not break listing every task (was:
+    // unguarded JSON.parse threw out of list()/getAllTasks()).
+    logTail: parseJsonOr<TaskLogEntry[]>(row.log_tail, []),
+    meta: parseJsonOr<Record<string, unknown>>(row.meta, {}),
   };
 }
 
@@ -179,6 +239,13 @@ export function taskToRecord(task: TaskRun): TaskRecord {
     endedAt: task.finishedAt ?? null,
     exitCode: task.exitCode ?? null,
     logTail: task.logs,
-    meta: { cwd: task.cwd, command: task.command, args: task.args },
+    meta: {
+      cwd: task.cwd,
+      command: task.command,
+      args: task.args,
+      ...(task.childProcess?.pid
+        ? { pidStartMs: processStartMs(task.childProcess.pid) ?? undefined }
+        : {}),
+    },
   };
 }

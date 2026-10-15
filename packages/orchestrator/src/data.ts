@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { execFileAsync, assertK8sLabel } from './exec-argv.js';
 
 export interface S3BucketInfo {
   name: string;
@@ -24,7 +21,7 @@ export interface QueryResult {
 export async function listS3Buckets(): Promise<{ buckets: S3BucketInfo[]; status: string }> {
   try {
     // Check if minio pod or mc client is accessible
-    const { stdout } = await execAsync("kubectl get pods -A -l 'app.kubernetes.io/name=minio' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true");
+    const { stdout } = await execFileAsync('kubectl', ['get', 'pods', '-A', '-l', 'app.kubernetes.io/name=minio', '-o', 'jsonpath={.items[0].metadata.name}']).catch(() => ({ stdout: '' }));
     const podName = stdout.trim();
 
     if (!podName) {
@@ -40,7 +37,7 @@ export async function listS3Buckets(): Promise<{ buckets: S3BucketInfo[]; status
 
     // Try querying mc in pod
     try {
-      const { stdout: mcOut } = await execAsync(`kubectl exec ${podName} -- mc ls local --json 2>/dev/null || true`);
+      const { stdout: mcOut } = await execFileAsync('kubectl', ['exec', podName, '--', 'mc', 'ls', 'local', '--json']).catch(() => ({ stdout: '' }));
       if (mcOut) {
         const lines = mcOut.trim().split('\n').filter(Boolean);
         const buckets: S3BucketInfo[] = lines.map((l) => {
@@ -88,17 +85,30 @@ export async function executePostgresQuery(
   let podName = '';
 
   if (ns) {
-    const { stdout: explicitPodOut } = await execAsync(
-      `kubectl get pods -n ${ns} -l 'app=postgres' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -n ${ns} -l 'app.kubernetes.io/component=postgres' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -n ${ns} -l 'app.kubernetes.io/name=postgresql' -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true`
-    );
-    podName = explicitPodOut.trim();
+    assertK8sLabel(ns, 'namespace');
+    for (const selector of ['app=postgres', 'app.kubernetes.io/component=postgres', 'app.kubernetes.io/name=postgresql']) {
+      const { stdout: out } = await execFileAsync('kubectl', [
+        'get', 'pods', '-n', ns, '-l', selector, '-o', 'jsonpath={.items[0].metadata.name}',
+      ]).catch(() => ({ stdout: '' }));
+      if (out.trim()) {
+        podName = out.trim();
+        break;
+      }
+    }
   }
 
   if (!podName) {
     // Search across cluster for any running PostgreSQL pod (Supabase, Kubegres, Bitnami)
-    const { stdout: anyPodOut } = await execAsync(
-      `kubectl get pods -A -l 'app.kubernetes.io/component=postgres' -o jsonpath='{.items[0].metadata.namespace}/{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -A -l 'app=postgres' -o jsonpath='{.items[0].metadata.namespace}/{.items[0].metadata.name}' 2>/dev/null || kubectl get pods -A -l 'app.kubernetes.io/name=postgresql' -o jsonpath='{.items[0].metadata.namespace}/{.items[0].metadata.name}' 2>/dev/null || true`
-    );
+    let anyPodOut = '';
+    for (const selector of ['app.kubernetes.io/component=postgres', 'app=postgres', 'app.kubernetes.io/name=postgresql']) {
+      const { stdout: out } = await execFileAsync('kubectl', [
+        'get', 'pods', '-A', '-l', selector, '-o', 'jsonpath={.items[0].metadata.namespace}/{.items[0].metadata.name}',
+      ]).catch(() => ({ stdout: '' }));
+      if (out.trim()) {
+        anyPodOut = out;
+        break;
+      }
+    }
     const entry = anyPodOut.trim();
     if (entry && entry.includes('/')) {
       const parts = entry.split('/');
@@ -136,11 +146,14 @@ export async function executePostgresQuery(
   const db = options?.database || 'postgres';
   const user = options?.user || 'postgres';
 
-  // Run psql inside pod
-  const escapedQuery = trimmed.replace(/"/g, '\\"');
-  const cmd = `kubectl exec -n ${ns} ${podName} -- psql -U ${user} -d ${db} -c "${escapedQuery}" -A -F "\t"`;
-
-  const { stdout } = await execAsync(cmd);
+  // Run psql inside pod. argv execution: the caller's SQL is meant to run
+  // as SQL (the data:query permission), but it must never be re-parsed by
+  // a shell on this host — the old string form only escaped double quotes,
+  // so $(...) / backticks in the query executed locally.
+  assertK8sLabel(podName, 'pod name');
+  const { stdout } = await execFileAsync('kubectl', [
+    'exec', '-n', ns, podName, '--', 'psql', '-U', user, '-d', db, '-c', trimmed, '-A', '-F', '\t',
+  ]);
   const executionTimeMs = Date.now() - start;
 
   const lines = stdout.trim().split('\n').filter(Boolean);

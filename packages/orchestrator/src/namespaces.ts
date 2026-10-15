@@ -1,11 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import YAML from 'yaml';
 import { loadProjectConfig } from './config.js';
 
-const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export type PSSLevel = 'privileged' | 'baseline' | 'restricted';
 
@@ -311,7 +310,7 @@ export async function applyClusterNamespaces(
   fs.writeFileSync(manifestPath, manifest, 'utf8');
 
   try {
-    await execAsync(`kubectl apply -f "${manifestPath}"`);
+    await execFileAsync('kubectl', ['apply', '-f', manifestPath]);
     return {
       total: discovery.total,
       namespaces: discovery.namespaces.map((n) => n.name),

@@ -7,6 +7,7 @@ import * as path from 'node:path';
 
 import { getChartsDirectory } from '../config.js';
 import { execAsync } from './shared.js';
+import { execFileAsync } from '../exec-argv.js';
 import { type WafflePipelineMetadata, type WafflePipeline, loadWafflePipeline, validateWafflePipeline } from './schema.js';
 
 // ============================================================================
@@ -138,8 +139,10 @@ export class WaffleSourceManager {
       const targetDir = path.join(this.cacheDir, id);
       localPath = targetDir;
       try {
-        const branchFlag = input.branch ? `-b ${JSON.stringify(input.branch)}` : '';
-        await execAsync(`git clone --depth 1 ${branchFlag} ${JSON.stringify(normalizedPath)} ${JSON.stringify(targetDir)}`);
+        const cloneArgs = ['clone', '--depth', '1'];
+        if (input.branch) cloneArgs.push('-b', input.branch);
+        cloneArgs.push(normalizedPath, targetDir);
+        await execFileAsync('git', cloneArgs);
         const { stdout: shaOut } = await execAsync('git rev-parse HEAD', { cwd: targetDir });
         currentSha = shaOut.trim();
 
@@ -230,8 +233,10 @@ export class WaffleSourceManager {
       if (source.type === 'git') {
         const targetDir = source.localPath;
         if (!fs.existsSync(targetDir)) {
-          const branchFlag = source.branch ? `-b ${JSON.stringify(source.branch)}` : '';
-          await execAsync(`git clone --depth 1 ${branchFlag} ${JSON.stringify(source.pathOrUrl)} ${JSON.stringify(targetDir)}`);
+          const cloneArgs = ['clone', '--depth', '1'];
+          if (source.branch) cloneArgs.push('-b', source.branch);
+          cloneArgs.push(source.pathOrUrl, targetDir);
+          await execFileAsync('git', cloneArgs);
         } else {
           await execAsync('git fetch --depth 1', { cwd: targetDir });
           await execAsync('git reset --hard FETCH_HEAD', { cwd: targetDir });

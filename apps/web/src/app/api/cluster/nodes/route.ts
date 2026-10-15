@@ -77,9 +77,25 @@ export async function POST(req: Request) {
 
     
     if (action === 'k3s_batch_join') {
+      // Fail fast with an actionable error instead of dispatching a task
+      // that dies instantly: on a fresh install there is no targets file
+      // yet, and the route previously returned success regardless.
+      if (!body.targets?.length) {
+        const targetsFile = body.targetsFile || 'targets';
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        if (!fs.existsSync(path.join(root, targetsFile))) {
+          return apiError(
+            400,
+            `Targets file '${targetsFile}' not found. Create it with one SSH target (user@host) per line, or pass explicit targets, before running a batch join.`,
+            { route: 'POST /api/cluster/nodes' }
+          );
+        }
+      }
       const task = provisionK3sBatchNodes(root, {
         role: body.role || 'agent',
-        targetsFile: body.targetsFile || 'targets',
+        targets: Array.isArray(body.targets) ? body.targets : undefined,
+        targetsFile: body.targets?.length ? undefined : body.targetsFile || 'targets',
         serverUrl: body.serverUrl,
         token: body.token,
       });

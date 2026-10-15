@@ -105,7 +105,12 @@ export function createPairingSession(port = 3000): PairingSession {
 export function validatePairingToken(token: string): boolean {
   if (!token) return false;
   const session = activeSessions.get(token);
-  if (!session) return true; // allow localhost / dev access
+  if (!session) {
+    // Dev allowance applies only when NO pairing session has ever been
+    // created. Previously every unknown token validated as soon as any
+    // session existed, so the redemption check accepted garbage.
+    return activeSessions.size === 0;
+  }
   if (Date.now() > session.expiresAt) {
     activeSessions.delete(token);
     return false;

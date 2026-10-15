@@ -15,7 +15,13 @@ fi
 
 # 2. Local routable IP fallback, then WAN IP
 if [[ -z "${THIS_IP:-}" ]]; then
-  THIS_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' || hostname -I 2>/dev/null | awk '{print $1}' || curl -s --connect-timeout 2 icanhazip.com 2>/dev/null || echo "127.0.0.1")
+  THIS_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}' || true)
+fi
+if [[ -z "${THIS_IP:-}" ]]; then
+  THIS_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+fi
+if [[ -z "${THIS_IP:-}" ]]; then
+  THIS_IP=$(curl -s --connect-timeout 2 icanhazip.com 2>/dev/null || echo "127.0.0.1")
 fi
 
 # 3. Detect WAN IP for optional extra TLS SAN
@@ -27,6 +33,7 @@ fi
 
 if [[ -f ./server_url && -s ./server_url ]]; then
   SAVED_URL=$(tr -d '[:space:]' < ./server_url)
+  SAVED_URL="${SAVED_URL%/}"
   if [[ ! "${SAVED_URL}" =~ ^https?:// ]]; then
     SAVED_URL="https://${SAVED_URL}"
   fi
@@ -80,7 +87,7 @@ chmod 600 ./.secrets/k3s_env
 # 1. Legacy init node script
 THIS_FILE=./.secrets/k3s_init_node.sh
 echo '#!/usr/bin/env bash' > ${THIS_FILE}
-echo "export THIS_IP=\$(ip route get 1.1.1.1 2>/dev/null | awk '{print \$7}' || hostname -I 2>/dev/null | awk '{print \$1}' || curl -s --connect-timeout 2 icanhazip.com 2>/dev/null || echo '127.0.0.1')" >> ${THIS_FILE}
+echo "export THIS_IP=\$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if (\$i == \"src\") {print \$(i+1); exit}}' || hostname -I 2>/dev/null | awk '{print \$1}' || curl -s --connect-timeout 2 icanhazip.com 2>/dev/null || echo '127.0.0.1')" >> ${THIS_FILE}
 echo "export K3S_TOKEN='${SECRET}'" >> ${THIS_FILE}
 echo "export K3S_URL='${FINAL_SERVER_URL}'" >> ${THIS_FILE}
 echo "export INSTALL_K3S_EXEC='${INSTALL_K3S_EXEC_COMMON}'" >> ${THIS_FILE}
@@ -103,7 +110,7 @@ SERVER_FILE=./.secrets/k3s_join_server.sh
 echo '#!/usr/bin/env bash' > ${SERVER_FILE}
 echo '# K3s HA Control-Plane Node Join Script' >> ${SERVER_FILE}
 echo 'set -euo pipefail' >> ${SERVER_FILE}
-echo "export THIS_LOCAL_IP=\$(ip route get 1.1.1.1 2>/dev/null | awk '{print \$7}' || hostname -I 2>/dev/null | awk '{print \$1}' || curl -s --connect-timeout 2 icanhazip.com 2>/dev/null || echo '127.0.0.1')" >> ${SERVER_FILE}
+echo "export THIS_LOCAL_IP=\$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if (\$i == \"src\") {print \$(i+1); exit}}' || hostname -I 2>/dev/null | awk '{print \$1}' || curl -s --connect-timeout 2 icanhazip.com 2>/dev/null || echo '127.0.0.1')" >> ${SERVER_FILE}
 echo "export K3S_URL='${FINAL_SERVER_URL}'" >> ${SERVER_FILE}
 echo "export K3S_TOKEN='${SECRET}'" >> ${SERVER_FILE}
 echo "export INSTALL_K3S_EXEC=\"server --tls-san \${THIS_LOCAL_IP} --flannel-backend=${FLANNEL_BACKEND} --embedded-registry --disable=traefik --secrets-encryption\"" >> ${SERVER_FILE}

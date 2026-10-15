@@ -1,8 +1,6 @@
 import * as k8s from '@kubernetes/client-node';
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 
-const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export interface ClusterTelemetry {
   isConnected: boolean;
@@ -212,7 +210,7 @@ export class K8sClient {
   }
 
   public async switchContext(contextName: string): Promise<void> {
-    await execAsync(`kubectl config use-context ${JSON.stringify(contextName)}`);
+    await execFileAsync('kubectl', ['config', 'use-context', contextName]);
     // Reload kubeconfig
     this.kc.loadFromDefault();
     this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
