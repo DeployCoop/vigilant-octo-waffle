@@ -286,6 +286,13 @@ export function assertK8sLabel(value: string, what: string): string {
   return value;
 }
 
+/** IP address literal (dotted-quad IPv4 with in-range octets, or an IPv6 form). */
+export function isIpAddressLiteral(value: string): boolean {
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(value);
+  if (v4) return v4.slice(1).every((octet) => Number(octet) <= 255);
+  return /^[0-9a-fA-F:]+$/.test(value) && value.includes(':') && value.length <= 45;
+}
+
 /** Docker image reference (`name[:tag][@digest]`, optionally registry-prefixed). */
 export function isImageRef(value: string): boolean {
   return /^[a-z0-9][a-z0-9._/:@-]*$/i.test(value) && !value.startsWith('-') && value.length <= 255;

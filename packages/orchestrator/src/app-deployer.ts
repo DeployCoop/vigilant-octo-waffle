@@ -1,6 +1,5 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { exec } from 'node:child_process';
 import { loadProjectConfig, findProjectRoot } from './config.js';
 import { substituteVariables } from './template.js';
 import { mergeYamlStrings } from './yaml.js';
@@ -202,14 +201,7 @@ export async function deployCatalogApp(
       });
 
       // Apply Application CRD directly to Kubernetes
-      await new Promise<void>((resolve, reject) => {
-        const proc = exec('kubectl apply -f -', { cwd: projectRoot }, (err, stdout, stderr) => {
-          if (err) reject(new Error(stderr || err.message));
-          else resolve();
-        });
-        proc.stdin?.write(renderedManifest);
-        proc.stdin?.end();
-      });
+      await execFileAsync('kubectl', ['apply', '-f', '-'], { cwd: projectRoot, input: renderedManifest });
 
       // 4. Post-initializers (init/<appId> and init/<appId>_<ingress>)
       await applyInitializerDirectory(projectRoot, `init/${appId}`);

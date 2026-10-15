@@ -33,7 +33,11 @@ export function getOidcConfig(env: NodeJS.ProcessEnv = process.env): OidcConfig 
   const issuer = env[OIDC_ISSUER_ENV]?.trim();
   const clientId = env[OIDC_CLIENT_ID_ENV]?.trim();
   if (!issuer || !clientId) return null;
-  return { issuer: issuer.replace(/\/+$/, ''), clientId };
+  // Strip trailing slashes with an index walk — the /\/+$/ regex is
+  // quadratic on slash-heavy input.
+  let end = issuer.length;
+  while (end > 0 && issuer[end - 1] === '/') end--;
+  return { issuer: issuer.slice(0, end), clientId };
 }
 
 /** Cheap structural check: three base64url segments. */

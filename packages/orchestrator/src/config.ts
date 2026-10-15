@@ -117,12 +117,21 @@ export function parseEnvFile(content: string): Record<string, string> {
       const [, key, rawVal] = match;
       let val = rawVal.trim();
       if (val.startsWith('"')) {
-        const closingQuote = val.indexOf('"', 1);
-        if (closingQuote !== -1) {
-          val = val.substring(1, closingQuote);
-        } else {
-          val = val.replace(/^["']|["']$/g, '').trim();
+        let parsed = '';
+        let closed = false;
+        for (let i = 1; i < val.length; i++) {
+          const ch = val[i];
+          if (ch === '\\' && i + 1 < val.length && '\\$`"'.includes(val[i + 1])) {
+            parsed += val[i + 1];
+            i++;
+          } else if (ch === '"') {
+            closed = true;
+            break;
+          } else {
+            parsed += ch;
+          }
         }
+        val = closed ? parsed : val.replace(/^["']|["']$/g, '').trim();
       } else if (val.startsWith("'")) {
         const closingQuote = val.indexOf("'", 1);
         if (closingQuote !== -1) {
@@ -330,8 +339,15 @@ export function saveEnvFile(projectRoot: string, envMap: Record<string, string>)
   for (const [k, v] of Object.entries(envMap)) {
     // Validate key identifier (must start with letter/underscore and contain alphanumeric/underscore)
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) continue;
-    // Sanitize value: escape double quotes, strip raw newlines to prevent multi-line injection
+    // Sanitize value for a double-quoted .env entry. The file is `source`d by
+    // bash scripts, where $, backticks and $(...) inside double quotes still
+    // execute — escape backslash first, then $, backtick and " so the value
+    // is fully inert, and strip raw newlines to prevent multi-line injection.
+    // parseEnvFile reverses exactly these escapes.
     const sanitizedVal = String(v ?? '')
+      .replace(/\\/g, '\\\\')
+      .replace(/\$/g, '\\$')
+      .replace(/`/g, '\\`')
       .replace(/"/g, '\\"')
       .replace(/[\r\n]+/g, ' ');
     lines.push(`${k}="${sanitizedVal}"`);
