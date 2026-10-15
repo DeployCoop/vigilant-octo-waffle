@@ -219,11 +219,13 @@ spec:
   });
 
   describe('K3s Multi-Node Orchestration', () => {
-    it('allows k3s, ssh, scp, and parallel binaries in command allowlist', () => {
+    it('allows k3s, ssh, and scp binaries in command allowlist', () => {
       assert.ok(ALLOWED_EXECUTABLES.has('k3s'), 'k3s must be in ALLOWED_EXECUTABLES');
       assert.ok(ALLOWED_EXECUTABLES.has('ssh'), 'ssh must be in ALLOWED_EXECUTABLES');
       assert.ok(ALLOWED_EXECUTABLES.has('scp'), 'scp must be in ALLOWED_EXECUTABLES');
-      assert.ok(ALLOWED_EXECUTABLES.has('parallel'), 'parallel must be in ALLOWED_EXECUTABLES');
+      // GNU parallel executes its arguments by design; removed from the
+      // allowlist in the 2026-10-14 bug sweep.
+      assert.ok(!ALLOWED_EXECUTABLES.has('parallel'), 'parallel must NOT be in ALLOWED_EXECUTABLES');
 
       const k3sRes = validateCommand('k3s', ['--version'], projectRoot);
       assert.equal(k3sRes.allowed, true);
@@ -235,7 +237,7 @@ spec:
       assert.equal(scpRes.allowed, true);
 
       const parRes = validateCommand('parallel', ['--version'], projectRoot);
-      assert.equal(parRes.allowed, true);
+      assert.equal(parRes.allowed, false);
     });
 
     it('allows all K3s suite scripts via validateCommand', () => {

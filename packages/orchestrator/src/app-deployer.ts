@@ -1,14 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { loadProjectConfig, findProjectRoot } from './config.js';
 import { substituteVariables } from './template.js';
 import { mergeYamlStrings } from './yaml.js';
 import { applyInitializerDirectory } from './initializer.js';
 import { ensureNamespaceWithSecurity } from './namespaces.js';
 
-const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export type DeployEngine = 'argocd' | 'helm' | 'flux';
 
@@ -232,8 +231,11 @@ export async function deployCatalogApp(
       }
 
       const timeout = `${options.timeoutSeconds || 300}s`;
-      const cmd = `helm upgrade --install ${JSON.stringify(appId)} ${JSON.stringify(chartPath)} --namespace ${JSON.stringify(targetNs)} --create-namespace --wait --timeout ${timeout}`;
-      const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: config.raw });
+      const { stdout, stderr } = await execFileAsync(
+        'helm',
+        ['upgrade', '--install', appId, chartPath, '--namespace', targetNs, '--create-namespace', '--wait', '--timeout', timeout],
+        { cwd: projectRoot, env: config.raw }
+      );
 
       await applyInitializerDirectory(projectRoot, `init/${appId}`);
 
@@ -271,9 +273,9 @@ export async function removeCatalogApp(
   const targetNs = namespace || appId.replace(/_/g, '-');
   try {
     // Attempt ArgoCD app removal
-    await execAsync(`kubectl delete application ${JSON.stringify(appId)} -n argocd --ignore-not-found`, { cwd: projectRoot }).catch(() => {});
+    await execFileAsync('kubectl', ['delete', 'application', appId, '-n', 'argocd', '--ignore-not-found'], { cwd: projectRoot }).catch(() => {});
     // Attempt Helm uninstall
-    await execAsync(`helm uninstall ${JSON.stringify(appId)} -n ${JSON.stringify(targetNs)} 2>/dev/null || true`, { cwd: projectRoot }).catch(() => {});
+    await execFileAsync('helm', ['uninstall', appId, '-n', targetNs], { cwd: projectRoot }).catch(() => {});
 
     return {
       success: true,
@@ -307,7 +309,7 @@ export async function getCatalogAppStatus(
 
   try {
     // 1. Check Pods in target namespace
-    const { stdout: podsOut } = await execAsync(`kubectl get pods -n ${JSON.stringify(targetNs)} -o json`, { cwd: projectRoot }).catch(() => ({ stdout: '{"items":[]}' }));
+    const { stdout: podsOut } = await execFileAsync('kubectl', ['get', 'pods', '-n', targetNs, '-o', 'json'], { cwd: projectRoot }).catch(() => ({ stdout: '{"items":[]}' }));
     const podsData = JSON.parse(podsOut);
 
     if (podsData.items && podsData.items.length > 0) {
@@ -331,7 +333,7 @@ export async function getCatalogAppStatus(
     }
 
     // 2. Check ArgoCD status
-    const { stdout: argoOut } = await execAsync(`kubectl get application ${JSON.stringify(appId)} -n argocd -o json`, { cwd: projectRoot }).catch(() => ({ stdout: '' }));
+    const { stdout: argoOut } = await execFileAsync('kubectl', ['get', 'application', appId, '-n', 'argocd', '-o', 'json'], { cwd: projectRoot }).catch(() => ({ stdout: '' }));
     if (argoOut) {
       result.isDeployed = true;
       const argoData = JSON.parse(argoOut);

@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { findProjectRoot } from './config.js';
 
 const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export interface DevCertificateInfo {
   certPath: string;
@@ -102,11 +103,8 @@ export async function ensureDevCertificate(
     new Set([...discoverLocalHostnames(), ...(options.hostnames || [])])
   );
 
-  const quotedHosts = hostnames.map((h) => JSON.stringify(h)).join(' ');
-  const cmd = `mkcert -cert-file ${JSON.stringify(certPath)} -key-file ${JSON.stringify(keyPath)} ${quotedHosts}`;
-
   try {
-    await execAsync(cmd, { cwd: projectRoot });
+    await execFileAsync('mkcert', ['-cert-file', certPath, '-key-file', keyPath, ...hostnames], { cwd: projectRoot });
     fs.chmodSync(keyPath, 0o600);
   } catch (err: any) {
     throw new Error(`Failed to generate mkcert certificate: ${err.message}`, { cause: err });

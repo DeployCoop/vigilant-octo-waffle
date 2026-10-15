@@ -200,7 +200,10 @@ kill_local() {
 
 kill_remote() {
   local host="$1"
-  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10" -o "BatchMode=yes")
+  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
+  # BatchMode only without a terminal: #81 added it unconditionally,
+  # which broke password and passphrase-key auth for interactive CLI use.
+  [[ -t 0 ]] || ssh_opts+=(-o "BatchMode=yes")
   if [[ -n "${SSH_KEY}" ]]; then
     ssh_opts+=(-i "${SSH_KEY}")
   fi

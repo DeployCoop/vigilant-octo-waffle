@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTerminal } from '@/context/TerminalContext';
 import { soundFx } from '@/lib/audio';
@@ -14,8 +14,7 @@ import {
   ShieldCheck,
   LayoutTemplate,
   ChevronRight,
-  Play,
-  ArrowRight
+  Play
 } from 'lucide-react';
 
 const steps = [

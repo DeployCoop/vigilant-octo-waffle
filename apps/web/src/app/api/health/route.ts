@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { routeError } from '@/lib/route-error';
+import { authorizeRequest } from '@/lib/authz';
 import {
   APP_CATALOG,
   loadProjectConfig,
@@ -10,7 +11,12 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  // Was completely unguarded: unauthenticated callers received the
+  // cluster domain, every app's ingress URL and live probe results, and
+  // each request triggered a fresh round of outbound probes.
+  const denied = await authorizeRequest(req, 'cluster:read');
+  if (denied) return denied;
   try {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);

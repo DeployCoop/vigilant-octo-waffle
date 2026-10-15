@@ -161,18 +161,26 @@ deploy_remote() {
   echo "Deploying registries.yaml to remote host: ${host}"
   echo "============================================================"
 
-  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10" -o "BatchMode=yes")
+  local ssh_opts=(-p "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
+  # BatchMode only without a terminal: #81 added it unconditionally,
+  # which broke password and passphrase-key auth for interactive CLI use.
+  [[ -t 0 ]] || ssh_opts+=(-o "BatchMode=yes")
   if [[ -n "${SSH_KEY}" ]]; then
     ssh_opts+=(-i "${SSH_KEY}")
   fi
+  local scp_opts=(-P "${SSH_PORT}" -o "StrictHostKeyChecking=accept-new" -o "ConnectTimeout=10")
+  [[ -t 0 ]] || scp_opts+=(-o "BatchMode=yes")
+  if [[ -n "${SSH_KEY}" ]]; then
+    scp_opts+=(-i "${SSH_KEY}")
+  fi
 
   ssh "${ssh_opts[@]}" "${host}" "sudo mkdir -p /etc/rancher/k3s"
-  scp -P "${SSH_PORT}" $(if [[ -n "${SSH_KEY}" ]]; then echo "-i ${SSH_KEY}"; fi) -o "StrictHostKeyChecking=accept-new" "${REG_FILE}" "${host}:/tmp/registries.yaml"
+  scp "${scp_opts[@]}" "${REG_FILE}" "${host}:/tmp/registries.yaml"
   ssh "${ssh_opts[@]}" "${host}" "sudo mv /tmp/registries.yaml /etc/rancher/k3s/registries.yaml && sudo chmod 644 /etc/rancher/k3s/registries.yaml"
   echo "  [OK] Deployed /etc/rancher/k3s/registries.yaml to ${host}"
 
   if [[ "${COPY_KUBECONFIG}" == "true" && -f /etc/rancher/k3s/k3s.yaml ]]; then
-    scp -P "${SSH_PORT}" $(if [[ -n "${SSH_KEY}" ]]; then echo "-i ${SSH_KEY}"; fi) -o "StrictHostKeyChecking=accept-new" /etc/rancher/k3s/k3s.yaml "${host}:/tmp/k3s.yaml"
+    scp "${scp_opts[@]}" /etc/rancher/k3s/k3s.yaml "${host}:/tmp/k3s.yaml"
     ssh "${ssh_opts[@]}" "${host}" "mkdir -p ~/.kube && sudo mv /tmp/k3s.yaml ~/.kube/config && sudo chown \$(id -u):\$(id -g) ~/.kube/config && chmod 600 ~/.kube/config"
     echo "  [OK] Copied k3s.yaml to ~/.kube/config on ${host}"
   fi

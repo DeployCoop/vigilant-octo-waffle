@@ -1,12 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import YAML from 'yaml';
+import { execFileAsync, assertK8sLabel } from './exec-argv.js';
 import { loadProjectConfig } from './config.js';
 import { toBase64 } from './secrets.js';
-
-const execAsync = promisify(exec);
 
 export interface ModularBundleDefinition {
   id: string;
@@ -295,22 +292,15 @@ export async function syncSecretsAcrossNamespaces(
 
     if (options.applyLiveCluster) {
       try {
+        assertK8sLabel(ns, 'namespace');
         // Ensure namespace exists first
-        await execAsync(`kubectl get namespace ${JSON.stringify(ns)} 2>/dev/null || kubectl create namespace ${JSON.stringify(ns)}`);
-        
-        // Apply secret into namespace
-        const child = exec(`kubectl apply -f -`);
-        if (child.stdin) {
-          child.stdin.write(manifest);
-          child.stdin.end();
-        }
-        await new Promise((resolve, reject) => {
-          child.on('close', (code) => {
-            if (code === 0) resolve(true);
-            else reject(new Error(`kubectl exited with code ${code}`));
-          });
-          child.on('error', reject);
-        });
+        await execFileAsync('kubectl', ['get', 'namespace', ns]).catch(() =>
+          execFileAsync('kubectl', ['create', 'namespace', ns])
+        );
+
+        // Apply secret into namespace (argv + stdin; the old exec() call
+        // neither drained output nor handled stdin errors)
+        await execFileAsync('kubectl', ['apply', '-f', '-'], { input: manifest });
 
         syncedNamespaces.push(ns);
       } catch (err: any) {

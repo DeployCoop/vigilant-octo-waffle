@@ -8,6 +8,7 @@ import { loadProjectConfig, getChartsDirectory } from './config.js';
 import type { AppCategory } from './registry.js';
 
 const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export interface HelmReleaseInfo {
   name: string;
@@ -78,7 +79,7 @@ export async function listHelmReleases(): Promise<HelmReleaseInfo[]> {
  */
 export async function getHelmReleaseValues(name: string, namespace: string): Promise<string> {
   try {
-    const { stdout } = await execAsync(`helm get values ${JSON.stringify(name)} -n ${JSON.stringify(namespace)} -a`);
+    const { stdout } = await execFileAsync('helm', ['get', 'values', name, '-n', namespace, '-a']);
     return stdout;
   } catch (err: any) {
     return `# Failed to retrieve values: ${err.message}`;
@@ -383,7 +384,7 @@ export async function lintLocalChart(
   }
 
   try {
-    const { stdout, stderr } = await execAsync(`helm lint ${JSON.stringify(chartDetail.chartPath)}`);
+    const { stdout, stderr } = await execFileAsync('helm', ['lint', chartDetail.chartPath]);
     return {
       valid: true,
       output: (stdout + '\n' + stderr).trim(),
@@ -420,7 +421,7 @@ export async function templateLocalChart(
   const releaseName = options.releaseName || chartDetail.id;
   const namespace = options.namespace || 'default';
 
-  let valuesFlag = '';
+  const valuesArgs: string[] = [];
   if (options.valuesYaml && options.valuesYaml.trim()) {
     const cacheDir = path.join(projectRoot, '.vow-cache', 'helm');
     if (!fs.existsSync(cacheDir)) {
@@ -428,32 +429,34 @@ export async function templateLocalChart(
     }
     const valuesFile = path.join(cacheDir, `temp-${chartId}-values.yaml`);
     fs.writeFileSync(valuesFile, options.valuesYaml, 'utf-8');
-    valuesFlag = `-f ${JSON.stringify(valuesFile)}`;
+    valuesArgs.push('-f', valuesFile);
   }
 
   const setArgs: string[] = [];
+  const pushSet = (kv: string) => setArgs.push('--set', kv);
   const targetDomain = options.domain || config.cluster.appDomains?.[chartId] || config.cluster.appDomains?.[releaseName];
   if (targetDomain) {
     if (!options.set || (!options.set['ingress.host'] && !options.set['web.ingress.hosts[0].host'] && !options.set['ingress.hosts[0].host'])) {
       if (chartId === 'ironcladgrants' || chartId === 'ironclad-grants') {
-        setArgs.push(`--set web.ingress.hosts[0].host=${JSON.stringify(targetDomain)}`);
+        pushSet(`web.ingress.hosts[0].host=${targetDomain}`);
       } else if (chartId === 'fitdjinn') {
-        setArgs.push(`--set ingress.hosts[0].host=${JSON.stringify(targetDomain)}`);
+        pushSet(`ingress.hosts[0].host=${targetDomain}`);
       } else {
-        setArgs.push(`--set ingress.host=${JSON.stringify(targetDomain)}`);
+        pushSet(`ingress.host=${targetDomain}`);
       }
     }
   }
 
   if (options.set) {
     for (const [k, v] of Object.entries(options.set)) {
-      setArgs.push(`--set ${k}=${JSON.stringify(v)}`);
+      pushSet(`${k}=${v}`);
     }
   }
 
   try {
-    const cmd = `helm template ${JSON.stringify(releaseName)} ${JSON.stringify(chartDetail.chartPath)} --namespace ${JSON.stringify(namespace)} ${valuesFlag} ${setArgs.join(' ')}`;
-    const { stdout } = await execAsync(cmd);
+    const { stdout } = await execFileAsync('helm', [
+      'template', releaseName, chartDetail.chartPath, '--namespace', namespace, ...valuesArgs, ...setArgs,
+    ]);
     return stdout;
   } catch (err: any) {
     throw new Error(`Helm template failed: ${err.message}\n${err.stderr || ''}`, { cause: err });
