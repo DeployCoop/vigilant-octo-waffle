@@ -24,9 +24,111 @@ export const ALLOWED_EXECUTABLES = new Set([
   'echo',
   'ssh',
   'scp',
-  'parallel',
   'git',
 ]);
+
+/**
+ * Per-binary argument policy (bug-sweep fix, 2026-10-14).
+ *
+ * The allowlist used to validate only the binary NAME: any allowlisted
+ * binary accepted arbitrary arguments, which quietly re-opened code
+ * execution (`git -c core.sshCommand=...`, `ssh -o ProxyCommand=...`,
+ * `docker run --privileged`, `helm --post-renderer`, GNU parallel).
+ * Returns a rejection reason, or null when the arguments are acceptable.
+ */
+export function validateBinaryArgs(binary: string, args: string[]): string | null {
+  for (const arg of args) {
+    if (arg.includes('\0') || arg.includes('\n')) {
+      return 'Arguments must not contain NUL or newline characters';
+    }
+  }
+
+  switch (binary) {
+    case 'git': {
+      for (const arg of args) {
+        if (
+          arg === '-c' ||
+          arg.startsWith('--config') ||
+          arg.startsWith('--exec-path') ||
+          arg === '-u' ||
+          arg.startsWith('--upload-pack') ||
+          arg.startsWith('--receive-pack') ||
+          arg.startsWith('ext::')
+        ) {
+          return `git argument "${arg}" can execute arbitrary commands (config/transport injection) and is forbidden`;
+        }
+      }
+      return null;
+    }
+    case 'ssh':
+    case 'scp': {
+      const localExecKeys = ['proxycommand', 'localcommand', 'permitlocalcommand', 'pkcs11provider', 'securitykeyprovider'];
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === '-F') return `${binary} -F (custom config file) is forbidden: the config can contain ProxyCommand`;
+        if (binary === 'scp' && arg === '-S') return 'scp -S (custom connection program) is forbidden';
+        const optValue = arg === '-o' ? args[i + 1] : arg.startsWith('-o') ? arg.slice(2) : undefined;
+        if (optValue) {
+          const key = optValue.split('=')[0]?.trim().toLowerCase();
+          if (key && localExecKeys.includes(key)) {
+            return `${binary} option "${key}" executes a local command/library and is forbidden`;
+          }
+        }
+        // Combined form: a bare token like ProxyCommand=... as an -o value
+        // is handled above; also catch it when smuggled as its own token.
+        const bareKey = arg.split('=')[0]?.trim().toLowerCase();
+        if (arg.includes('=') && bareKey && localExecKeys.includes(bareKey)) {
+          return `${binary} option "${bareKey}" executes a local command/library and is forbidden`;
+        }
+      }
+      return null;
+    }
+    case 'docker': {
+      const allowedSubcommands = new Set([
+        'build', 'push', 'pull', 'tag', 'save', 'load', 'images', 'image',
+        'ps', 'inspect', 'version', 'info', 'login', 'logout', 'rmi', 'history',
+      ]);
+      const globalValueFlags = new Set(['--config', '--host', '-H', '--context', '--log-level', '-l']);
+      let subcommand: string | undefined;
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (globalValueFlags.has(arg)) {
+          i++;
+          continue;
+        }
+        if (arg.startsWith('-')) continue;
+        subcommand = arg;
+        break;
+      }
+      if (subcommand && !allowedSubcommands.has(subcommand)) {
+        return `docker subcommand "${subcommand}" is forbidden through the task executor (container execution/management is out of scope; allowed: ${[...allowedSubcommands].join(', ')})`;
+      }
+      return null;
+    }
+    case 'helm': {
+      for (const arg of args) {
+        if (arg === '--post-renderer' || arg.startsWith('--post-renderer=')) {
+          return 'helm --post-renderer executes an arbitrary binary and is forbidden';
+        }
+      }
+      return null;
+    }
+    case 'kubectl': {
+      for (const arg of args) {
+        if (arg === '--server' || arg.startsWith('--server=')) {
+          return 'kubectl --server is forbidden: it would send cluster credentials to an arbitrary endpoint';
+        }
+      }
+      const subcommand = args.find((a) => !a.startsWith('-'));
+      if (subcommand && ['exec', 'cp', 'port-forward'].includes(subcommand)) {
+        return `kubectl ${subcommand} is forbidden through the generic task executor (use the dedicated exec route, which is permission-gated separately)`;
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
 
 export interface CommandValidationResult {
   allowed: boolean;
@@ -124,6 +226,11 @@ export function validateCommand(
     return { allowed: false, reason: 'Custom path binaries outside standard system directories are not permitted' };
   }
 
+  const argRejection = validateBinaryArgs(baseBinary, rawArgs);
+  if (argRejection) {
+    return { allowed: false, reason: argRejection };
+  }
+
   return {
     allowed: true,
     normalizedCommand: baseBinary,
@@ -182,16 +289,25 @@ export class ProcessManager {
    */
   private maybeAutoAttach(cwd: string): void {
     if (this.store || this.autoAttachTried) return;
-    this.autoAttachTried = true;
-    if (process.env.VOW_TASK_STORE === 'off') return;
+    if (process.env.VOW_TASK_STORE === 'off') {
+      this.autoAttachTried = true;
+      return;
+    }
     try {
       const root = findProjectRoot(cwd);
-      if (!fs.existsSync(path.join(root, 'src', 'default.env'))) return;
+      if (!fs.existsSync(path.join(root, 'src', 'default.env'))) {
+        // Definitive negative: not a project cwd. (Previously the tried
+        // flag was also set when the attach THREW, permanently disabling
+        // persistence for the process after one transient failure.)
+        this.autoAttachTried = true;
+        return;
+      }
       const store = new TaskStore(taskStorePath(root));
       store.reconcileRunning();
       this.attachStore(store);
     } catch {
-      // persistence is best-effort
+      // persistence is best-effort; leave autoAttachTried unset so the
+      // next task retries instead of disabling persistence for good.
     }
   }
 
@@ -235,7 +351,25 @@ export class ProcessManager {
 
     this.tasks.set(id, task);
     this.persist(task);
+    this.pruneTasks();
     return task;
+  }
+
+  /**
+   * Bounds the in-memory task map (bug-sweep fix): it previously grew
+   * without limit for the life of the process, retaining every task and
+   * its logs forever. Terminal tasks are kept up to a cap, newest first;
+   * running tasks are never pruned.
+   */
+  private pruneTasks(): void {
+    const MAX_TERMINAL_TASKS = 200;
+    const terminal = [...this.tasks.values()]
+      .filter((task) => task.status !== 'running')
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+    for (const task of terminal.slice(MAX_TERMINAL_TASKS)) {
+      this.tasks.delete(task.id);
+      this.lastFlush.delete(task.id);
+    }
   }
 
   public getTask(id: string): TaskRun | undefined {
@@ -275,6 +409,8 @@ export class ProcessManager {
     options: {
       cwd: string;
       env?: Record<string, string>;
+      /** Kill the task (SIGTERM, then SIGKILL after a grace period) after this many ms. */
+      timeoutMs?: number;
     }
   ): TaskRun {
     const validation = validateCommand(command, args, options.cwd);
@@ -299,6 +435,55 @@ export class ProcessManager {
       task.childProcess = child;
       this.persist(task);
 
+      // Terminal-state handling is finalize-once: whichever of close /
+      // error / cancel / timeout lands first owns the status, and 'close'
+      // is emitted exactly once. Previously the child's close handler
+      // unconditionally overwrote a user cancel back to failed/completed,
+      // and the error handler emitted 'error' on an emitter with no
+      // listeners — which Node turns into a thrown exception that can
+      // crash the server process.
+      let finalized = false;
+      let timedOut = false;
+      let timeoutTimer: NodeJS.Timeout | undefined;
+      let killTimer: NodeJS.Timeout | undefined;
+
+      const finalize = (status: TaskRun['status'], code: number | null, logLine: string): void => {
+        if (finalized) return;
+        finalized = true;
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        if (killTimer) clearTimeout(killTimer);
+        task.exitCode = code;
+        task.finishedAt = new Date().toISOString();
+        task.status = status;
+        this.appendLog(task, 'system', logLine);
+        this.persist(task);
+        task.emitter.emit('close', code);
+      };
+      taskFinalizers.set(task, finalize);
+
+      if (options.timeoutMs && options.timeoutMs > 0) {
+        timeoutTimer = setTimeout(() => {
+          timedOut = true;
+          this.appendLog(task, 'system', `Task timed out after ${options.timeoutMs}ms; terminating`);
+          try {
+            child.kill('SIGTERM');
+          } catch {
+            // already gone
+          }
+          killTimer = setTimeout(() => {
+            if (child.exitCode === null && child.signalCode === null) {
+              try {
+                child.kill('SIGKILL');
+              } catch {
+                // already gone
+              }
+            }
+          }, 5000);
+          killTimer.unref?.();
+        }, options.timeoutMs);
+        timeoutTimer.unref?.();
+      }
+
       child.stdout.on('data', (data: Buffer) => {
         const text = data.toString('utf-8');
         this.appendLog(task, 'stdout', text);
@@ -310,31 +495,37 @@ export class ProcessManager {
       });
 
       child.on('close', (code: number | null) => {
-        task.exitCode = code;
-        task.finishedAt = new Date().toISOString();
-        task.status = code === 0 ? 'completed' : 'failed';
-        this.appendLog(
-          task,
-          'system',
-          `Process exited with code ${code} (${task.status})`
+        if (task.status === 'cancelled') {
+          // Cancel already finalized the record; just note the real exit.
+          this.appendLog(task, 'system', `Process exited with code ${code} after cancellation`);
+          this.persist(task);
+          return;
+        }
+        finalize(
+          timedOut ? 'failed' : code === 0 ? 'completed' : 'failed',
+          code,
+          timedOut
+            ? `Process terminated after timeout (code ${code})`
+            : `Process exited with code ${code} (${code === 0 ? 'completed' : 'failed'})`
         );
-        this.persist(task);
-        task.emitter.emit('close', code);
       });
 
       child.on('error', (err: Error) => {
-        task.status = 'failed';
-        task.finishedAt = new Date().toISOString();
-        this.appendLog(task, 'system', `Process error: ${err.message}`);
-        this.persist(task);
-        task.emitter.emit('error', err);
+        if (task.status === 'cancelled') return;
+        if (task.emitter.listenerCount('error') > 0) {
+          task.emitter.emit('error', err);
+        }
+        finalize('failed', null, `Process error: ${err.message}`);
       });
     } catch (err: any) {
+      // Spawn threw synchronously: the caller has not had a chance to
+      // attach any listener yet, so emitting 'error' here would throw.
+      // Record the failure on the task instead (status is the contract).
       task.status = 'failed';
       task.finishedAt = new Date().toISOString();
       this.appendLog(task, 'system', `Failed to spawn: ${err.message}`);
       this.persist(task);
-      task.emitter.emit('error', err);
+      task.emitter.emit('close', null);
     }
 
     return task;
@@ -347,12 +538,31 @@ export class ProcessManager {
     }
 
     try {
-      task.childProcess.kill('SIGTERM');
-      task.status = 'cancelled';
-      task.finishedAt = new Date().toISOString();
-      this.appendLog(task, 'system', 'Process terminated by user');
-      this.persist(task);
-      task.emitter.emit('close', -1);
+      const child = task.childProcess;
+      child.kill('SIGTERM');
+      // Escalate: a child that ignores SIGTERM used to run forever while
+      // its record claimed a finished state.
+      const killTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            // already gone
+          }
+        }
+      }, 5000);
+      killTimer.unref?.();
+
+      const finalize = taskFinalizers.get(task);
+      if (finalize) {
+        finalize('cancelled', -1, 'Process terminated by user');
+      } else {
+        task.status = 'cancelled';
+        task.finishedAt = new Date().toISOString();
+        this.appendLog(task, 'system', 'Process terminated by user');
+        this.persist(task);
+        task.emitter.emit('close', -1);
+      }
       return true;
     } catch {
       return false;
@@ -402,6 +612,17 @@ function hydrateRecord(record: TaskRecord): TaskRun {
     emitter: new EventEmitter(),
   };
 }
+
+/**
+ * Per-task finalize callbacks registered by runCommand, keyed by the task
+ * object. Lets cancelTask finalize through the same finalize-once path as
+ * the child's own close/error handlers (so cancel state can't be
+ * overwritten by the later close event, and 'close' emits exactly once).
+ */
+const taskFinalizers = new WeakMap<
+  TaskRun,
+  (status: TaskRun['status'], code: number | null, logLine: string) => void
+>();
 
 export const processManager = new ProcessManager();
 

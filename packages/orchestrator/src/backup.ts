@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { processManager, type TaskRun } from './executor.js';
 
 const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export interface BackupItem {
   id: string;
@@ -79,6 +80,6 @@ export function restoreVeleroBackup(backupName: string, cwd?: string): TaskRun {
 
 export async function createDockerNodeSnapshot(containerName: string, snapshotName: string): Promise<string> {
   const tag = `vow-snapshot-${snapshotName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}:${Date.now()}`;
-  await execAsync(`docker commit ${JSON.stringify(containerName)} ${JSON.stringify(tag)}`);
+  await execFileAsync('docker', ['commit', containerName, tag]);
   return tag;
 }

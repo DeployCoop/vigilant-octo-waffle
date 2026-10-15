@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 export interface RolloutInfo {
   name: string;
@@ -26,11 +23,11 @@ const inMemoryCanaryWeights = new Map<string, number>();
 
 export async function listRollouts(namespace?: string): Promise<RolloutInfo[]> {
   const rollouts: RolloutInfo[] = [];
-  const nsFilter = namespace && namespace !== 'all' ? `-n ${namespace}` : '-A';
+  const nsArgs = namespace && namespace !== 'all' ? ['-n', namespace] : ['-A'];
 
   try {
     // 1. Try querying argo rollouts CRD if installed
-    const { stdout } = await execAsync(`kubectl get rollouts ${nsFilter} -o json 2>/dev/null || true`);
+    const { stdout } = await execFileAsync('kubectl', ['get', 'rollouts', ...nsArgs, '-o', 'json']).catch(() => ({ stdout: '' }));
     if (stdout.trim().startsWith('{')) {
       const parsed = JSON.parse(stdout);
       const items = parsed.items || [];
@@ -64,7 +61,7 @@ export async function listRollouts(namespace?: string): Promise<RolloutInfo[]> {
   // If no CRD rollouts found, discover standard user deployments and project them into canary models
   if (rollouts.length === 0) {
     try {
-      const { stdout } = await execAsync(`kubectl get deployments ${nsFilter} -o json 2>/dev/null || true`);
+      const { stdout } = await execFileAsync('kubectl', ['get', 'deployments', ...nsArgs, '-o', 'json']).catch(() => ({ stdout: '' }));
       if (stdout.trim().startsWith('{')) {
         const parsed = JSON.parse(stdout);
         const items = (parsed.items || []).filter((d: any) => {
@@ -112,7 +109,7 @@ export async function setCanaryWeight(name: string, namespace: string, weight: n
   try {
     // Attempt updating Ingress weighted service annotation or Rollout spec
     const annotation = `traefik.ingress.kubernetes.io/service.weights: "${name}-stable:${100 - boundedWeight}, ${name}-canary:${boundedWeight}"`;
-    await execAsync(`kubectl annotate service ${name} -n ${namespace} ${annotation} --overwrite 2>/dev/null || true`);
+    await execFileAsync('kubectl', ['annotate', 'service', name, '-n', namespace, annotation, '--overwrite']).catch(() => {});
   } catch {}
 
   return {
@@ -129,7 +126,7 @@ export async function promoteRollout(name: string, namespace: string, full = fal
   inMemoryCanaryWeights.set(key, newWeight);
 
   try {
-    await execAsync(`kubectl argo rollouts promote ${name} -n ${namespace} 2>/dev/null || true`);
+    await execFileAsync('kubectl', ['argo', 'rollouts', 'promote', name, '-n', namespace]).catch(() => {});
   } catch {}
 
   return {
@@ -145,7 +142,7 @@ export async function abortRollout(name: string, namespace: string): Promise<{ s
   inMemoryCanaryWeights.set(key, 0);
 
   try {
-    await execAsync(`kubectl argo rollouts abort ${name} -n ${namespace} 2>/dev/null || true`);
+    await execFileAsync('kubectl', ['argo', 'rollouts', 'abort', name, '-n', namespace]).catch(() => {});
   } catch {}
 
   return {

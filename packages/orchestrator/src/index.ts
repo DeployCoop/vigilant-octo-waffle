@@ -5,6 +5,7 @@ export * from './config.js';
 export * from './hosts.js';
 export * from './registry.js';
 export * from './executor.js';
+export * from './exec-argv.js';
 export * from './taskStore.js';
 export * from './cluster.js';
 export * from './argocd.js';

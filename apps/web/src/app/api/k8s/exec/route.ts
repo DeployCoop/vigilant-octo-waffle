@@ -70,12 +70,12 @@ export async function GET(req: Request) {
   const sessionId = searchParams.get('sessionId');
 
   if (!sessionId) {
-    return new Response('sessionId required', { status: 400 });
+    return apiError(400, 'sessionId required', { route: 'GET /api/k8s/exec' });
   }
 
   const session = execSessionManager.getSession(sessionId);
   if (!session) {
-    return new Response('Session not found', { status: 404 });
+    return apiError(404, 'Session not found', { route: 'GET /api/k8s/exec' });
   }
 
   const encoder = new TextEncoder();

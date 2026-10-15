@@ -79,6 +79,21 @@ export async function GET(req: Request) {
     // Status actions are cluster reads; the default response embeds the
     // k3s join info (including the node token), so it requires the
     // node-join permission.
+    //
+    // BUG FIX (2026-10-14 sweep): any TRUTHY action used to downgrade
+    // the check to cluster:read, and an unrecognized action then fell
+    // through to the join-info default — so a read-only viewer could
+    // steal the node-join token with ?action=bogus. Unknown actions are
+    // now rejected, and only the enumerated read actions get the
+    // cluster:read check.
+    const READ_ACTIONS = new Set([
+      'health', 'etcd', 'certs', 'cis', 'vip', 'cni', 'secrets',
+      'security-status', 'storage', 'monitoring', 'gpu', 'model-cache',
+      'healer', 'dr-drill', 'gateway', 'pool', 'finops', 'copilot-tools',
+    ]);
+    if (action !== null && !READ_ACTIONS.has(action)) {
+      return apiError(400, `Unknown action: ${action}`, { route: 'GET /api/cluster/k3s' });
+    }
     const denied = await authorizeRequest(req, action ? 'cluster:read' : 'cluster:nodes:join');
     if (denied) return denied;
 

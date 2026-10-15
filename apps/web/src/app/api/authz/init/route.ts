@@ -9,7 +9,7 @@ import {
   ensureDevCertificate,
   type Principal,
 } from '@vow/orchestrator';
-import { authorizeRequest, toPublicPrincipal, uniquePrincipalId } from '@/lib/authz';
+import { authorizeRequest, isLocalBoardRequest, toPublicPrincipal, uniquePrincipalId } from '@/lib/authz';
 import { getProjectRoot } from '@/lib/project';
 import { apiError } from '@/lib/route-error';
 
@@ -32,6 +32,23 @@ export async function POST(req: Request) {
 
   const root = getProjectRoot();
   const loaded = loadAuthzStore(root);
+
+  // BUG FIX (2026-10-14 sweep): while authz is DISABLED (the default —
+  // no store file), decide() allows every caller, and this route never
+  // consulted locality: anyone who could reach the port could create
+  // the first owner with a self-chosen password and lock the operator
+  // out (subsequent inits are 409-refused). Bootstrap now requires the
+  // local board, matching the empty-store path in decide(). Operators
+  // who need remote bootstrap can use the authz CLI on the host.
+  const needsBootstrap = loaded.status !== 'ready' || loaded.store.principals.length === 0;
+  if (needsBootstrap && !isLocalBoardRequest(req)) {
+    return apiError(
+      403,
+      'Authorization bootstrap is only available from the local board (loopback). Enable authz locally first, or use the authz CLI on the host.',
+      { reason: 'bootstrap_requires_local_board' }
+    );
+  }
+
   if (loaded.status === 'ready' && loaded.store.principals.length > 0) {
     return apiError(
       409,

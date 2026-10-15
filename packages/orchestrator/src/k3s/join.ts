@@ -445,14 +445,21 @@ export function provisionK3sBatchNodes(projectRoot: string, options: K3sBatchPro
     }
   }
 
+  // Precedence: an explicitly configured SERVER_URL in the process env
+  // wins; the server_url file (written by install_k3s.sh) is the
+  // fallback. Previously a stale file silently overrode a correct env
+  // value. (The script itself now also honors the injected env — its
+  // unconditional SERVER_URL="" assignment used to clobber this value.)
   let serverUrlEnv = process.env.SERVER_URL;
-  try {
-    const serverUrlFile = path.join(projectRoot, 'server_url');
-    if (fs.existsSync(serverUrlFile)) {
-      serverUrlEnv = fs.readFileSync(serverUrlFile, 'utf8').trim();
+  if (!serverUrlEnv) {
+    try {
+      const serverUrlFile = path.join(projectRoot, 'server_url');
+      if (fs.existsSync(serverUrlFile)) {
+        serverUrlEnv = fs.readFileSync(serverUrlFile, 'utf8').trim() || undefined;
+      }
+    } catch {
+      // ignore read errors
     }
-  } catch {
-    // ignore read errors
   }
 
   return processManager.runCommand('bash', args, { 

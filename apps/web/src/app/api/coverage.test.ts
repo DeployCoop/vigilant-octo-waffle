@@ -20,10 +20,11 @@ const GUARD_MARKERS = [
 ];
 
 /** Routes that are deliberately reachable without authorization. */
-const PUBLIC_ROUTES = new Set([
-  // Liveness/readiness probe; exposes no project data.
-  'health/route.ts',
-]);
+// (Empty since 2026-10-14: /api/health used to be public as a liveness
+// probe, but it returns the cluster domain, every app's ingress URL and
+// live probe results, and triggers outbound probes per request — it now
+// requires cluster:read like every other data route.)
+const PUBLIC_ROUTES = new Set<string>([]);
 
 function collectRouteFiles(dir: string, prefix = ''): string[] {
   const out: string[] = [];

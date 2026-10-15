@@ -8,6 +8,7 @@ import { applyInitializerDirectory } from './initializer.js';
 import { ensureNamespaceWithSecurity } from './namespaces.js';
 
 const execAsync = promisify(exec);
+import { execFileAsync } from './exec-argv.js';
 
 function getIngressExecutionEnv(extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const kubeconfig =
@@ -71,20 +72,20 @@ export async function deployCertManager(
     warn: 'restricted',
   });
 
-  const cmd = [
-    'helm upgrade --install cert-manager cert-manager',
-    '--repo https://charts.jetstack.io',
-    '--namespace cert-manager',
+  const cmdArgs = [
+    'upgrade', '--install', 'cert-manager', 'cert-manager',
+    '--repo', 'https://charts.jetstack.io',
+    '--namespace', 'cert-manager',
     '--create-namespace',
     '--wait',
-    `--timeout ${JSON.stringify(timeout)}`,
-    `--version ${JSON.stringify(version)}`,
-    '--set prometheus.enabled=true',
-    '--set crds.enabled=true',
-  ].join(' ');
+    '--timeout', timeout,
+    '--version', version,
+    '--set', 'prometheus.enabled=true',
+    '--set', 'crds.enabled=true',
+  ];
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
+    const { stdout, stderr } = await execFileAsync('helm', cmdArgs, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
     return {
       success: true,
       output: (stdout + '\n' + stderr).trim(),
@@ -111,8 +112,14 @@ export async function setupMkcert(
     }
 
     // Create or update secret idempotently via client-side dry-run pipe
-    const secretCmd = `kubectl create secret tls mkcert-ca-key-pair --key ${JSON.stringify(keyPath)} --cert ${JSON.stringify(certPath)} -n cert-manager --dry-run=client -o yaml | kubectl apply -f -`;
-    await execAsync(secretCmd, { cwd: projectRoot });
+    const secretManifest = await execFileAsync('kubectl', [
+      'create', 'secret', 'tls', 'mkcert-ca-key-pair',
+      '--key', keyPath, '--cert', certPath,
+      '-n', 'cert-manager', '--dry-run=client', '-o', 'yaml',
+    ], { cwd: projectRoot }).then((r) => r.stdout).catch(() => '');
+        if (secretManifest) {
+      await execFileAsync('kubectl', ['apply', '-f', '-'], { cwd: projectRoot, input: secretManifest });
+    }
 
     // Apply init/certmanager-mkcert manifests
     await applyInitializerDirectory(projectRoot, 'init/certmanager-mkcert');
@@ -173,7 +180,7 @@ export async function deployIngressNginx(
   // Apply raymii mosquitto configmap if mqtt enabled
   const mosquittoCm = path.join(projectRoot, 'init/raymii-mosquitto_nginx/configmap.yaml');
   if (options.mqtt && fs.existsSync(mosquittoCm)) {
-    await execAsync(`kubectl apply -f ${JSON.stringify(mosquittoCm)}`, { cwd: projectRoot }).catch(() => {});
+    await execFileAsync('kubectl', ['apply', '-f', mosquittoCm], { cwd: projectRoot }).catch(() => {});
   }
 
   // Determine values template
@@ -193,18 +200,18 @@ export async function deployIngressNginx(
   const valuesFile = path.join(cacheDir, 'nginx-values.yaml');
   fs.writeFileSync(valuesFile, valuesYaml, 'utf-8');
 
-  const cmd = [
-    'helm upgrade --install ingress-nginx ingress-nginx',
-    '--repo https://kubernetes.github.io/ingress-nginx',
-    '--namespace ingress-nginx',
+  const cmdArgs = [
+    'upgrade', '--install', 'ingress-nginx', 'ingress-nginx',
+    '--repo', 'https://kubernetes.github.io/ingress-nginx',
+    '--namespace', 'ingress-nginx',
     '--create-namespace',
     '--wait',
-    `--timeout ${JSON.stringify(timeout)}`,
-    `-f ${JSON.stringify(valuesFile)}`,
-  ].join(' ');
+    '--timeout', timeout,
+    '-f', valuesFile,
+  ];
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
+    const { stdout, stderr } = await execFileAsync('helm', cmdArgs, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
     return {
       provider: 'nginx',
       success: true,
@@ -275,18 +282,18 @@ export async function deployTraefik(
   const valuesFile = path.join(cacheDir, 'traefik-values.yaml');
   fs.writeFileSync(valuesFile, valuesYaml, 'utf-8');
 
-  const cmd = [
-    'helm upgrade --install traefik traefik',
-    '--repo https://traefik.github.io/charts',
-    '--namespace traefik',
+  const cmdArgs = [
+    'upgrade', '--install', 'traefik', 'traefik',
+    '--repo', 'https://traefik.github.io/charts',
+    '--namespace', 'traefik',
     '--create-namespace',
     '--wait',
-    `--timeout ${JSON.stringify(timeout)}`,
-    `-f ${JSON.stringify(valuesFile)}`,
-  ].join(' ');
+    '--timeout', timeout,
+    '-f', valuesFile,
+  ];
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
+    const { stdout, stderr } = await execFileAsync('helm', cmdArgs, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
     return {
       provider: 'traefik',
       success: true,
@@ -336,19 +343,19 @@ export async function deployHAProxy(
   const valuesFile = path.join(cacheDir, 'haproxy-values.yaml');
   fs.writeFileSync(valuesFile, valuesYaml, 'utf-8');
 
-  const cmd = [
-    'helm upgrade --install haproxy-kubernetes-ingress kubernetes-ingress',
-    '--repo https://haproxytech.github.io/helm-charts',
+  const cmdArgs = [
+    'upgrade', '--install', 'haproxy-kubernetes-ingress', 'kubernetes-ingress',
+    '--repo', 'https://haproxytech.github.io/helm-charts',
     '--wait',
-    `--timeout ${JSON.stringify(timeout)}`,
-    '--set controller.image.tag=3.0',
-    '--namespace ingress-haproxy',
+    '--timeout', timeout,
+    '--set', 'controller.image.tag=3.0',
+    '--namespace', 'ingress-haproxy',
     '--create-namespace',
-    `-f ${JSON.stringify(valuesFile)}`,
-  ].join(' ');
+    '-f', valuesFile,
+  ];
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
+    const { stdout, stderr } = await execFileAsync('helm', cmdArgs, { cwd: projectRoot, env: getIngressExecutionEnv(config.raw) });
     return {
       provider: 'haproxy',
       success: true,
@@ -466,7 +473,7 @@ export async function getIngressFabricStatus(projectRoot: string): Promise<Ingre
 
     // Check active controller readiness
     const ns = activeProvider === 'nginx' ? 'ingress-nginx' : activeProvider === 'haproxy' ? 'ingress-haproxy' : 'traefik';
-    const { stdout: podsOut } = await execAsync(`kubectl get pods -n ${JSON.stringify(ns)} -o json`).catch(() => ({ stdout: '{"items":[]}' }));
+    const { stdout: podsOut } = await execFileAsync('kubectl', ['get', 'pods', '-n', ns, '-o', 'json']).catch(() => ({ stdout: '{"items":[]}' }));
     const podsData = JSON.parse(podsOut);
     isControllerReady = (podsData.items || []).some((p: any) => p.status?.phase === 'Running');
   } catch {

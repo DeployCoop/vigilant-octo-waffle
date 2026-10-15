@@ -8,6 +8,14 @@ import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
+// The app id becomes a path segment below; without validation it was a
+// path traversal (constrained to files named argocd.yaml, but readable /
+// writable / deletable anywhere the server process can reach). Same
+// standard as the apps/[id] route: strict id shape + containment.
+function validAppId(app: string): boolean {
+  return /^[a-zA-Z0-9_-]+$/.test(app);
+}
+
 export async function GET(req: Request) {
   try {
     const root = getProjectRoot();
@@ -16,6 +24,9 @@ export async function GET(req: Request) {
 
     if (!app) {
       return apiError(400, 'App parameter required');
+    }
+    if (!validAppId(app)) {
+      return apiError(400, 'Invalid app id');
     }
 
     const denied = await authorizeRequest(req, 'apps:read', { appId: app });
@@ -60,6 +71,9 @@ export async function POST(req: Request) {
 
     if (!app || typeof overrideYaml !== 'string') {
       return apiError(400, 'app and overrideYaml required');
+    }
+    if (!validAppId(app)) {
+      return apiError(400, 'Invalid app id');
     }
 
     // This POST writes (or deletes) an Argo override manifest.

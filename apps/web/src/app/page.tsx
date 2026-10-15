@@ -87,7 +87,10 @@ export default function DashboardPage() {
       setLatencyHistory((prev) => [...prev.slice(-14), latencyMs]);
 
       const clusterData = await clusterRes.json();
-      if (!clusterData?.isRunning && !localStorage.getItem('vow-setup-skipped')) {
+      // Only a SUCCESSFUL cluster response may trigger the setup
+      // redirect: error envelopes (authz denial, 500) have no isRunning
+      // field and used to bounce even signed-out users into the wizard.
+      if (clusterRes.ok && !clusterData?.isRunning && !localStorage.getItem('vow-setup-skipped')) {
         router.push('/setup');
         return;
       }
