@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import {
   validateCommand,
   ALLOWED_EXECUTABLES,
@@ -53,6 +54,19 @@ import {
   uninstallLocalChart,
   findProjectRoot,
 } from '../index.js';
+
+// Plan II §7.2: suites that shell out to helm/mkcert skip cleanly when the
+// binary is absent (developer machines); CI installs both and asserts the
+// skip count stays zero.
+function binaryAvailable(cmd: string): boolean {
+  try {
+    return !spawnSync(cmd, ['--version'], { stdio: 'ignore' }).error;
+  } catch {
+    return false;
+  }
+}
+
+const hasHelm = binaryAvailable('helm');
 
 describe('Orchestrator Security & Smoke Tests', () => {
   const projectRoot = findProjectRoot();
@@ -870,13 +884,13 @@ kubectl get ingress -A
       assert.equal(sampleApp.isLocalChart, true);
     });
 
-    it('runs helm lint against the example chart and reports 0 errors', async () => {
+    it('runs helm lint against the example chart and reports 0 errors', { skip: hasHelm ? false : 'helm binary not available' }, async () => {
       const lintResult = await lintLocalChart(projectRoot, 'sample-app');
       assert.equal(lintResult.valid, true);
       assert.ok(lintResult.output.includes('0 chart(s) failed'));
     });
 
-    it('renders Kubernetes manifests via helm template', async () => {
+    it('renders Kubernetes manifests via helm template', { skip: hasHelm ? false : 'helm binary not available' }, async () => {
       const rendered = await templateLocalChart(projectRoot, 'sample-app');
       assert.ok(rendered.includes('kind: Deployment'));
       assert.ok(rendered.includes('kind: Service'));

@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 13",
     "dev": "tsc --watch",
     "start": "node ./dist/cli.js",
     "typecheck": "tsc --noEmit",

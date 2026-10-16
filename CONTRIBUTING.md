@@ -31,6 +31,13 @@ Each package has its own suite; CI runs all of them.
   `CHANGELOG.md` (Keep-a-Changelog format) — add an entry under
   *Unreleased* with your change.
 
+Warning budgets (Plan II §6.2/§7.1): lint warnings and ShellCheck warnings
+are ratcheted. Each package's `lint` script carries a `--max-warnings`
+budget set at the count when the ratchet landed (web 376, orchestrator
+152, ink 13, githubio 1), and `.github/shellcheck-warning-budget.txt`
+holds the ShellCheck warning budget (70). CI fails if a count rises;
+when you lower a count, lower its budget in the same PR.
+
 ## A note on native dependencies (allowBuilds)
 
 pnpm 11 refuses to install when a dependency's build script has no
