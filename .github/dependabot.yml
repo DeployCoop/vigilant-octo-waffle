@@ -26,6 +26,11 @@ updates:
           - "@vitejs/*"
           - "@types/*"
           - "typescript-eslint"
+      # Plan II §5.2: catch-all (evaluated last) so nothing arrives as a
+      # one-off PR the way eslint/dotenv/postcss did in October 2026.
+      everything-else:
+        patterns:
+          - "*"
     ignore:
       # TypeScript majors stay out until typescript-eslint supports them
       # (TS 7 support is tracked in typescript-eslint#10940; the TS 7 bump
@@ -53,3 +58,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    groups:
+      actions:
+        patterns:
+          - "*"
