@@ -81,84 +81,34 @@ export function abilityFromMe(
 }
 
 // ---------------------------------------------------------------------------
-// Principal token storage + fetch interception
+// Session exchange (WS5 §8.2)
+//
+// The browser never persists the principal token. Sign-in exchanges it
+// once for an httpOnly session cookie (POST /api/authz/session); after
+// that, the cookie rides every request — fetch and EventSource alike —
+// and GET /api/authz/me is the signed-in probe. Nothing credential-shaped
+// is stored anywhere page JS can reach it.
 // ---------------------------------------------------------------------------
 
-export const PRINCIPAL_TOKEN_KEY = 'vow_token';
-
-export function readStoredToken(): string | null {
+/** Exchanges a principal token for a session cookie. True on success. */
+export async function exchangeTokenForSession(token: string): Promise<boolean> {
   try {
-    if (typeof window === 'undefined') return null;
-    const local = window.localStorage.getItem(PRINCIPAL_TOKEN_KEY);
-    if (local && local.trim()) return local.trim();
-    const session = window.sessionStorage.getItem(PRINCIPAL_TOKEN_KEY);
-    if (session && session.trim()) return session.trim();
-    if (typeof document !== 'undefined') {
-      const match = document.cookie.match(/(?:^|;\s*)vow_token=([^;]+)/);
-      if (match && match[1]) {
-        const decoded = decodeURIComponent(match[1]).trim();
-        if (decoded) return decoded;
-      }
-    }
-    return null;
+    const res = await fetch('/api/authz/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    return res.ok;
   } catch {
-    return null;
+    return false;
   }
 }
 
-export function storeToken(token: string | null): void {
+/** Revokes the current session server-side and clears the cookie. */
+export async function endSession(): Promise<void> {
   try {
-    if (token) {
-      window.localStorage.setItem(PRINCIPAL_TOKEN_KEY, token);
-      window.sessionStorage.setItem(PRINCIPAL_TOKEN_KEY, token);
-      if (typeof document !== 'undefined') {
-        document.cookie = `vow_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
-      }
-    } else {
-      window.localStorage.removeItem(PRINCIPAL_TOKEN_KEY);
-      window.sessionStorage.removeItem(PRINCIPAL_TOKEN_KEY);
-      if (typeof document !== 'undefined') {
-        document.cookie = `vow_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
-      }
-    }
+    await fetch('/api/authz/session', { method: 'DELETE' });
   } catch {
-    // Storage unavailable (private mode); the session simply won't persist.
+    // Already offline or signed out — nothing else to do.
   }
-}
-
-let interceptorInstalled = false;
-
-/**
- * Wraps window.fetch so same-origin /api/* requests carry the stored
- * principal token (Q1: localStorage tokens). Requests that already set
- * an Authorization header (e.g. the webhook helper) are left untouched.
- * Installed once; the token is read lazily per request.
- */
-export function installAuthFetchInterceptor(): void {
-  if (interceptorInstalled || typeof window === 'undefined') return;
-  interceptorInstalled = true;
-  const original = window.fetch.bind(window);
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    const token = readStoredToken();
-    if (token) {
-      const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.href
-            : input.url;
-      const isApi =
-        url.startsWith('/api/') || url.startsWith(`${window.location.origin}/api/`);
-      if (isApi) {
-        const headers = new Headers(
-          init?.headers ?? (input instanceof Request ? input.headers : undefined)
-        );
-        if (!headers.has('authorization')) {
-          headers.set('authorization', `Bearer ${token}`);
-          return original(input, { ...init, headers });
-        }
-      }
-    }
-    return original(input, init);
-  };
 }
