@@ -16,7 +16,7 @@
   "scripts": {
     "prepare": "tsc",
     "build": "tsc",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 152",
     "test": "node --test --test-concurrency=1 dist/__tests__/*.test.js",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch",
