@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { apiErrorMessage } from '@/lib/envelope';
-import { readStoredToken } from '@/lib/ability-core';
 
 export interface WafflePipelineMetadata {
   name: string;
@@ -213,8 +212,9 @@ export function useWafflePage() {
 
   // SSE event streaming listener
   useEffect(() => {
-    const token = readStoredToken();
-    const streamUrl = token ? `/api/waffle/stream?token=${encodeURIComponent(token)}` : '/api/waffle/stream';
+    // WS5: the httpOnly session cookie rides the EventSource request —
+    // no token in the URL (URLs leak into logs and history).
+    const streamUrl = '/api/waffle/stream';
     const eventSource = new EventSource(streamUrl);
 
     eventSource.addEventListener('init', (e: any) => {

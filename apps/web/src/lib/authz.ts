@@ -7,14 +7,18 @@ import {
   decide,
   findPrincipalByToken,
   findPrincipalByOidcSubject,
+  findSessionIncludingExpired,
   getOidcConfig,
   verifyOidcToken,
   looksLikeJwt,
   webhookTokensEqual,
+  SESSION_COOKIE_NAME,
+  type AuthMethod,
   type AuthzStoreLoad,
   type AuthzTarget,
   type Decision,
   type DecisionReason,
+  type RequestContext,
   type Permission,
   type Principal,
 } from '@vow/orchestrator';
@@ -46,6 +50,7 @@ const REASON_MESSAGES: Record<DecisionReason, string> = {
   deny_disabled_principal: 'Principal is disabled',
   deny_missing_grant: 'Missing required permission',
   deny_scope: 'Permission grant does not cover this resource',
+  deny_context: 'Grant is not valid for this request context (time window, source, or sign-in method)',
   deny_revoked: 'Permission has been revoked for this principal',
   deny_store_invalid: 'Authorization store is invalid',
 };
@@ -67,6 +72,10 @@ export interface AuthzContext {
   principal: Principal | null;
   unknownPrincipal: boolean;
   localBoard: boolean;
+  /** How the caller authenticated (WS5); null when unauthenticated. */
+  authMethod: AuthMethod | 'bootstrap' | null;
+  /** True when a session cookie was presented but its session expired. */
+  expiredSession: boolean;
 }
 
 /** Synthetic principal for the legacy VOW_API_TOKEN bootstrap credential. */
@@ -79,19 +88,13 @@ export const BOOTSTRAP_OWNER_PRINCIPAL: Principal = {
 
 let warnedBootstrapToken = false;
 
-/**
- * Routes whose clients consume them via EventSource, which cannot set
- * headers — the only paths where a query-string token is honored
- * (Plan II §4.2, §16 Q3). Everywhere else the token URL form is ignored:
- * URLs leak into logs, browser history, and Referer headers.
- */
-export const QUERY_TOKEN_PATHS: ReadonlySet<string> = new Set([
-  '/api/waffle/stream',
-  '/api/tasks/stream',
-  '/api/k8s/exec',
-]);
-
-/** Tokens are accepted as `Authorization: Bearer <t>`, `x-vow-token: <t>`, cookie `vow_token=<t>`, or URL query `?token=<t>`. */
+/** Tokens are accepted only as `Authorization: Bearer <t>` or `x-vow-token: <t>`.
+ * Browsers authenticate with the httpOnly session cookie instead
+ * (extractSessionId). Query-string tokens are honored nowhere (WS5 §8.2
+ * retired the Plan II §4.2 stream exception once streams could ride the
+ * session cookie): URLs leak into logs, browser history, and Referer
+ * headers. The legacy JS-set `vow_token` cookie is likewise not a
+ * credential anymore — it duplicated the raw token into JS reach. */
 export function extractRequestToken(req: Request): string | null {
   const custom = req.headers.get('x-vow-token');
   if (custom && custom.trim() !== '') return custom.trim();
@@ -100,22 +103,23 @@ export function extractRequestToken(req: Request): string | null {
     const token = auth.substring(7).trim();
     if (token !== '') return token;
   }
-  const cookieHeader = req.headers.get('cookie');
-  if (cookieHeader) {
-    const match = cookieHeader.match(/(?:^|;\s*)vow_token=([^;]+)/);
-    if (match && match[1]) {
-      const decoded = decodeURIComponent(match[1]).trim();
-      if (decoded !== '') return decoded;
-    }
-  }
-  try {
-    const url = new URL(req.url);
-    if (QUERY_TOKEN_PATHS.has(url.pathname)) {
-      const queryToken = url.searchParams.get('token');
-      if (queryToken && queryToken.trim() !== '') return queryToken.trim();
-    }
-  } catch {}
   return null;
+}
+
+/**
+ * Reads the httpOnly session cookie (WS5 §8.2), or null.
+ */
+export function extractSessionId(req: Request): string | null {
+  const cookieHeader = req.headers.get('cookie');
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
+  if (!match || !match[1]) return null;
+  try {
+    const decoded = decodeURIComponent(match[1]).trim();
+    return decoded !== '' ? decoded : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -146,15 +150,40 @@ function safeUrlHostname(url: string): string {
 export async function resolveAuthzContext(req: Request): Promise<AuthzContext> {
   const loaded = loadAuthzStore(getProjectRoot());
   const localBoard = isLocalBoardRequest(req);
-  const base: AuthzContext = { loaded, principal: null, unknownPrincipal: false, localBoard };
+  const base: AuthzContext = {
+    loaded,
+    principal: null,
+    unknownPrincipal: false,
+    localBoard,
+    authMethod: null,
+    expiredSession: false,
+  };
 
   if (loaded.status !== 'ready') return base;
+
+  // Browser session (WS5 §8.2): the httpOnly cookie carries a session id
+  // whose hash lives in the store. A session for a since-removed principal
+  // resolves to no principal; an expired one is flagged so the /me probe
+  // can clear the cookie and audit the expiry exactly once.
+  const sessionId = extractSessionId(req);
+  if (sessionId) {
+    const found = findSessionIncludingExpired(loaded.store, sessionId);
+    if (found) {
+      if (found.expired) return { ...base, expiredSession: true };
+      if (found.session.principalId === BOOTSTRAP_OWNER_PRINCIPAL.id) {
+        return { ...base, principal: BOOTSTRAP_OWNER_PRINCIPAL, authMethod: 'session' };
+      }
+      const principal =
+        loaded.store.principals.find((p) => p.id === found.session.principalId) ?? null;
+      if (principal) return { ...base, principal, authMethod: 'session' };
+    }
+  }
 
   const token = extractRequestToken(req);
   if (!token) return base;
 
   const byToken = findPrincipalByToken(loaded.store, token);
-  if (byToken) return { ...base, principal: byToken };
+  if (byToken) return { ...base, principal: byToken, authMethod: 'token' };
 
   // Bootstrap owner: the legacy shared VOW_API_TOKEN acts as an
   // owner-equivalent credential (plan §7) so existing deployments keep a
@@ -167,7 +196,7 @@ export async function resolveAuthzContext(req: Request): Promise<AuthzContext> {
         '[authz] VOW_API_TOKEN was used as a bootstrap owner credential. Migrate to a store principal (`vow authz add`) and unset VOW_API_TOKEN.'
       );
     }
-    return { ...base, principal: BOOTSTRAP_OWNER_PRINCIPAL };
+    return { ...base, principal: BOOTSTRAP_OWNER_PRINCIPAL, authMethod: 'bootstrap' };
   }
 
   const oidc = getOidcConfig();
@@ -177,7 +206,7 @@ export async function resolveAuthzContext(req: Request): Promise<AuthzContext> {
       const principal =
         findPrincipalByOidcSubject(loaded.store, identity.subject) ??
         (identity.email ? findPrincipalByOidcSubject(loaded.store, identity.email) : null);
-      return { ...base, principal, unknownPrincipal: principal === null };
+      return { ...base, principal, unknownPrincipal: principal === null, authMethod: 'oidc' };
     }
   }
 
@@ -192,11 +221,13 @@ export async function resolveAuthzContext(req: Request): Promise<AuthzContext> {
 export interface AuditEntry {
   ts: string;
   principalId: string | null;
-  permission: Permission;
+  permission?: Permission;
   target?: AuthzTarget;
-  allowed: boolean;
-  reason: DecisionReason;
+  allowed?: boolean;
+  reason?: DecisionReason;
   route: string;
+  /** Lifecycle event instead of a decision (WS5 session create/revoke/expire). */
+  event?: string;
 }
 
 const READ_PERMISSIONS: ReadonlySet<Permission> = new Set([
@@ -298,6 +329,26 @@ export function recordAudit(
   }
 }
 
+/** Appends a lifecycle event (not a decision) to the audit log. Never throws. */
+export function recordAuthEvent(req: Request, event: string, principalId: string | null): void {
+  try {
+    const file = auditLogPath(getProjectRoot());
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    let route = '';
+    try {
+      route = new URL(req.url).pathname;
+    } catch {
+      route = '';
+    }
+    const entry: AuditEntry = { ts: new Date().toISOString(), principalId, route, event };
+    const line = formatAuditEntry(entry) + '\n';
+    rotateAuditIfNeeded(file, Buffer.byteLength(line));
+    fs.appendFileSync(file, line);
+  } catch (err) {
+    console.error('[authz] failed to write audit event:', err);
+  }
+}
+
 /** Reads the most recent audit entries (newest first). */
 export function readAuditEntries(root: string, limit = 200): AuditEntry[] {
   try {
@@ -331,6 +382,16 @@ export function readAuditEntries(root: string, limit = 200): AuditEntry[] {
 // Permission checks
 // ---------------------------------------------------------------------------
 
+/** Builds the WS5 request context for `decide()` from a resolved caller. */
+export function requestContextFrom(ctx: AuthzContext): RequestContext {
+  return {
+    now: new Date(),
+    loopback: ctx.localBoard,
+    authMethod:
+      ctx.authMethod === 'session' ? 'session' : ctx.authMethod === 'oidc' ? 'oidc' : 'token',
+  };
+}
+
 export interface PermissionCheck {
   allowed: boolean;
   status: number;
@@ -353,6 +414,7 @@ export async function checkPermission(
   const decision = decide(ctx.loaded, ctx.principal, permission, target, {
     localBoard: ctx.localBoard,
     unknownPrincipal: ctx.unknownPrincipal,
+    requestContext: requestContextFrom(ctx),
   });
   if (shouldAudit(permission, decision)) {
     recordAudit(req, permission, decision, target);

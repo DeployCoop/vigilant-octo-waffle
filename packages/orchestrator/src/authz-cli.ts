@@ -20,6 +20,7 @@ import {
   isPermission,
   type AuthzStore,
   type Grant,
+  type GrantContext,
   type Permission,
   type Principal,
   type Role,
@@ -66,11 +67,18 @@ Commands:
     --grant <permission>          Extra permission grant (repeatable)
     --scope-app <appId>           Scope all --grant entries to an app
     --scope-namespace <ns>        Scope all --grant entries to a namespace
+    --context <json>              Context conditions for all --grant entries (WS5):
+                                  {"notBefore": iso, "notAfter": iso,
+                                   "source": "loopback"|"any",
+                                   "authMethod": "session"|"token"|"oidc"|"any"}
   list                            List principals
   revoke <principal-id>           Remove a principal
   rotate <principal-id>           Issue a replacement token (printed once)
   check <token> <permission> [--app <appId>] [--namespace <ns>]
-                                  Dry-run a permission check, prints the decision reason`;
+                                  Dry-run a permission check, prints the decision reason
+    --at <iso>                    Evaluate context grants at this instant (default: now)
+    --loopback                    Evaluate as a loopback (local board) request
+    --auth-method <m>             session | token | oidc (default: token)`;
 
 function parseFlags(args: string[]): { positional: string[]; flags: Map<string, string[]> } {
   const positional: string[] = [];
@@ -182,6 +190,29 @@ async function cmdInit(root: string, args: string[], io: AuthzCliIo): Promise<nu
   return 0;
 }
 
+/** Shape-checks a --context JSON value; returns an error message or null. */
+function validateGrantContext(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return 'must be a JSON object';
+  }
+  const allowed = new Set(['notBefore', 'notAfter', 'source', 'authMethod']);
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    if (!allowed.has(key)) return `unknown field: ${key}`;
+    if (key === 'notBefore' || key === 'notAfter') {
+      if (typeof v !== 'string' || Number.isNaN(Date.parse(v))) {
+        return `${key} must be an ISO timestamp`;
+      }
+    } else if (key === 'source') {
+      if (v !== 'loopback' && v !== 'any') return 'source must be "loopback" or "any"';
+    } else if (key === 'authMethod') {
+      if (v !== 'session' && v !== 'token' && v !== 'oidc' && v !== 'any') {
+        return 'authMethod must be "session", "token", "oidc", or "any"';
+      }
+    }
+  }
+  return null;
+}
+
 async function cmdAdd(root: string, args: string[], io: AuthzCliIo): Promise<number> {
   const { positional, flags } = parseFlags(args);
   const name = positional[0];
@@ -206,6 +237,23 @@ async function cmdAdd(root: string, args: string[], io: AuthzCliIo): Promise<num
 
   const scopeApp = flag(flags, 'scope-app');
   const scopeNamespace = flag(flags, 'scope-namespace');
+  let context: GrantContext | undefined;
+  const contextRaw = flag(flags, 'context');
+  if (contextRaw !== undefined) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(contextRaw);
+    } catch {
+      io.err('--context must be valid JSON, e.g. --context \'{"source":"loopback"}\'');
+      return 1;
+    }
+    const problem = validateGrantContext(parsed);
+    if (problem) {
+      io.err(`--context: ${problem}`);
+      return 1;
+    }
+    context = parsed as GrantContext;
+  }
   const grants: Grant[] = [];
   for (const permission of flags.get('grant') ?? []) {
     if (!isPermission(permission)) {
@@ -216,7 +264,11 @@ async function cmdAdd(root: string, args: string[], io: AuthzCliIo): Promise<num
       scopeApp || scopeNamespace
         ? { ...(scopeApp ? { appId: scopeApp } : {}), ...(scopeNamespace ? { namespace: scopeNamespace } : {}) }
         : undefined;
-    grants.push({ permission: permission as Permission, ...(scope ? { scope } : {}) });
+    grants.push({
+      permission: permission as Permission,
+      ...(scope ? { scope } : {}),
+      ...(context ? { context } : {}),
+    });
   }
 
   const oidcSubject = flag(flags, 'oidc-subject');
@@ -255,7 +307,16 @@ async function cmdList(root: string, io: AuthzCliIo): Promise<number> {
               .map(([k, v]) => `${k}=${v}`)
               .join(',')
           : 'global';
-        return `${g.permission}[${scope}]`;
+        const ctx: string[] = [];
+        if (g.context) {
+          if (g.context.source && g.context.source !== 'any') ctx.push(`src=${g.context.source}`);
+          if (g.context.authMethod && g.context.authMethod !== 'any') {
+            ctx.push(`auth=${g.context.authMethod}`);
+          }
+          if (g.context.notBefore) ctx.push(`from=${g.context.notBefore}`);
+          if (g.context.notAfter) ctx.push(`until=${g.context.notAfter}`);
+        }
+        return `${g.permission}[${scope}]${ctx.length > 0 ? `{${ctx.join(' ')}}` : ''}`;
       })
       .join(' ');
     io.out(
@@ -324,7 +385,21 @@ async function cmdCheck(root: string, args: string[], io: AuthzCliIo): Promise<n
     ...(flag(flags, 'app') ? { appId: flag(flags, 'app') } : {}),
     ...(flag(flags, 'namespace') ? { namespace: flag(flags, 'namespace') } : {}),
   };
-  const decision = decide(loaded, principal, permission, target);
+  const atRaw = flag(flags, 'at');
+  const at = atRaw ? new Date(atRaw) : new Date();
+  if (Number.isNaN(at.getTime())) {
+    io.err(`--at must be an ISO timestamp, got: ${atRaw}`);
+    return 1;
+  }
+  const authMethodRaw = flag(flags, 'auth-method') ?? 'token';
+  if (authMethodRaw !== 'session' && authMethodRaw !== 'token' && authMethodRaw !== 'oidc') {
+    io.err(`--auth-method must be session, token, or oidc, got: ${authMethodRaw}`);
+    return 1;
+  }
+  const decision = decide(loaded, principal, permission, target, {
+    localBoard: flags.has('loopback'),
+    requestContext: { now: at, loopback: flags.has('loopback'), authMethod: authMethodRaw },
+  });
   io.out(
     `${decision.allowed ? 'ALLOW' : 'DENY'} ${permission}` +
       `${principal ? ` for ${principal.id}` : ' (no matching principal)'}` +

@@ -12,9 +12,8 @@ import {
 import {
   abilityFromMe,
   emptyAbility,
-  installAuthFetchInterceptor,
-  readStoredToken,
-  storeToken,
+  endSession,
+  exchangeTokenForSession,
   subjectFor,
   type AbilityStatus,
   type ClientAbility,
@@ -81,6 +80,7 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
   const [promptOpen, setPromptOpen] = useState(false);
   const [tokenDraft, setTokenDraft] = useState('');
   const [signingIn, setSigningIn] = useState(false);
+  const [signInFailed, setSignInFailed] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -98,7 +98,6 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    installAuthFetchInterceptor();
     try {
       setPromptDismissed(window.sessionStorage.getItem(PROMPT_DISMISSED_KEY) === '1');
     } catch {
@@ -113,15 +112,19 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (token: string) => {
-      storeToken(token.trim());
-      setPromptOpen(false);
+      // WS5: the token is exchanged once for an httpOnly session cookie
+      // and never stored in the browser.
+      const ok = await exchangeTokenForSession(token.trim());
+      setSignInFailed(!ok);
+      if (ok) setPromptOpen(false);
       await refresh();
     },
     [refresh]
   );
 
   const signOut = useCallback(async () => {
-    storeToken(null);
+    await endSession();
+    setSignInFailed(false);
     await refresh();
   }, [refresh]);
 
@@ -148,7 +151,6 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
 
   const showPrompt =
     promptOpen || ((status === 'unauthenticated' || status === 'unknown-principal') && !promptDismissed);
-  const hasStoredToken = typeof window !== 'undefined' && readStoredToken() !== null;
 
   return (
     <AbilityContext.Provider value={value}>
@@ -164,8 +166,8 @@ export function AbilityProvider({ children }: { children: ReactNode }) {
             <p className="mt-2 text-sm text-slate-400">
               {status === 'unknown-principal'
                 ? 'Your identity was verified but is not provisioned as a principal. Ask an owner to add you on the Access page, or continue with a principal token instead.'
-                : hasStoredToken
-                  ? 'The stored token was not accepted. Paste a valid principal token to continue.'
+                : signInFailed
+                  ? 'That token was not accepted. Paste a valid principal token to continue.'
                   : 'Authorization is enabled for this deployment. Paste your principal token (issued by `vow authz add` or the Access page) to continue.'}
             </p>
             <input

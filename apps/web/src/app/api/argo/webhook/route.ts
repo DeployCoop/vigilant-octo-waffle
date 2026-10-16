@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { accelerateArgoSync, authorizeWebhookRequest, decide } from '@vow/orchestrator';
-import { resolveAuthzContext, recordAudit } from '@/lib/authz';
+import { requestContextFrom, resolveAuthzContext, recordAudit } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     const decision = decide(ctx.loaded, ctx.principal, 'webhook:argo', undefined, {
       localBoard: ctx.localBoard,
       unknownPrincipal: ctx.unknownPrincipal,
+      requestContext: requestContextFrom(ctx),
     });
     recordAudit(req, 'webhook:argo', decision);
     if (!decision.allowed) {
