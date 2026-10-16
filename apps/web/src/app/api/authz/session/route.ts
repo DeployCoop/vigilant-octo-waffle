@@ -12,9 +12,9 @@ import {
 } from '@vow/orchestrator';
 import {
   BOOTSTRAP_OWNER_PRINCIPAL,
-  extractRequestToken,
   extractSessionId,
   recordAuthEvent,
+  resolveAuthzContext,
 } from '@/lib/authz';
 import { getProjectRoot } from '@/lib/project';
 import { apiError } from '@/lib/route-error';
@@ -51,28 +51,36 @@ export async function POST(req: Request) {
     return apiError(409, 'Authorization is not enabled yet.', { reason: 'authz_not_enabled' });
   }
 
-  const body = await req.json().catch(() => ({}));
-  const token =
-    (typeof body?.token === 'string' && body.token.trim() ? body.token.trim() : null) ??
-    extractRequestToken(req);
-  if (!token) return apiError(400, 'A principal token is required');
+  // Credential paths, in order: an already-authenticated caller (header
+  // token, OIDC, or a live session cookie — re-exchange doubles as
+  // rotation) resolved by the shared authz layer; otherwise the token in
+  // the request body, which is how the sign-in form presents it.
+  const ctx = await resolveAuthzContext(req);
+  let who = ctx.principal && !ctx.principal.disabled ? ctx.principal : null;
 
-  let principalId: string;
-  const principal = findPrincipalByToken(store, token);
-  if (principal) {
-    if (principal.disabled) return apiError(403, 'Principal is disabled');
-    principalId = principal.id;
-  } else if (process.env.VOW_API_TOKEN && webhookTokensEqual(token, process.env.VOW_API_TOKEN)) {
-    principalId = BOOTSTRAP_OWNER_PRINCIPAL.id;
-  } else {
-    return apiError(401, 'Invalid token');
+  if (!who) {
+    const body = await req.json().catch(() => ({}));
+    const token = typeof body?.token === 'string' && body.token.trim() ? body.token.trim() : null;
+    if (token) {
+      const principal = findPrincipalByToken(store, token);
+      if (principal) {
+        if (principal.disabled) return apiError(403, 'Principal is disabled');
+        who = principal;
+      } else if (
+        process.env.VOW_API_TOKEN &&
+        webhookTokensEqual(token, process.env.VOW_API_TOKEN)
+      ) {
+        who = BOOTSTRAP_OWNER_PRINCIPAL;
+      }
+    }
   }
 
-  const { store: next, sessionId } = createSession(store, principalId);
-  saveAuthzStore(getProjectRoot(), next);
-  recordAuthEvent(req, 'session_created', principalId);
+  if (!who) return apiError(401, 'Invalid token');
 
-  const who = principal ?? BOOTSTRAP_OWNER_PRINCIPAL;
+  const { store: next, sessionId } = createSession(store, who.id);
+  saveAuthzStore(getProjectRoot(), next);
+  recordAuthEvent(req, 'session_created', who.id);
+
   const res = NextResponse.json({
     principal: { id: who.id, name: who.name, kind: who.kind, role: who.role },
   });
