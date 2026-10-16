@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { APP_CATALOG } from '../registry.js';
 import { type AIProvider, type DetectedManifest, type StreamEvent, type AntigravityResponse, type AskAntigravityOptions, type StreamAntigravityOptions } from './types.js';
-import { findAgyBinary } from './providers.js';
+import { agySkipPermissionsEnabled, findAgyBinary } from './providers.js';
 import { buildClusterContext } from './context.js';
 
 /**
@@ -351,6 +351,27 @@ Need specific details on certificates, ArgoCD applications, network security, or
  * - vLLM (`/v1/chat/completions` REST)
  * - Automatic Heuristic Cluster Copilot fallback
  */
+/**
+ * Builds the agy CLI argument list. The permission-skipping flag is included
+ * only when the operator opted in (VOW_AGY_SKIP_PERMISSIONS=1, Plan II §4.1);
+ * both the one-shot and streaming call sites share this builder so the policy
+ * cannot drift between them.
+ */
+export function buildAgyArgs(
+  outputFormat: 'json' | 'stream-json',
+  effort: string,
+  opts: { conversationId?: string; model?: string; prompt: string },
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const args: string[] = [];
+  if (agySkipPermissionsEnabled(env)) args.push('--dangerously-skip-permissions');
+  args.push('--effort', effort, '--output-format', outputFormat);
+  if (opts.conversationId) args.push('--conversation', opts.conversationId);
+  if (opts.model) args.push('--model', opts.model);
+  args.push('-p', opts.prompt);
+  return args;
+}
+
 export async function askAntigravity(options: AskAntigravityOptions): Promise<AntigravityResponse> {
   const {
     prompt,
@@ -477,17 +498,8 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
 
   const fullPrompt = `${systemInstructions}\n\nUser Question:\n${prompt}`;
 
-  const args: string[] = ['--dangerously-skip-permissions', '--effort', effort, '--output-format', 'json'];
 
-  if (conversationId) {
-    args.push('--conversation', conversationId);
-  }
-
-  if (model) {
-    args.push('--model', model);
-  }
-
-  args.push('-p', fullPrompt);
+  const args = buildAgyArgs('json', effort, { conversationId, model, prompt: fullPrompt });
 
   return new Promise<AntigravityResponse>((resolve) => {
     const startTime = Date.now();
@@ -788,15 +800,7 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
   }
 
   const fullPrompt = `${systemInstructions}\n\nUser Question:\n${prompt}`;
-  const args: string[] = ['--dangerously-skip-permissions', '--effort', effort, '--output-format', 'stream-json'];
-
-  if (conversationId) {
-    args.push('--conversation', conversationId);
-  }
-  if (model) {
-    args.push('--model', model);
-  }
-  args.push('-p', fullPrompt);
+  const args = buildAgyArgs('stream-json', effort, { conversationId, model, prompt: fullPrompt });
 
   return new Promise<AntigravityResponse>((resolve) => {
     const startTime = Date.now();

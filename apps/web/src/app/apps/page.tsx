@@ -501,7 +501,7 @@ export default function AppsPage() {
           {(cdRunner === 'flux' || cdRunner === 'both') && (!fluxStatus?.isHealthy || fluxStatus?.activeControllers === 0) && (
             <button
               onClick={() => handleBootstrapFlux()}
-              disabled={bootstrappingFlux || !can('flux:sync')}
+              disabled={bootstrappingFlux || !can('flux:bootstrap')}
               className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
               title="Run src/flux.sh to install FluxCD controllers into flux-system"
             >

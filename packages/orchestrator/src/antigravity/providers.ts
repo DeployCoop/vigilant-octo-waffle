@@ -27,6 +27,15 @@ export function stripTrailingSlashes(value: string): string {
  * fe80::/10) are rejected. Operator-configured env endpoints are trusted
  * and do not pass through here.
  */
+/**
+ * Plan II §4.1 (§16 Q1): agy may skip its tool-call permission prompts only
+ * when the operator explicitly opts in with VOW_AGY_SKIP_PERMISSIONS=1.
+ * Default off — the same default-false rule the paperclip agy adapter uses.
+ */
+export function agySkipPermissionsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.VOW_AGY_SKIP_PERMISSIONS === '1';
+}
+
 export function isAllowedCustomEndpoint(raw: string): boolean {
   let url: URL;
   try {
@@ -230,6 +239,7 @@ export async function getAntigravityEngineStatus(endpoints?: {
       id: 'antigravity',
       name: 'Google Antigravity (AGY)',
       available: agyAvailable,
+      skipPermissions: agySkipPermissionsEnabled(),
       models: DEFAULT_ANTIGRAVITY_MODELS,
       defaultModel: 'gemini-3.8-flash-high',
     },

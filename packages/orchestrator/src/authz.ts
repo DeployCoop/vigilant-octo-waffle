@@ -36,6 +36,7 @@ export const PERMISSIONS = [
   'apps:override',
   'argo:sync',
   'flux:sync',
+  'flux:bootstrap',
   'webhook:argo',
   'cluster:read',
   'cluster:manage',
@@ -494,6 +495,13 @@ export function generatePrincipalToken(): string {
 }
 
 /** Hashes a token for storage (`sha256:<hex>`). */
+/**
+ * Minimum length for a human-chosen password (Plan II §4.4, §16 Q5: 12).
+ * Applies at the bootstrap entry points only (web init route, authz CLI
+ * init); generated principal tokens are far longer by construction.
+ */
+export const MIN_PASSWORD_LENGTH = 12;
+
 export function hashToken(token: string): string {
   return TOKEN_HASH_PREFIX + createHash('sha256').update(token).digest('hex');
 }
