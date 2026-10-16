@@ -689,13 +689,19 @@ export function generateSessionId(): string {
   return randomBytes(32).toString('base64url');
 }
 
+/** Returns the store with its session list replaced (field omitted when empty). */
+function withSessions(store: AuthzStore, sessions: AuthzSession[]): AuthzStore {
+  const next: AuthzStore = { version: store.version, principals: store.principals };
+  if (sessions.length > 0) next.sessions = sessions;
+  return next;
+}
+
 /** Sessions whose expiry has passed, dropped. Pure; `now` injectable for tests. */
 export function pruneExpiredSessions(store: AuthzStore, now: Date = new Date()): AuthzStore {
   if (!store.sessions || store.sessions.length === 0) return store;
   const kept = store.sessions.filter((sess) => Date.parse(sess.expiresAt) > now.getTime());
   if (kept.length === store.sessions.length) return store;
-  const { sessions: _dropped, ...rest } = store;
-  return kept.length > 0 ? { ...rest, sessions: kept } : rest;
+  return withSessions(store, kept);
 }
 
 /**
@@ -760,8 +766,7 @@ export function revokeSession(store: AuthzStore, sessionId: string): AuthzStore 
   const idHash = hashToken(sessionId);
   const sessions = store.sessions.filter((sess) => sess.idHash !== idHash);
   if (sessions.length === store.sessions.length) return store;
-  const { sessions: _all, ...rest } = store;
-  return sessions.length > 0 ? { ...rest, sessions } : rest;
+  return withSessions(store, sessions);
 }
 
 /** Removes every session belonging to a principal. */
@@ -769,8 +774,7 @@ export function revokePrincipalSessions(store: AuthzStore, principalId: string):
   if (!store.sessions) return store;
   const sessions = store.sessions.filter((sess) => sess.principalId !== principalId);
   if (sessions.length === store.sessions.length) return store;
-  const { sessions: _all, ...rest } = store;
-  return sessions.length > 0 ? { ...rest, sessions } : rest;
+  return withSessions(store, sessions);
 }
 
 // ---------------------------------------------------------------------------
