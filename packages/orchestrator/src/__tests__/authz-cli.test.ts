@@ -163,3 +163,66 @@ describe('vow authz CLI', () => {
   });
 });
 
+
+describe('vow authz CLI — WS5 grant context', () => {
+  let root: string;
+
+  before(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-cli-ws5-'));
+  });
+
+  it('add --context lands in the store, list renders it, check honors the window', async () => {
+    const init = await runCli(['init', '--name', 'Owner'], root);
+    assert.equal(init.code, 0, init.stderr);
+
+    const add = await runCli(
+      [
+        'add', 'Windowed',
+        '--role', 'viewer',
+        '--grant', 'apps:deploy',
+        '--context', '{"notAfter":"2020-01-01T00:00:00.000Z","source":"loopback"}',
+      ],
+      root
+    );
+    assert.equal(add.code, 0, add.stderr);
+    const token = extractToken(add.stdout);
+
+    const list = await runCli(['list'], root);
+    assert.match(list.stdout, /apps:deploy\[global\]\{src=loopback until=2020-01-01T00:00:00\.000Z\}/);
+
+    // Default check context (now, non-loopback, token): expired window denies.
+    const denied = await runCli(['check', token, 'apps:deploy'], root);
+    assert.equal(denied.code, 1, denied.stdout);
+    assert.match(denied.stdout, /DENY apps:deploy .*deny_context/);
+
+    // Inside the window AND loopback: allows.
+    const allowed = await runCli(
+      ['check', token, 'apps:deploy', '--at', '2019-06-01T00:00:00.000Z', '--loopback'],
+      root
+    );
+    assert.equal(allowed.code, 0, allowed.stdout);
+    assert.match(allowed.stdout, /ALLOW apps:deploy/);
+
+    // Inside the window but not loopback: still denied by source.
+    const wrongSource = await runCli(
+      ['check', token, 'apps:deploy', '--at', '2019-06-01T00:00:00.000Z'],
+      root
+    );
+    assert.equal(wrongSource.code, 1);
+    assert.match(wrongSource.stdout, /deny_context/);
+  });
+
+  it('rejects malformed --context values', async () => {
+    const badJson = await runCli(
+      ['add', 'Bad', '--grant', 'apps:deploy', '--context', '{nope'],
+      root
+    );
+    assert.equal(badJson.code, 1);
+    const badShape = await runCli(
+      ['add', 'Bad2', '--grant', 'apps:deploy', '--context', '{"source":"moon"}'],
+      root
+    );
+    assert.equal(badShape.code, 1);
+    assert.match(badShape.stderr, /source must be/);
+  });
+});
