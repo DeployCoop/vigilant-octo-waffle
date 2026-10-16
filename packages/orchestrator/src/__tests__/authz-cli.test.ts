@@ -153,5 +153,13 @@ describe('vow authz CLI', () => {
     const fail = await runCli(['check', 'WrongPass', 'users:manage_permissions'], customRoot);
     assert.equal(fail.code, 1);
   });
+
+  it('init rejects a password below the floor and writes no store', async () => {
+    const shortRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-short-'));
+    const res = await runCli(['init', '--password', 'short'], shortRoot);
+    assert.equal(res.code, 1);
+    assert.match(res.stderr, /at least 12 characters/);
+    assert.equal(fs.existsSync(path.join(shortRoot, '.vow', 'authz.yaml')), false);
+  });
 });
 

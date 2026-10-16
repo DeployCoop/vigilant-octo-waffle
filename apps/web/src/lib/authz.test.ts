@@ -94,6 +94,17 @@ describe('extractRequestToken', () => {
     expect(extractRequestToken(request(undefined, { 'x-vow-token': 'xyz' }))).toBe('xyz');
     expect(extractRequestToken(request())).toBeNull();
   });
+
+  it('honors query tokens only on the EventSource streaming routes (Plan II §4.2)', () => {
+    const q = new URLSearchParams({ token: 'abc' }).toString();
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/waffle/stream?${q}`))).toBe('abc');
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/tasks/stream?${q}`))).toBe('abc');
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/k8s/exec?${q}`))).toBe('abc');
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/flux?${q}`))).toBeNull();
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/cluster/status?${q}`))).toBeNull();
+    // Header credentials keep working on every route.
+    expect(extractRequestToken(request('abc', {}, 'http://localhost:3000/api/flux'))).toBe('abc');
+  });
 });
 
 describe('isLocalBoardRequest', () => {

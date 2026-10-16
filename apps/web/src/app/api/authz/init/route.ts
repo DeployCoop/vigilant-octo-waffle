@@ -7,6 +7,7 @@ import {
   generatePrincipalToken,
   hashPassword,
   hashToken,
+  MIN_PASSWORD_LENGTH,
   ensureDevCertificate,
   type Principal,
 } from '@vow/orchestrator';
@@ -68,6 +69,12 @@ export async function POST(req: Request) {
       : typeof body.token === 'string' && body.token.trim()
         ? body.token.trim()
         : null;
+
+  if (customPassword && customPassword.length < MIN_PASSWORD_LENGTH) {
+    return apiError(400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, {
+      reason: 'password_too_short',
+    });
+  }
 
   const store = loaded.status === 'ready' ? loaded.store : createEmptyStore();
   const token = customPassword ?? generatePrincipalToken();

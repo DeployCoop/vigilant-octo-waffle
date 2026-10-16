@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   PERMISSIONS,
+  MIN_PASSWORD_LENGTH,
   ROLE_PERMISSIONS,
   createEmptyStore,
   parseAuthzStore,
@@ -474,5 +475,24 @@ describe('authz store mutations', () => {
     assert.throws(() =>
       upsertPrincipal(store, principal({ grants: [{ permission: 'bogus' as any }] }))
     );
+  });
+});
+
+describe('Plan II: flux:bootstrap split and password floor', () => {
+  it('catalogs flux:bootstrap alongside flux:sync', () => {
+    assert.ok(PERMISSIONS.includes('flux:bootstrap'));
+    assert.ok(PERMISSIONS.includes('flux:sync'));
+  });
+
+  it('owner and admin hold flux:bootstrap; operator and viewer do not', () => {
+    assert.ok(ROLE_PERMISSIONS.owner.includes('flux:bootstrap'));
+    assert.ok(ROLE_PERMISSIONS.admin.includes('flux:bootstrap'));
+    assert.ok(!ROLE_PERMISSIONS.operator.includes('flux:bootstrap'));
+    assert.ok(ROLE_PERMISSIONS.operator.includes('flux:sync'));
+    assert.ok(!ROLE_PERMISSIONS.viewer.includes('flux:bootstrap'));
+  });
+
+  it('pins the bootstrap password floor at 12', () => {
+    assert.equal(MIN_PASSWORD_LENGTH, 12);
   });
 });

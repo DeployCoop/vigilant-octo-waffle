@@ -57,12 +57,15 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { action, name, namespace, cdRunner } = body;
 
-    // set-runner rewrites project config; everything else is a Flux sync action.
-    const denied = await authorizeRequest(
-      req,
-      action === 'set-runner' ? 'config:update' : 'flux:sync',
-      { namespace }
-    );
+    // set-runner rewrites project config; bootstrap installs Flux itself and
+    // carries its own grant (Plan II §4.3); the rest are Flux sync actions.
+    const permission =
+      action === 'set-runner'
+        ? 'config:update'
+        : action === 'bootstrap'
+          ? 'flux:bootstrap'
+          : 'flux:sync';
+    const denied = await authorizeRequest(req, permission, { namespace });
     if (denied) return denied;
 
     if (action === 'set-runner' && cdRunner) {

@@ -79,6 +79,18 @@ export const BOOTSTRAP_OWNER_PRINCIPAL: Principal = {
 
 let warnedBootstrapToken = false;
 
+/**
+ * Routes whose clients consume them via EventSource, which cannot set
+ * headers — the only paths where a query-string token is honored
+ * (Plan II §4.2, §16 Q3). Everywhere else the token URL form is ignored:
+ * URLs leak into logs, browser history, and Referer headers.
+ */
+export const QUERY_TOKEN_PATHS: ReadonlySet<string> = new Set([
+  '/api/waffle/stream',
+  '/api/tasks/stream',
+  '/api/k8s/exec',
+]);
+
 /** Tokens are accepted as `Authorization: Bearer <t>`, `x-vow-token: <t>`, cookie `vow_token=<t>`, or URL query `?token=<t>`. */
 export function extractRequestToken(req: Request): string | null {
   const custom = req.headers.get('x-vow-token');
@@ -98,8 +110,10 @@ export function extractRequestToken(req: Request): string | null {
   }
   try {
     const url = new URL(req.url);
-    const queryToken = url.searchParams.get('token');
-    if (queryToken && queryToken.trim() !== '') return queryToken.trim();
+    if (QUERY_TOKEN_PATHS.has(url.pathname)) {
+      const queryToken = url.searchParams.get('token');
+      if (queryToken && queryToken.trim() !== '') return queryToken.trim();
+    }
   } catch {}
   return null;
 }

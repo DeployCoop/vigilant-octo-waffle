@@ -13,6 +13,7 @@ import {
   removePrincipal,
   generatePrincipalToken,
   hashPassword,
+  MIN_PASSWORD_LENGTH,
   hashToken,
   findPrincipalByToken,
   decide,
@@ -152,6 +153,10 @@ async function cmdInit(root: string, args: string[], io: AuthzCliIo): Promise<nu
 
   const hasCustomPassword = Boolean(customPassword && customPassword.trim());
   const token = hasCustomPassword ? customPassword!.trim() : generatePrincipalToken();
+  if (hasCustomPassword && token.length < MIN_PASSWORD_LENGTH) {
+    io.err(`Error: the initial owner password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+    return 1;
+  }
   const owner: Principal = {
     id: newPrincipalId(createEmptyStore(), name),
     name,
