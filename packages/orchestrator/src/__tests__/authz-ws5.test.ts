@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createEmptyStore,
+  decide,
   createSession,
   findSession,
   findSessionIncludingExpired,
@@ -143,5 +144,100 @@ describe('WS5 sessions (orchestrator store layer)', () => {
   it('accepts a store with no sessions field (pre-WS5 files)', () => {
     const parsed = parseAuthzStore(serializeAuthzStore(createEmptyStore()));
     assert.equal(parsed.sessions, undefined);
+  });
+});
+
+describe('WS5 context-scoped grants in decide()', () => {
+  const NOW = new Date('2026-10-16T12:00:00.000Z');
+  const loaded = (store: AuthzStore) => ({ status: 'ready' as const, store });
+  const ctx = (over: Partial<{ loopback: boolean; authMethod: 'session' | 'token' | 'oidc' }> = {}) => ({
+    now: NOW,
+    loopback: false,
+    authMethod: 'token' as const,
+    ...over,
+  });
+  const deployer = (grant: object): Principal => ({
+    id: 'p_dep',
+    name: 'Deployer',
+    kind: 'human',
+    role: 'viewer', // viewer has no apps:deploy default — the grant is the only path
+    grants: [{ permission: 'apps:deploy', ...grant } as never],
+  });
+
+  it('allows a context-free grant with or without a request context (back-compat)', () => {
+    const p = deployer({});
+    assert.equal(decide(loaded(storeWith(p)), p, 'apps:deploy').reason, 'allow_explicit_grant');
+    assert.equal(
+      decide(loaded(storeWith(p)), p, 'apps:deploy', undefined, { requestContext: ctx() }).reason,
+      'allow_explicit_grant'
+    );
+  });
+
+  it('gates on the time window [notBefore, notAfter)', () => {
+    const p = deployer({
+      context: { notBefore: '2026-10-16T00:00:00.000Z', notAfter: '2026-10-17T00:00:00.000Z' },
+    });
+    assert.equal(
+      decide(loaded(storeWith(p)), p, 'apps:deploy', undefined, { requestContext: ctx() }).reason,
+      'allow_explicit_grant'
+    );
+    const early = deployer({ context: { notBefore: '2026-10-17T00:00:00.000Z' } });
+    assert.equal(
+      decide(loaded(storeWith(early)), early, 'apps:deploy', undefined, { requestContext: ctx() }).reason,
+      'deny_context'
+    );
+    const late = deployer({ context: { notAfter: '2026-10-16T00:00:00.000Z' } });
+    assert.equal(
+      decide(loaded(storeWith(late)), late, 'apps:deploy', undefined, { requestContext: ctx() }).reason,
+      'deny_context'
+    );
+  });
+
+  it('gates on loopback source', () => {
+    const p = deployer({ context: { source: 'loopback' } });
+    assert.equal(
+      decide(loaded(storeWith(p)), p, 'apps:deploy', undefined, { requestContext: ctx({ loopback: true }) }).reason,
+      'allow_explicit_grant'
+    );
+    assert.equal(
+      decide(loaded(storeWith(p)), p, 'apps:deploy', undefined, { requestContext: ctx({ loopback: false }) }).reason,
+      'deny_context'
+    );
+  });
+
+  it('gates on auth method', () => {
+    const p = deployer({ context: { authMethod: 'session' } });
+    assert.equal(
+      decide(loaded(storeWith(p)), p, 'apps:deploy', undefined, { requestContext: ctx({ authMethod: 'session' }) }).reason,
+      'allow_explicit_grant'
+    );
+    assert.equal(
+      decide(loaded(storeWith(p)), p, 'apps:deploy', undefined, { requestContext: ctx({ authMethod: 'token' }) }).reason,
+      'deny_context'
+    );
+  });
+
+  it('fails closed when no request context is supplied for a context grant', () => {
+    const p = deployer({ context: { source: 'any', authMethod: 'any' } });
+    assert.equal(decide(loaded(storeWith(p)), p, 'apps:deploy').reason, 'deny_context');
+  });
+
+  it('keeps deny_scope when the target is not covered, whatever the context', () => {
+    const p = deployer({ scope: { appId: 'wiki' }, context: { source: 'loopback' } });
+    const d = decide(loaded(storeWith(p)), p, 'apps:deploy', { appId: 'blog' }, { requestContext: ctx() });
+    assert.equal(d.reason, 'deny_scope');
+    const d2 = decide(loaded(storeWith(p)), p, 'apps:deploy', { appId: 'wiki' }, { requestContext: ctx() });
+    assert.equal(d2.reason, 'deny_context');
+  });
+
+  it('never context-gates role defaults', () => {
+    const op: Principal = {
+      id: 'p_op2',
+      name: 'Op',
+      kind: 'human',
+      role: 'operator', // apps:deploy is an operator default
+      grants: [{ permission: 'apps:deploy', context: { notBefore: '2999-01-01T00:00:00.000Z' } }],
+    };
+    assert.equal(decide(loaded(storeWith(op)), op, 'apps:deploy').reason, 'allow_role_default');
   });
 });

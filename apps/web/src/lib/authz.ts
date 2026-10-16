@@ -18,6 +18,7 @@ import {
   type AuthzTarget,
   type Decision,
   type DecisionReason,
+  type RequestContext,
   type Permission,
   type Principal,
 } from '@vow/orchestrator';
@@ -49,6 +50,7 @@ const REASON_MESSAGES: Record<DecisionReason, string> = {
   deny_disabled_principal: 'Principal is disabled',
   deny_missing_grant: 'Missing required permission',
   deny_scope: 'Permission grant does not cover this resource',
+  deny_context: 'Grant is not valid for this request context (time window, source, or sign-in method)',
   deny_revoked: 'Permission has been revoked for this principal',
   deny_store_invalid: 'Authorization store is invalid',
 };
@@ -380,6 +382,16 @@ export function readAuditEntries(root: string, limit = 200): AuditEntry[] {
 // Permission checks
 // ---------------------------------------------------------------------------
 
+/** Builds the WS5 request context for `decide()` from a resolved caller. */
+export function requestContextFrom(ctx: AuthzContext): RequestContext {
+  return {
+    now: new Date(),
+    loopback: ctx.localBoard,
+    authMethod:
+      ctx.authMethod === 'session' ? 'session' : ctx.authMethod === 'oidc' ? 'oidc' : 'token',
+  };
+}
+
 export interface PermissionCheck {
   allowed: boolean;
   status: number;
@@ -402,6 +414,7 @@ export async function checkPermission(
   const decision = decide(ctx.loaded, ctx.principal, permission, target, {
     localBoard: ctx.localBoard,
     unknownPrincipal: ctx.unknownPrincipal,
+    requestContext: requestContextFrom(ctx),
   });
   if (shouldAudit(permission, decision)) {
     recordAudit(req, permission, decision, target);

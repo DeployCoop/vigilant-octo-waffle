@@ -398,7 +398,10 @@ function scopeIsEmpty(scope?: GrantScope): boolean {
 
 /**
  * Builds the CASL ability for a principal: role defaults first, then
- * explicit grants (scoped grants become CASL conditions), then revocations
+ * explicit grants (scoped grants become CASL conditions), then revocations.
+ * NOTE: grant *context* conditions (§8.1) are enforced by `decide()` only —
+ * CASL conditions bind to the target, not the request — so these rules are
+ * the UI's approximation; the API's `decide()` stays authoritative.
  * as `cannot` rules (last rules win in CASL, so revocations subtract from
  * both role defaults and grants). A disabled or unknown principal gets an
  * empty ability. The owner role gets CASL's `manage all` wildcard.
@@ -464,6 +467,7 @@ export type DecisionReason =
   | 'deny_disabled_principal'
   | 'deny_missing_grant'
   | 'deny_scope'
+  | 'deny_context'
   | 'deny_revoked'
   | 'deny_store_invalid';
 
@@ -471,6 +475,33 @@ export interface Decision {
   allowed: boolean;
   reason: DecisionReason;
   principalId?: string;
+}
+
+/**
+ * True when a grant's context conditions match the request context.
+ * A grant without context always matches. A context-carrying grant with
+ * NO request context supplied fails closed — honoring it requires a
+ * caller that knows the request facts (the web layer always supplies
+ * them; see `DecideOptions.requestContext`).
+ */
+export function grantContextMatches(
+  context: GrantContext | undefined,
+  requestContext?: RequestContext
+): boolean {
+  if (!context) return true;
+  if (!requestContext) return false;
+  const now = requestContext.now.getTime();
+  if (context.notBefore !== undefined && now < Date.parse(context.notBefore)) return false;
+  if (context.notAfter !== undefined && now >= Date.parse(context.notAfter)) return false;
+  if (context.source === 'loopback' && !requestContext.loopback) return false;
+  if (
+    context.authMethod !== undefined &&
+    context.authMethod !== 'any' &&
+    context.authMethod !== requestContext.authMethod
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export interface DecideOptions {
@@ -487,6 +518,13 @@ export interface DecideOptions {
    * `deny_unknown_principal` instead of `deny_unauthenticated`.
    */
   unknownPrincipal?: boolean;
+  /**
+   * The request facts context-scoped grants are evaluated against
+   * (WS5 §8.1). Callers that authorize real requests must supply this;
+   * omitting it makes context-carrying grants unsatisfiable (fail
+   * closed) while leaving context-free behavior unchanged.
+   */
+  requestContext?: RequestContext;
 }
 
 function deny(reason: DecisionReason, principal?: Principal | null): Decision {
@@ -537,9 +575,13 @@ export function decide(
 
   const grants = (principal.grants ?? []).filter((g) => g.permission === permission);
   if (grants.length > 0) {
-    if (grants.some((g) => grantCoversTarget(g, target))) {
+    const covering = grants.filter((g) => grantCoversTarget(g, target));
+    if (covering.some((g) => grantContextMatches(g.context, opts.requestContext))) {
       return allow('allow_explicit_grant', principal);
     }
+    // A grant covers the target but its context rejects this request —
+    // reported distinctly so the audit trail shows *why*.
+    if (covering.length > 0) return deny('deny_context', principal);
     return deny('deny_scope', principal);
   }
 
