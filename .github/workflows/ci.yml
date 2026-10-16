@@ -90,6 +90,16 @@ jobs:
           pnpm --filter @vow/orchestrator build
           pnpm --filter @vow/orchestrator test
 
+      # Plan II §7.2: helm/mkcert-dependent tests skip when the binary is
+      # absent (developer machines); CI installs both, so a skip here
+      # means the coverage silently vanished.
+      - name: Assert binary-dependent tests ran (no skips in CI)
+        run: |
+          cd packages/orchestrator
+          out=$(node --test dist/__tests__/smoke.test.js dist/__tests__/storage.test.js dist/__tests__/tls.test.js 2>&1)
+          echo "$out" | grep -E '^ℹ (tests|pass|fail|skipped)'
+          echo "$out" | grep -qE '^ℹ skipped 0$'
+
       - name: Web tests
         run: pnpm --filter @vow/web test
 
@@ -168,3 +178,25 @@ jobs:
       # carrying a justification.
       - name: ShellCheck (error severity)
         run: shellcheck --severity=error src/*.bash src/*.sh up bin/vow
+
+      # Plan II §6.2: the warning count may only shrink. Lower the budget
+      # file in the same PR that lowers the count.
+      - name: ShellCheck warning budget
+        run: |
+          count=$(shellcheck --severity=warning --format=gcc src/*.bash src/*.sh up bin/vow | grep -cE ': (warning|error):' || true)
+          budget=$(cat .github/shellcheck-warning-budget.txt)
+          echo "ShellCheck warnings: ${count} (budget: ${budget})"
+          if [ "${count}" -gt "${budget}" ]; then
+            echo "::error::ShellCheck warning count ${count} exceeds budget ${budget}"
+            exit 1
+          fi
+
+  shell-tests:
+    name: Shell tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Plan II §6.1: stubbed-binary regression tests for the k3s scripts.
+      - name: Run shell script tests
+        run: bash scripts/tests/run.sh
