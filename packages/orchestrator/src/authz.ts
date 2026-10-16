@@ -133,6 +133,34 @@ export interface GrantScope {
 export interface Grant {
   permission: Permission;
   scope?: GrantScope;
+  context?: GrantContext;
+}
+
+/**
+ * Request-context conditions on a grant (Plan II WS5 §8.1). All present
+ * fields must match the request context (AND). Evaluated by `decide()` —
+ * CASL conditions bind to the target only, so request facts (time, source,
+ * sign-in method) are threaded through `DecideOptions.requestContext`.
+ */
+export interface GrantContext {
+  /** ISO timestamp: the grant counts only at or after this instant. */
+  notBefore?: string;
+  /** ISO timestamp: the grant counts only before this instant. */
+  notAfter?: string;
+  /** The request must originate from a loopback host. */
+  source?: 'loopback' | 'any';
+  /** How the caller must have authenticated for this grant to count. */
+  authMethod?: 'session' | 'token' | 'oidc' | 'any';
+}
+
+/** How a caller authenticated, as seen by the decision point. */
+export type AuthMethod = 'session' | 'token' | 'oidc';
+
+/** The request facts context-scoped grants are evaluated against. */
+export interface RequestContext {
+  now: Date;
+  loopback: boolean;
+  authMethod: AuthMethod;
 }
 
 export interface Principal {
@@ -152,6 +180,20 @@ export interface Principal {
 export interface AuthzStore {
   version: 1;
   principals: Principal[];
+  sessions?: AuthzSession[];
+}
+
+/**
+ * A browser session record (Plan II WS5 §8.2). Only the sha256 hash of the
+ * session id is stored; the id itself lives solely in the client's
+ * httpOnly cookie. Expiry is absolute from `createdAt` (no sliding
+ * renewal, so resolving a session never writes the store).
+ */
+export interface AuthzSession {
+  idHash: string;
+  principalId: string;
+  createdAt: string;
+  expiresAt: string;
 }
 
 /** The resource context a permission check runs against. */
@@ -176,9 +218,30 @@ const grantScopeSchema = z.object({
   namespace: z.string().min(1).optional(),
 });
 
+const grantContextSchema = z.object({
+  notBefore: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), { message: 'notBefore must be an ISO timestamp' })
+    .optional(),
+  notAfter: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), { message: 'notAfter must be an ISO timestamp' })
+    .optional(),
+  source: z.enum(['loopback', 'any']).optional(),
+  authMethod: z.enum(['session', 'token', 'oidc', 'any']).optional(),
+});
+
 const grantSchema = z.object({
   permission: permissionSchema,
   scope: grantScopeSchema.optional(),
+  context: grantContextSchema.optional(),
+});
+
+const sessionSchema = z.object({
+  idHash: z.string().min(1),
+  principalId: z.string().min(1),
+  createdAt: z.string().min(1),
+  expiresAt: z.string().min(1),
 });
 
 const principalSchema = z.object({
@@ -197,6 +260,7 @@ const authzStoreSchema = z
   .object({
     version: z.literal(1),
     principals: z.array(principalSchema),
+    sessions: z.array(sessionSchema).optional(),
   })
   .superRefine((store, ctx) => {
     const seen = new Set<string>();
@@ -566,6 +630,108 @@ export function findPrincipalByOidcSubject(
 }
 
 // ---------------------------------------------------------------------------
+// Browser sessions (Plan II WS5 §8.2)
+// ---------------------------------------------------------------------------
+
+/** Session lifetime: 12 hours, absolute (Plan II WS5 design D2). */
+export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** Cookie carrying the session id (set httpOnly by the web layer). */
+export const SESSION_COOKIE_NAME = 'vow_session';
+
+/** Bounds store growth: oldest sessions are evicted past this per principal. */
+export const MAX_SESSIONS_PER_PRINCIPAL = 10;
+
+/** Mints a new session id. Shown once (as a cookie); only its hash is stored. */
+export function generateSessionId(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+/** Sessions whose expiry has passed, dropped. Pure; `now` injectable for tests. */
+export function pruneExpiredSessions(store: AuthzStore, now: Date = new Date()): AuthzStore {
+  if (!store.sessions || store.sessions.length === 0) return store;
+  const kept = store.sessions.filter((sess) => Date.parse(sess.expiresAt) > now.getTime());
+  if (kept.length === store.sessions.length) return store;
+  const { sessions: _dropped, ...rest } = store;
+  return kept.length > 0 ? { ...rest, sessions: kept } : rest;
+}
+
+/**
+ * Creates a session for a principal and returns the new store plus the raw
+ * session id (the only place the id ever appears server-side). Expired
+ * sessions are pruned first; the per-principal cap evicts oldest-first.
+ */
+export function createSession(
+  store: AuthzStore,
+  principalId: string,
+  now: Date = new Date()
+): { store: AuthzStore; sessionId: string; session: AuthzSession } {
+  const pruned = pruneExpiredSessions(store, now);
+  const sessionId = generateSessionId();
+  const session: AuthzSession = {
+    idHash: hashToken(sessionId),
+    principalId,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + SESSION_TTL_MS).toISOString(),
+  };
+  let sessions = [...(pruned.sessions ?? []), session];
+  const mine = sessions.filter((sess) => sess.principalId === principalId);
+  if (mine.length > MAX_SESSIONS_PER_PRINCIPAL) {
+    const evict = new Set(
+      mine.slice(0, mine.length - MAX_SESSIONS_PER_PRINCIPAL).map((sess) => sess.idHash)
+    );
+    sessions = sessions.filter((sess) => !evict.has(sess.idHash));
+  }
+  return { store: { ...pruned, sessions }, sessionId, session };
+}
+
+/** Finds a live session record by raw id. Expired ids resolve to null. */
+export function findSession(
+  store: AuthzStore,
+  sessionId: string,
+  now: Date = new Date()
+): AuthzSession | null {
+  let match: AuthzSession | null = null;
+  for (const sess of store.sessions ?? []) {
+    if (verifyTokenHash(sessionId, sess.idHash)) match = sess;
+  }
+  if (!match) return null;
+  return Date.parse(match.expiresAt) > now.getTime() ? match : null;
+}
+
+/** Like findSession, but reports expiry distinctly (for audit). */
+export function findSessionIncludingExpired(
+  store: AuthzStore,
+  sessionId: string
+): { session: AuthzSession; expired: boolean } | null {
+  for (const sess of store.sessions ?? []) {
+    if (verifyTokenHash(sessionId, sess.idHash)) {
+      return { session: sess, expired: Date.parse(sess.expiresAt) <= Date.now() };
+    }
+  }
+  return null;
+}
+
+/** Removes one session (logout). Unknown ids are a no-op. */
+export function revokeSession(store: AuthzStore, sessionId: string): AuthzStore {
+  if (!store.sessions) return store;
+  const idHash = hashToken(sessionId);
+  const sessions = store.sessions.filter((sess) => sess.idHash !== idHash);
+  if (sessions.length === store.sessions.length) return store;
+  const { sessions: _all, ...rest } = store;
+  return sessions.length > 0 ? { ...rest, sessions } : rest;
+}
+
+/** Removes every session belonging to a principal. */
+export function revokePrincipalSessions(store: AuthzStore, principalId: string): AuthzStore {
+  if (!store.sessions) return store;
+  const sessions = store.sessions.filter((sess) => sess.principalId !== principalId);
+  if (sessions.length === store.sessions.length) return store;
+  const { sessions: _all, ...rest } = store;
+  return sessions.length > 0 ? { ...rest, sessions } : rest;
+}
+
+// ---------------------------------------------------------------------------
 // Store mutations (pure) with invariants — used by the CLI and admin API.
 // ---------------------------------------------------------------------------
 
@@ -606,7 +772,11 @@ export function upsertPrincipal(store: AuthzStore, principal: Principal): AuthzS
     ? store.principals.map((p) => (p.id === valid.id ? valid : p))
     : [...store.principals, valid];
   assertNotLastOwner(store, principals, `upsert principal ${valid.id}`);
-  return { version: 1, principals };
+  // Sessions survive unrelated edits, but the edited principal's own
+  // sessions are revoked: role/grant/token changes must not leave stale
+  // sessions exercising yesterday's privileges (WS5 §8.2).
+  const sessions = (store.sessions ?? []).filter((sess) => sess.principalId !== valid.id);
+  return { version: 1, principals, ...(sessions.length > 0 ? { sessions } : {}) };
 }
 
 /** Removes a principal by id and returns the new store. */
@@ -616,5 +786,6 @@ export function removePrincipal(store: AuthzStore, principalId: string): AuthzSt
   }
   const principals = store.principals.filter((p) => p.id !== principalId);
   assertNotLastOwner(store, principals, `remove principal ${principalId}`);
-  return { version: 1, principals };
+  const sessions = (store.sessions ?? []).filter((sess) => sess.principalId !== principalId);
+  return { version: 1, principals, ...(sessions.length > 0 ? { sessions } : {}) };
 }

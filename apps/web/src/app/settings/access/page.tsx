@@ -35,10 +35,11 @@ interface PublicPrincipal {
 interface AuditEntry {
   ts: string;
   principalId: string | null;
-  permission: string;
-  allowed: boolean;
-  reason: string;
+  permission?: string;
+  allowed?: boolean;
+  reason?: string;
   route: string;
+  event?: string;
 }
 
 interface TokenReveal {
@@ -661,13 +662,17 @@ export default function AccessPage() {
                       <tr key={i} className="border-b border-slate-800/60 text-slate-300">
                         <td className="py-2 pr-3 whitespace-nowrap">{new Date(entry.ts).toLocaleString()}</td>
                         <td className="py-2 pr-3">{entry.principalId ?? '—'}</td>
-                        <td className="py-2 pr-3">{entry.permission}</td>
+                        <td className="py-2 pr-3">{entry.event ? `session · ${entry.event.replace('session_', '')}` : entry.permission}</td>
                         <td className="py-2 pr-3">
-                          <span className={entry.allowed ? 'text-emerald-300' : 'text-red-300'}>
-                            {entry.allowed ? 'allow' : 'DENY'}
-                          </span>
+                          {entry.event ? (
+                            <span className="text-slate-400">event</span>
+                          ) : (
+                            <span className={entry.allowed ? 'text-emerald-300' : 'text-red-300'}>
+                              {entry.allowed ? 'allow' : 'DENY'}
+                            </span>
+                          )}
                         </td>
-                        <td className="py-2 pr-3">{entry.reason}</td>
+                        <td className="py-2 pr-3">{entry.reason ?? '—'}</td>
                         <td className="py-2">{entry.route}</td>
                       </tr>
                     ))}

@@ -338,3 +338,45 @@ describe('audit logging', () => {
     });
   });
 });
+
+describe('session resolution (WS5)', () => {
+  it('resolves a vow_session cookie to its principal with authMethod session', async () => {
+    const { createSession } = await import('@vow/orchestrator');
+    const { store: withSession, sessionId } = createSession(store(viewer), viewer.id);
+    hoisted.load = { status: 'ready', store: withSession };
+    const ctx = await resolveAuthzContext(
+      request(undefined, { cookie: `vow_session=${sessionId}` })
+    );
+    expect(ctx.principal?.id).toBe('p_viewer');
+    expect(ctx.authMethod).toBe('session');
+    expect(ctx.expiredSession).toBe(false);
+  });
+
+  it('flags an expired session instead of resolving it', async () => {
+    const { createSession, SESSION_TTL_MS } = await import('@vow/orchestrator');
+    const past = new Date(Date.now() - SESSION_TTL_MS - 60_000);
+    const { store: withSession, sessionId } = createSession(store(viewer), viewer.id, past);
+    hoisted.load = { status: 'ready', store: withSession };
+    const ctx = await resolveAuthzContext(
+      request(undefined, { cookie: `vow_session=${sessionId}` })
+    );
+    expect(ctx.principal).toBeNull();
+    expect(ctx.expiredSession).toBe(true);
+  });
+
+  it('ignores an unknown session id', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    const ctx = await resolveAuthzContext(
+      request(undefined, { cookie: 'vow_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' })
+    );
+    expect(ctx.principal).toBeNull();
+    expect(ctx.expiredSession).toBe(false);
+  });
+
+  it('still resolves bearer tokens with authMethod token', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    const ctx = await resolveAuthzContext(request(viewerToken));
+    expect(ctx.principal?.id).toBe('p_viewer');
+    expect(ctx.authMethod).toBe('token');
+  });
+});
