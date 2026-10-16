@@ -86,19 +86,13 @@ export const BOOTSTRAP_OWNER_PRINCIPAL: Principal = {
 
 let warnedBootstrapToken = false;
 
-/**
- * Routes whose clients consume them via EventSource, which cannot set
- * headers — the only paths where a query-string token is honored
- * (Plan II §4.2, §16 Q3). Everywhere else the token URL form is ignored:
- * URLs leak into logs, browser history, and Referer headers.
- */
-export const QUERY_TOKEN_PATHS: ReadonlySet<string> = new Set([
-  '/api/waffle/stream',
-  '/api/tasks/stream',
-  '/api/k8s/exec',
-]);
-
-/** Tokens are accepted as `Authorization: Bearer <t>`, `x-vow-token: <t>`, cookie `vow_token=<t>`, or URL query `?token=<t>`. */
+/** Tokens are accepted only as `Authorization: Bearer <t>` or `x-vow-token: <t>`.
+ * Browsers authenticate with the httpOnly session cookie instead
+ * (extractSessionId). Query-string tokens are honored nowhere (WS5 §8.2
+ * retired the Plan II §4.2 stream exception once streams could ride the
+ * session cookie): URLs leak into logs, browser history, and Referer
+ * headers. The legacy JS-set `vow_token` cookie is likewise not a
+ * credential anymore — it duplicated the raw token into JS reach. */
 export function extractRequestToken(req: Request): string | null {
   const custom = req.headers.get('x-vow-token');
   if (custom && custom.trim() !== '') return custom.trim();
@@ -107,21 +101,6 @@ export function extractRequestToken(req: Request): string | null {
     const token = auth.substring(7).trim();
     if (token !== '') return token;
   }
-  const cookieHeader = req.headers.get('cookie');
-  if (cookieHeader) {
-    const match = cookieHeader.match(/(?:^|;\s*)vow_token=([^;]+)/);
-    if (match && match[1]) {
-      const decoded = decodeURIComponent(match[1]).trim();
-      if (decoded !== '') return decoded;
-    }
-  }
-  try {
-    const url = new URL(req.url);
-    if (QUERY_TOKEN_PATHS.has(url.pathname)) {
-      const queryToken = url.searchParams.get('token');
-      if (queryToken && queryToken.trim() !== '') return queryToken.trim();
-    }
-  } catch {}
   return null;
 }
 

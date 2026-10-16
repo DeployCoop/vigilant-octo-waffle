@@ -95,15 +95,19 @@ describe('extractRequestToken', () => {
     expect(extractRequestToken(request())).toBeNull();
   });
 
-  it('honors query tokens only on the EventSource streaming routes (Plan II §4.2)', () => {
+  it('ignores query tokens on every route (WS5: streams ride the session cookie)', () => {
     const q = new URLSearchParams({ token: 'abc' }).toString();
-    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/waffle/stream?${q}`))).toBe('abc');
-    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/tasks/stream?${q}`))).toBe('abc');
-    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/k8s/exec?${q}`))).toBe('abc');
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/waffle/stream?${q}`))).toBeNull();
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/tasks/stream?${q}`))).toBeNull();
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/k8s/exec?${q}`))).toBeNull();
     expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/flux?${q}`))).toBeNull();
-    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/cluster/status?${q}`))).toBeNull();
     // Header credentials keep working on every route.
     expect(extractRequestToken(request('abc', {}, 'http://localhost:3000/api/flux'))).toBe('abc');
+  });
+
+  it('ignores the legacy vow_token cookie (WS5: only the session cookie authenticates)', () => {
+    expect(extractRequestToken(request(undefined, { cookie: 'vow_token=abc' }))).toBeNull();
+    expect(extractRequestToken(request('abc', { cookie: 'vow_token=zzz' }))).toBe('abc');
   });
 });
 
