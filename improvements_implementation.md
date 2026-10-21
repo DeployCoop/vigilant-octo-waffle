@@ -1,6 +1,8 @@
 # Vigilant Octo Waffle — Repository Improvements Implementation Plan
 
-**Status:** Draft for review (2026-10-03)
+**Status:** Implemented (October 2026) — executed via PR #29 and the
+workstream rollouts. Superseded by Improvements Plan II
+(`improvements_implementation_2.md`).
 **Companion to:** `authz_implementation.md` (Implemented — PRs #21–#27) and the CI
 rollout (PR #28). This plan covers the engineering-health backlog identified in
 two review passes over the repository on 2026-10-03: one before CI existed,

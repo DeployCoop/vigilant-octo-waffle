@@ -1,7 +1,9 @@
 # Vigilant Octo Waffle — Improvements Plan II: Least-Privilege Tightening & Guardrail Depth
 
-**Status:** Decisions taken 2026-10-15 — §16 answered with the recommended
-defaults on all eight questions (Q1–Q8). Implementation in progress.
+**Status:** Complete — implemented in full (PRs #86–#97), completed
+2026-10-19. §16 decisions were taken with the recommended defaults on
+all eight questions (Q1–Q8). Followed by Improvements Plan III
+(`improvements_implementation_3.md`).
 **Companion to:** `improvements_implementation.md` (implemented, PR #29 and the WS
 rollouts) and the October 2026 security arc — bug sweep (PR #83), required-check
 promotion + scanning enablement (PR #84), and the CodeQL triage (PR #85).
