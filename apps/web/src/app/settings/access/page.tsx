@@ -15,7 +15,13 @@ import {
 import type { GrantContext } from '@vow/orchestrator';
 import { useAbilityContext } from '@/lib/ability';
 import { apiErrorMessage } from '@/lib/envelope';
-import { serializeGrantForSave, formatGrantContext } from '@/lib/access-grants';
+import {
+  serializeGrantForSave,
+  formatGrantContext,
+  contextToFormValues,
+  formValuesToContext,
+  type GrantContextFormValues,
+} from '@/lib/access-grants';
 
 interface Grant {
   permission: string;
@@ -50,6 +56,13 @@ interface TokenReveal {
   token: string;
 }
 
+interface SessionInfo {
+  idHashPrefix: string;
+  principalId: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 const inputCls =
   'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none';
 const btnCls =
@@ -66,6 +79,7 @@ export default function AccessPage() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reveal, setReveal] = useState<TokenReveal | null>(null);
@@ -110,6 +124,11 @@ export default function AccessPage() {
         if (auditRes.ok) {
           const auditData = await auditRes.json();
           setAudit(auditData.entries ?? []);
+        }
+        const sessRes = await fetch('/api/authz/session');
+        if (sessRes.ok) {
+          const sessData = await sessRes.json();
+          setSessions(sessData.sessions ?? []);
         }
       }
     } catch (err: any) {
@@ -251,6 +270,18 @@ export default function AccessPage() {
     });
     if (!res.ok) return await fail(res);
     setMessage(`${p.name} removed.`);
+    await load();
+  };
+
+  const handleRevokeSession = async (s: SessionInfo) => {
+    setError(null);
+    const res = await fetch('/api/authz/session', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idHashPrefix: s.idHashPrefix }),
+    });
+    if (!res.ok) return await fail(res);
+    setMessage('Session revoked.');
     await load();
   };
 
@@ -524,8 +555,21 @@ export default function AccessPage() {
                           <span>Add grant</span>
                         </button>
                       </div>
-                      {editGrants.map((g, i) => (
-                        <div key={i} className="flex flex-wrap gap-2 items-center">
+                      {editGrants.map((g, i) => {
+                        const ctxForm = contextToFormValues(g.context);
+                        const setCtx = (patch: Partial<GrantContextFormValues>) =>
+                          setEditGrants(
+                            editGrants.map((x, j) =>
+                              j === i
+                                ? { ...x, context: formValuesToContext({ ...ctxForm, ...patch }) }
+                                : x
+                            )
+                          );
+                        const ctxInputCls =
+                          'rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 [color-scheme:dark]';
+                        return (
+                        <div key={i} className="space-y-2">
+                          <div className="flex flex-wrap gap-2 items-center">
                           <select
                             value={g.permission}
                             onChange={(e) =>
@@ -559,16 +603,78 @@ export default function AccessPage() {
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                          {formatGrantContext(g.context) && (
-                            <span
-                              className="text-[11px] text-amber-300/90"
-                              title="Context constraints are preserved when you save. Edit them via the authz CLI or API."
-                            >
-                              {`{${formatGrantContext(g.context)}}`}
+                          </div>
+                          <div className="flex flex-wrap gap-2 items-end pl-1">
+                            <label className="space-y-0.5">
+                              <span className="block text-[11px] text-slate-500">Not before</span>
+                              <input
+                                type="datetime-local"
+                                value={ctxForm.notBefore}
+                                onChange={(e) => setCtx({ notBefore: e.target.value })}
+                                className={ctxInputCls}
+                              />
+                            </label>
+                            <label className="space-y-0.5">
+                              <span className="block text-[11px] text-slate-500">Not after</span>
+                              <input
+                                type="datetime-local"
+                                value={ctxForm.notAfter}
+                                onChange={(e) => setCtx({ notAfter: e.target.value })}
+                                className={ctxInputCls}
+                              />
+                            </label>
+                            <label className="space-y-0.5">
+                              <span className="block text-[11px] text-slate-500">Source</span>
+                              <select
+                                value={ctxForm.source}
+                                onChange={(e) =>
+                                  setCtx({ source: e.target.value as GrantContextFormValues['source'] })
+                                }
+                                className={ctxInputCls}
+                              >
+                                <option value="any">any</option>
+                                <option value="loopback">loopback only</option>
+                              </select>
+                            </label>
+                            <label className="space-y-0.5">
+                              <span className="block text-[11px] text-slate-500">Auth method</span>
+                              <select
+                                value={ctxForm.authMethod}
+                                onChange={(e) =>
+                                  setCtx({
+                                    authMethod: e.target.value as GrantContextFormValues['authMethod'],
+                                  })
+                                }
+                                className={ctxInputCls}
+                              >
+                                <option value="any">any</option>
+                                <option value="session">session</option>
+                                <option value="token">token</option>
+                                <option value="oidc">oidc</option>
+                              </select>
+                            </label>
+                            {g.context && (
+                              <button
+                                className={btnCls}
+                                onClick={() =>
+                                  setEditGrants(
+                                    editGrants.map((x, j) =>
+                                      j === i ? { ...x, context: undefined } : x
+                                    )
+                                  )
+                                }
+                              >
+                                Clear context
+                              </button>
+                            )}
+                            <span className="text-[11px] text-slate-500 pb-1.5">
+                              Context (WS5): the grant counts only when the request matches.
+                              Empty / any = unconstrained.
                             </span>
-                          )}
+                          </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <div className="space-y-2">
@@ -612,6 +718,53 @@ export default function AccessPage() {
                 )}
               </div>
             ))}
+          </div>
+
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+            <h3 className="text-base font-semibold text-white">Active sessions</h3>
+            {sessions.length === 0 ? (
+              <p className="text-sm text-slate-400">No active sessions.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-800">
+                      <th className="py-2 pr-3 font-medium">Principal</th>
+                      <th className="py-2 pr-3 font-medium">Session</th>
+                      <th className="py-2 pr-3 font-medium">Created</th>
+                      <th className="py-2 pr-3 font-medium">Expires</th>
+                      <th className="py-2 font-medium"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessions.map((s) => {
+                      const owner = principals.find((p) => p.id === s.principalId);
+                      return (
+                        <tr key={s.idHashPrefix} className="border-b border-slate-800/60 text-slate-300">
+                          <td className="py-2 pr-3">
+                            {owner ? owner.name : s.principalId}
+                            {s.principalId === me?.id ? ' (you)' : ''}
+                            {owner && <span className="text-slate-500"> · {s.principalId}</span>}
+                          </td>
+                          <td className="py-2 pr-3 font-mono">{s.idHashPrefix}…</td>
+                          <td className="py-2 pr-3 whitespace-nowrap">{new Date(s.createdAt).toLocaleString()}</td>
+                          <td className="py-2 pr-3 whitespace-nowrap">{new Date(s.expiresAt).toLocaleString()}</td>
+                          <td className="py-2 text-right">
+                            <button className={btnCls} onClick={() => void handleRevokeSession(s)}>
+                              Revoke
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-xs text-slate-500">
+              Browser sign-ins (WS5 httpOnly sessions, 12h absolute). Revoking a session
+              signs that browser out; the underlying token is unaffected.
+            </p>
           </div>
 
           <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-4">
