@@ -29,6 +29,8 @@ This project provides a **Kubernetes cluster setup** using [KinD](https://kind.s
 
 Vigilant Octo Waffle is organized as a **pnpm monorepo** containing:
 - `apps/web`: Next.js 15+ App Router dashboard with live streaming console, catalog, and cluster manager.
+- `apps/ink`: Terminal UI (Ink/React) shipped as the `vow` CLI binary, driving the same engine without the web layer.
+- `apps/githubio`: The static project site, built and deployed by its own workflow.
 - `packages/orchestrator`: Core TypeScript engine for config parsing, templating, YAML merging, secret generation, and process execution.
 
 ### Quick Start with pnpm
@@ -211,7 +213,7 @@ Ensure the following tools are installed:
 - **Python 3**
 - **kubectl**
 - **argocd CLI**
-- **Docker** (with `docker-compose`)
+- **Docker** (with `docker compose`)
 - **mkcert**
 - **KinD** (for Kubernetes-in-Docker)
 - **yq** [yq-go](https://github.com/mikefarah/yq)
