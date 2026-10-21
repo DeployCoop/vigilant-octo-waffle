@@ -18,6 +18,10 @@ import {
   findPrincipalByToken,
   decide,
   isPermission,
+  validateGrantContext,
+  pruneExpiredSessions,
+  revokePrincipalSessions,
+  type AuthMethod,
   type AuthzStore,
   type Grant,
   type GrantContext,
@@ -36,7 +40,9 @@ import { ensureDevCertificate } from './tls.js';
  *                    [--oidc-subject <sub>] [--grant <permission>]...
  *                    [--scope-app <appId>] [--scope-namespace <ns>]
  *   vow authz list                                          list principals (never prints token hashes)
+ *   vow authz sessions [--principal <id>]                   list active browser sessions (hash prefixes only)
  *   vow authz revoke <principal-id>                         remove a principal
+ *   vow authz revoke-sessions <principal-id>                revoke every browser session for a principal
  *   vow authz rotate <principal-id>                         issue a new token (printed once)
  *   vow authz check  <token> <permission> [--app <id>] [--namespace <ns>]
  *
@@ -72,7 +78,9 @@ Commands:
                                    "source": "loopback"|"any",
                                    "authMethod": "session"|"token"|"oidc"|"any"}
   list                            List principals
+  sessions [--principal <id>]     List active browser sessions (id-hash prefix, principal, expiry)
   revoke <principal-id>           Remove a principal
+  revoke-sessions <principal-id>  Revoke every browser session for a principal
   rotate <principal-id>           Issue a replacement token (printed once)
   check <token> <permission> [--app <appId>] [--namespace <ns>]
                                   Dry-run a permission check, prints the decision reason
@@ -190,29 +198,6 @@ async function cmdInit(root: string, args: string[], io: AuthzCliIo): Promise<nu
   return 0;
 }
 
-/** Shape-checks a --context JSON value; returns an error message or null. */
-function validateGrantContext(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return 'must be a JSON object';
-  }
-  const allowed = new Set(['notBefore', 'notAfter', 'source', 'authMethod']);
-  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-    if (!allowed.has(key)) return `unknown field: ${key}`;
-    if (key === 'notBefore' || key === 'notAfter') {
-      if (typeof v !== 'string' || Number.isNaN(Date.parse(v))) {
-        return `${key} must be an ISO timestamp`;
-      }
-    } else if (key === 'source') {
-      if (v !== 'loopback' && v !== 'any') return 'source must be "loopback" or "any"';
-    } else if (key === 'authMethod') {
-      if (v !== 'session' && v !== 'token' && v !== 'oidc' && v !== 'any') {
-        return 'authMethod must be "session", "token", "oidc", or "any"';
-      }
-    }
-  }
-  return null;
-}
-
 async function cmdAdd(root: string, args: string[], io: AuthzCliIo): Promise<number> {
   const { positional, flags } = parseFlags(args);
   const name = positional[0];
@@ -327,6 +312,55 @@ async function cmdList(root: string, io: AuthzCliIo): Promise<number> {
   return 0;
 }
 
+async function cmdSessions(root: string, args: string[], io: AuthzCliIo): Promise<number> {
+  const { flags } = parseFlags(args);
+  const store = requireStore(root, io);
+  if (!store) return 1;
+  const principalId = flag(flags, 'principal');
+  if (principalId && !store.principals.some((p) => p.id === principalId)) {
+    io.err(`Unknown principal: ${principalId}`);
+    return 1;
+  }
+  const active = (pruneExpiredSessions(store).sessions ?? []).filter(
+    (sess) => !principalId || sess.principalId === principalId
+  );
+  if (active.length === 0) {
+    io.out(principalId ? `No active sessions for ${principalId}.` : 'No active sessions.');
+    return 0;
+  }
+  for (const sess of active) {
+    const principal = store.principals.find((p) => p.id === sess.principalId);
+    const who = principal ? `${sess.principalId} (${principal.name})` : sess.principalId;
+    // Only ever a prefix of the stored hash — session ids are never stored,
+    // and the full hash stays out of terminal output like token hashes do.
+    const prefix = `${sess.idHash.slice(0, 19)}…`;
+    io.out(`${prefix.padEnd(22)} ${who.padEnd(28)} created ${sess.createdAt}  expires ${sess.expiresAt}`);
+  }
+  return 0;
+}
+
+async function cmdRevokeSessions(root: string, args: string[], io: AuthzCliIo): Promise<number> {
+  const { positional } = parseFlags(args);
+  const id = positional[0];
+  if (!id) {
+    io.err('Usage: vow authz revoke-sessions <principal-id>');
+    return 1;
+  }
+  const store = requireStore(root, io);
+  if (!store) return 1;
+  if (!store.principals.some((p) => p.id === id)) {
+    io.err(`Unknown principal: ${id}`);
+    return 1;
+  }
+  const countFor = (s: AuthzStore) =>
+    (s.sessions ?? []).filter((sess) => sess.principalId === id).length;
+  const next = revokePrincipalSessions(store, id);
+  const revoked = countFor(store) - countFor(next);
+  saveAuthzStore(root, next);
+  io.out(`Revoked ${revoked} session${revoked === 1 ? '' : 's'} for ${id}.`);
+  return 0;
+}
+
 async function cmdRevoke(root: string, args: string[], io: AuthzCliIo): Promise<number> {
   const { positional } = parseFlags(args);
   const id = positional[0];
@@ -392,13 +426,17 @@ async function cmdCheck(root: string, args: string[], io: AuthzCliIo): Promise<n
     return 1;
   }
   const authMethodRaw = flag(flags, 'auth-method') ?? 'token';
-  if (authMethodRaw !== 'session' && authMethodRaw !== 'token' && authMethodRaw !== 'oidc') {
+  // Membership comes from the shared grant-context validator (which also
+  // accepts the 'any' wildcard — meaningless for a concrete check, so it
+  // is rejected here with this command's own message, as before).
+  if (authMethodRaw === 'any' || validateGrantContext({ authMethod: authMethodRaw }) !== null) {
     io.err(`--auth-method must be session, token, or oidc, got: ${authMethodRaw}`);
     return 1;
   }
+  const authMethod = authMethodRaw as AuthMethod;
   const decision = decide(loaded, principal, permission, target, {
     localBoard: flags.has('loopback'),
-    requestContext: { now: at, loopback: flags.has('loopback'), authMethod: authMethodRaw },
+    requestContext: { now: at, loopback: flags.has('loopback'), authMethod },
   });
   io.out(
     `${decision.allowed ? 'ALLOW' : 'DENY'} ${permission}` +
@@ -430,8 +468,12 @@ export async function runAuthzCommand(
         return await cmdAdd(root, rest, io);
       case 'list':
         return await cmdList(root, io);
+      case 'sessions':
+        return await cmdSessions(root, rest, io);
       case 'revoke':
         return await cmdRevoke(root, rest, io);
+      case 'revoke-sessions':
+        return await cmdRevokeSessions(root, rest, io);
       case 'rotate':
         return await cmdRotate(root, rest, io);
       case 'check':
