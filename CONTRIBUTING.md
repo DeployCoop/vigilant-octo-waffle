@@ -17,7 +17,7 @@ Each package has its own suite; CI runs all of them.
 | `packages/orchestrator` | `pnpm --filter @vow/orchestrator build && pnpm --filter @vow/orchestrator test` (compiles, then `node --test` on `dist`) |
 | `apps/web` | `pnpm --filter @vow/web test` (vitest) and `pnpm --filter @vow/web typecheck` |
 | `apps/ink` | `pnpm --filter @vow/ink build && pnpm --filter @vow/ink test` |
-| `apps/githubio` | No test suite yet; typechecked and built by `pnpm --filter @vow/githubio build` in its own workflow |
+| `apps/githubio` | `pnpm --filter @vow/githubio test` (node --test) and `pnpm --filter @vow/githubio typecheck`; built by its own workflow |
 | Shell scripts (`src/`) | `scripts/tests/run.sh` (behavioral harness, runs as the **Shell tests** CI job) plus ShellCheck in CI |
 
 ## CI and merging
