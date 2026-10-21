@@ -15,10 +15,16 @@ permissions:
   contents: write
   pull-requests: write
 
+# Never cancel an in-progress run: it may be mid-merge (Plan III §8.5).
+concurrency:
+  group: dependabot-automerge-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   automerge:
     if: github.actor == 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Fetch Dependabot metadata
         id: meta
