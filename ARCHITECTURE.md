@@ -101,6 +101,19 @@ When running K3s (`THIS_K8S_TYPE="k3s"`), Vigilant Octo Waffle provides a compre
     - **Interactive Join Modal**: Select between Worker (Agent) and Control-Plane (Server) roles, configure node labels/taints, and copy curl one-liners.
     - **Remote SSH Node Provisioner**: Directly provision and join remote machines from the web dashboard with streaming logs.
 
+### 7. Workspace apps
+
+- **`apps/web` (`@vow/web`)**: the Next.js control plane — the dashboard
+  pages, the `/api` routes, and the web authz guards described below. It
+  consumes the orchestrator as a library (`@vow/orchestrator`).
+- **`apps/ink` (`@vow/ink`)**: a terminal UI (Ink/React) shipped as the
+  `vow` binary. It drives the same orchestrator engine directly — no
+  HTTP layer, no web authz; the authz CLI (`vow authz`) lives in the
+  orchestrator package.
+- **`apps/githubio` (`@vow/githubio`)**: the static project site, built
+  and deployed by the `githubio` workflow. It shares no runtime code
+  with the control plane.
+
 ## 🔐 Authorization Model
 
 Modeled on Paperclip's company/role/grant design and enforced with [CASL](https://casl.js.org/) (`@casl/ability`). Off by default; when off, none of the components below engage and the control plane behaves as it always has. Full design record: [`authz_implementation.md`](authz_implementation.md).
