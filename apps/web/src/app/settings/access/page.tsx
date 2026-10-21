@@ -12,12 +12,15 @@ import {
   Copy,
   X,
 } from 'lucide-react';
+import type { GrantContext } from '@vow/orchestrator';
 import { useAbilityContext } from '@/lib/ability';
 import { apiErrorMessage } from '@/lib/envelope';
+import { serializeGrantForSave, formatGrantContext } from '@/lib/access-grants';
 
 interface Grant {
   permission: string;
   scope?: { appId?: string; namespace?: string };
+  context?: GrantContext;
 }
 
 interface PublicPrincipal {
@@ -183,21 +186,20 @@ export default function AccessPage() {
     setEditingId(p.id);
     setEditRole(p.role);
     setEditDisabled(p.disabled);
-    setEditGrants(p.grants.map((g) => ({ ...g, scope: g.scope ? { ...g.scope } : undefined })));
+    setEditGrants(
+      p.grants.map((g) => ({
+        ...g,
+        scope: g.scope ? { ...g.scope } : undefined,
+        context: g.context ? { ...g.context } : undefined,
+      }))
+    );
     setEditRevocations([...p.revocations]);
     setError(null);
   };
 
   const handleSaveEdit = async (p: PublicPrincipal) => {
     setError(null);
-    const grants = editGrants
-      .filter((g) => g.permission)
-      .map((g) => {
-        const scope: Grant['scope'] = {};
-        if (g.scope?.appId?.trim()) scope.appId = g.scope.appId.trim();
-        if (g.scope?.namespace?.trim()) scope.namespace = g.scope.namespace.trim();
-        return Object.keys(scope).length ? { permission: g.permission, scope } : { permission: g.permission };
-      });
+    const grants = editGrants.filter((g) => g.permission).map(serializeGrantForSave);
     const res = await fetch(`/api/authz/principals/${encodeURIComponent(p.id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -469,13 +471,16 @@ export default function AccessPage() {
                     <p>
                       Grants:{' '}
                       {p.grants
-                        .map(
-                          (g) =>
+                        .map((g) => {
+                          const ctx = formatGrantContext(g.context);
+                          return (
                             g.permission +
                             (g.scope
                               ? ` (${[g.scope.appId && `app=${g.scope.appId}`, g.scope.namespace && `ns=${g.scope.namespace}`].filter(Boolean).join(', ')})`
-                              : '')
-                        )
+                              : '') +
+                            (ctx ? ` {${ctx}}` : '')
+                          );
+                        })
                         .join(' · ')}
                     </p>
                   )}
@@ -554,6 +559,14 @@ export default function AccessPage() {
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                          {formatGrantContext(g.context) && (
+                            <span
+                              className="text-[11px] text-amber-300/90"
+                              title="Context constraints are preserved when you save. Edit them via the authz CLI or API."
+                            >
+                              {`{${formatGrantContext(g.context)}}`}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
