@@ -16,14 +16,23 @@ jobs:
   secrets-scan:
     name: Secrets scan
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
+      # Checksum-pinned install (Plan III §8.1): Dependabot does not track
+      # curl installs, so bump GITLEAKS_VERSION and GITLEAKS_SHA256 together.
+      # The digest is the linux_x64 line of the release's official
+      # gitleaks_<version>_checksums.txt.
       - name: Install gitleaks
         run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz | tar -xz -C /tmp gitleaks
+          GITLEAKS_VERSION="8.28.0"
+          GITLEAKS_SHA256="a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb"
+          curl -sSL -o /tmp/gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          tar -xz -C /tmp -f /tmp/gitleaks.tar.gz gitleaks
           sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
 
       # Scan only the change range (PR commits, or the pushed range), not
@@ -43,6 +52,7 @@ jobs:
   test:
     name: Tests & typecheck
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -59,22 +69,34 @@ jobs:
       # kubectl is deliberately NOT installed: the storage tests stub it
       # (see packages/orchestrator/src/__tests__/storage.test.ts), and no
       # test needs a live cluster.
+      # Helm version must match the Dockerfile's HELM_VERSION pin (Plan III
+      # §8.2): the image is what users run, so CI tests that same helm.
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
-          version: v3.16.4
+          version: v3.17.1
 
       # The bash<->TS parity tests (WS3) shell out to the bash runners,
       # which need yq (manifest merging) and envsubst (templating).
       # VOW_PARITY_REQUIRED makes a missing tool a failure rather
       # than a skip, so parity cannot silently void in CI.
+      # yq is checksum-pinned (Plan III §8.1): Dependabot does not track
+      # curl installs, so bump YQ_VERSION and YQ_SHA256 together. The digest
+      # is the SHA-256 entry for yq_linux_amd64 in the release's official
+      # `checksums` file.
       - name: Install parity tools (yq, envsubst)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gettext-base
-          sudo curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.44.5/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
+          YQ_VERSION="v4.44.5"
+          YQ_SHA256="638c4b251c49201fc94b598834b715f8f1c6e9b1854d2820772d2c79f0289002"
+          curl -fsSL -o /tmp/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          echo "${YQ_SHA256}  /tmp/yq" | sha256sum -c -
+          sudo install -m 0755 /tmp/yq /usr/local/bin/yq
 
       # The TLS helper tests exercise the real `mkcert` binary to
       # generate a dev certificate, so it must exist.
+      # NOTE (Plan III §8.1): mkcert publishes no checksum file for its
+      # release binaries (verified 2026-10-21), so this install is the
+      # documented exception to checksum pinning.
       - name: Install mkcert
         run: |
           sudo curl -fsSL -o /usr/local/bin/mkcert "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64"
@@ -116,6 +138,7 @@ jobs:
   build:
     name: Production build
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -145,6 +168,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -164,9 +188,13 @@ jobs:
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # NOTE (Plan III §8.1): ShellCheck publishes no checksum file for its
+      # release tarballs (verified 2026-10-21), so this install is the
+      # documented exception to checksum pinning.
       - name: Install ShellCheck
         run: |
           curl -sSL https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz | tar -xJ
@@ -194,6 +222,7 @@ jobs:
   shell-tests:
     name: Shell tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
