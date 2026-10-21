@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import {
   validateStorageHostPrereqs,
   detectHostVolumeGroups,
@@ -12,18 +11,9 @@ import {
   deployOpenEBS,
 } from '../storage.js';
 import { findProjectRoot } from '../config.js';
+import { binaryAvailable } from './helpers.js';
 
-// Plan II §7.2: suites that shell out to helm/mkcert skip cleanly when the
-// binary is absent (developer machines); CI installs both and asserts the
-// skip count stays zero.
-function binaryAvailable(cmd: string): boolean {
-  try {
-    return !spawnSync(cmd, ['--version'], { stdio: 'ignore' }).error;
-  } catch {
-    return false;
-  }
-}
-
+// Plan II §7.2: skip cleanly when helm is absent (see helpers.ts).
 const hasHelm = binaryAvailable('helm');
 
 describe('Storage Fabric Engine', () => {
