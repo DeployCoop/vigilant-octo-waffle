@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import {
   validateCommand,
   ALLOWED_EXECUTABLES,
@@ -54,18 +53,9 @@ import {
   uninstallLocalChart,
   findProjectRoot,
 } from '../index.js';
+import { binaryAvailable } from './helpers.js';
 
-// Plan II §7.2: suites that shell out to helm/mkcert skip cleanly when the
-// binary is absent (developer machines); CI installs both and asserts the
-// skip count stays zero.
-function binaryAvailable(cmd: string): boolean {
-  try {
-    return !spawnSync(cmd, ['--version'], { stdio: 'ignore' }).error;
-  } catch {
-    return false;
-  }
-}
-
+// Plan II §7.2: skip cleanly when helm is absent (see helpers.ts).
 const hasHelm = binaryAvailable('helm');
 
 describe('Orchestrator Security & Smoke Tests', () => {

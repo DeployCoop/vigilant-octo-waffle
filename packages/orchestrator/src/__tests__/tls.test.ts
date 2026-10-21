@@ -3,24 +3,14 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import {
   discoverLocalHostnames,
   hasDevCertificate,
   ensureDevCertificate,
 } from '../tls.js';
+import { binaryAvailable } from './helpers.js';
 
-// Plan II §7.2: suites that shell out to helm/mkcert skip cleanly when the
-// binary is absent (developer machines); CI installs both and asserts the
-// skip count stays zero.
-function binaryAvailable(cmd: string): boolean {
-  try {
-    return !spawnSync(cmd, ['--version'], { stdio: 'ignore' }).error;
-  } catch {
-    return false;
-  }
-}
-
+// Plan II §7.2: skip cleanly when mkcert is absent (see helpers.ts).
 const hasMkcert = binaryAvailable('mkcert');
 
 describe('TLS & mkcert helper', () => {

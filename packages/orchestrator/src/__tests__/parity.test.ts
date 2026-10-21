@@ -203,6 +203,7 @@ function runBashRunner(
   };
 }
 
+// Skip idiom 2 of 2 — see the header of helpers.ts for this vs binaryAvailable().
 function skipOrFail(t: { skip: (msg: string) => void }): boolean {
   if (bashToolsReady) return false;
   if (parityRequired) {
