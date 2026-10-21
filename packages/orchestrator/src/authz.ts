@@ -237,6 +237,38 @@ const grantSchema = z.object({
   context: grantContextSchema.optional(),
 });
 
+/**
+ * Validates a grant-context value (e.g. parsed from CLI JSON) against
+ * `grantContextSchema` — the same schema the store enforces — so accepted
+ * values can never drift between surfaces. Returns an error message or
+ * null. The messages keep the phrasing the authz CLI has always printed.
+ */
+export function validateGrantContext(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return 'must be a JSON object';
+  }
+  const shape = grantContextSchema.shape;
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    if (!Object.prototype.hasOwnProperty.call(shape, key)) {
+      return `unknown field: ${key}`;
+    }
+    const field = shape[key as keyof typeof shape];
+    if (field.safeParse(v).success) continue;
+    switch (key) {
+      case 'notBefore':
+      case 'notAfter':
+        return `${key} must be an ISO timestamp`;
+      case 'source':
+        return 'source must be "loopback" or "any"';
+      case 'authMethod':
+        return 'authMethod must be "session", "token", "oidc", or "any"';
+      default:
+        return `invalid value for field: ${key}`;
+    }
+  }
+  return null;
+}
+
 const sessionSchema = z.object({
   idHash: z.string().min(1),
   principalId: z.string().min(1),
