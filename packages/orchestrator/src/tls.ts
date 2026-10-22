@@ -71,8 +71,9 @@ export function discoverLocalHostnames(): string[] {
   } catch {}
 
   // Standard domain defaults for the datacenter / vigilant-octo-waffle
-  names.add('monitaur.net');
-  names.add('*.monitaur.net');
+  const domain = process.env.THIS_DOMAIN || 'example.com';
+  names.add(domain);
+  names.add(`*.${domain}`);
 
   return Array.from(names);
 }

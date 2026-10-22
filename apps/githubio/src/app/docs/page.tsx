@@ -78,6 +78,15 @@ export default function DocsOverview() {
           </tr>
           <tr>
             <td>
+              <Link href="/docs/waffle">Waffle &amp; Auto-Rebuilding</Link>
+            </td>
+            <td>
+              Declarative multi-tier pipelines, repository watchers, Helm chart
+              template sync, container builds, and zero-downtime rollouts.
+            </td>
+          </tr>
+          <tr>
+            <td>
               <Link href="/docs/gitops">GitOps</Link>
             </td>
             <td>ArgoCD &amp; FluxCD side by side, manifest synthesis.</td>

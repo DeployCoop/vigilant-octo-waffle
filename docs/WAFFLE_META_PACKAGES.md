@@ -242,3 +242,59 @@ The Web Studio (`/waffle`) offers complete operational control:
 - **Floating Streaming Terminal Drawer**: Delivers unbuffered ANSI logs from Helm and kubectl via Server-Sent Events (`/api/waffle/stream`).
 - **Dry-Run Simulation**: Renders templates and validates manifest syntaxes without modifying cluster state.
 - **Victory Celebration**: Displays particle confetti upon 100% completion with direct clickable VIP domain links.
+
+---
+
+## 6. Automated Repository Watching, Chart Synchronization, & Continuous Rebuilding (`WaffleWatcher`)
+
+When developing multi-repo platforms with local microservices, `WaffleWatcher` continuously monitors application repositories, synchronizes Helm chart templates, builds updated container images, imports them into K3s containerd, and triggers zero-downtime rolling restarts.
+
+### 6.1 Architectural Lifecycle
+
+```
+[Service Repositories] ──► [WaffleWatcher Daemon]
+                                 │
+         ┌───────────────────────┴───────────────────────┐
+         ▼                                               ▼
+[1. Chart Template Sync]                      [2. Image Build & Import]
+Copy <repo>/helm/* -> charts/<target>         Docker build -> localhost:5001
+Preserve custom values.yaml                   sudo k3s ctr images import to all nodes
+                                                         │
+                                                         ▼
+                                              [3. Zero-Downtime Rollout]
+                                              kubectl rollout restart deployment/<release>
+```
+
+### 6.2 Key Capabilities
+- **Git SHA & Working Tree Tracking**: Detects commit changes (`git rev-parse HEAD`) and uncommitted working tree edits via mtime.
+- **Remote Polling (`--fetch`)**: Runs background `git fetch --depth 1` to track remote branches.
+- **Chart Template Synchronization**: Automatically copies Helm chart templates from source repos (e.g. `helm/`, `apps/saas/helm`) to the central `charts/` directory while preserving cluster-specific `values.yaml`.
+- **Multi-Node Containerd Import**: Directly imports newly built container images into `containerd` across the control plane and all cluster nodes via `k3s ctr -n k8s.io images import -`.
+- **Automated Rollouts**: Restarts deployments via `kubectl rollout restart deployment/<release>` and monitors rolling readiness.
+- **Umbrella Dependency Updates (`--umbrella`)**: Automatically runs `helm dependency update ./ecosystem` when subcharts change.
+
+### 6.3 CLI Usage Reference
+
+```bash
+# Continuous watch daemon across all targets in charts/waffle.yaml
+./up waffle:watch charts/waffle.yaml
+
+# Run via vow CLI
+vow waffle watch charts/waffle.yaml
+
+# Target filtering
+vow waffle watch charts/waffle.yaml --targets web-app,api-gateway
+
+# Single-pass inspection / pre-commit check
+vow waffle watch charts/waffle.yaml --once
+
+# Dry-run inspection
+vow waffle watch charts/waffle.yaml --dry-run --once
+
+# Custom polling interval (seconds)
+vow waffle watch charts/waffle.yaml --interval 10
+
+# Skip deployment rollout
+vow waffle watch charts/waffle.yaml --no-deploy
+```
+

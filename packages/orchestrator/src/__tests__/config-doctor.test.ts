@@ -46,26 +46,26 @@ describe('Config Doctor & Variable Cascading Engine (Phase 1)', () => {
     };
 
     const updates = {
-      THIS_NAME: 'monitaur',
+      THIS_NAME: 'demostack',
     };
 
     const cascaded = cascadeConfigUpdates(initialRaw, updates);
 
-    assert.equal(cascaded['THIS_NAME'], 'monitaur');
-    assert.equal(cascaded['THIS_DOMAIN'], 'monitaur.net');
-    assert.equal(cascaded['THIS_NAMESPACE'], 'monitaur');
-    assert.equal(cascaded['THIS_SECRETS'], 'monitaur-secrets');
-    assert.equal(cascaded['KEY_FILE'], './.secrets/monitaur-secrets-plain.yaml');
-    assert.equal(cascaded['SECRET_FILE'], './.secrets/monitaur-secrets.yaml');
-    assert.equal(cascaded['THIS_LVM_VG'], 'monitaurVG');
+    assert.equal(cascaded['THIS_NAME'], 'demostack');
+    assert.equal(cascaded['THIS_DOMAIN'], 'demostack.net');
+    assert.equal(cascaded['THIS_NAMESPACE'], 'demostack');
+    assert.equal(cascaded['THIS_SECRETS'], 'demostack-secrets');
+    assert.equal(cascaded['KEY_FILE'], './.secrets/demostack-secrets-plain.yaml');
+    assert.equal(cascaded['SECRET_FILE'], './.secrets/demostack-secrets.yaml');
+    assert.equal(cascaded['THIS_LVM_VG'], 'demostackVG');
   });
 
   it('cascades derived variables when THIS_NAMESPACE changes', () => {
     const initialRaw: Record<string, string> = {
-      THIS_NAME: 'monitaur',
-      THIS_NAMESPACE: 'monitaur',
-      THIS_OPENSEARCH_NAMESPACE: 'monitaur',
-      THIS_HOSTPATH_STORAGECLASS: 'monitaur-hostpath',
+      THIS_NAME: 'demostack',
+      THIS_NAMESPACE: 'demostack',
+      THIS_OPENSEARCH_NAMESPACE: 'demostack',
+      THIS_HOSTPATH_STORAGECLASS: 'demostack-hostpath',
     };
 
     const updates = {

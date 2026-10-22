@@ -59,6 +59,35 @@ vow authz init      # turn on authorization, mint the first owner`}</code>
         </li>
       </ul>
 
+      <h2>Waffle Meta-Packages &amp; Auto-Rebuilding</h2>
+      <pre>
+        <code>{`# Execute a multi-stage pipeline
+vow waffle run charts/waffle.yaml
+
+# Validate pipeline syntax, dependencies, and parameters
+vow waffle validate charts/waffle.yaml
+
+# List built-in community blueprints
+vow waffle blueprints
+
+# Watch repos, sync chart templates, rebuild images, and rollout deployments
+vow waffle watch charts/waffle.yaml
+
+# Watch specific targets with single-pass scan
+vow waffle watch charts/waffle.yaml --targets web-app,api-gateway --once
+
+# Or use the ./up runner directly
+./up waffle:watch charts/waffle.yaml --interval 5`}</code>
+      </pre>
+      <p>
+        The <code>waffle watch</code> command continuously tracks target
+        application codebases for Git commits and file changes. Whenever an
+        update is detected, it syncs Helm chart templates, builds container
+        images, pushes and imports them directly into K3s containerd across all
+        nodes, and executes a zero-downtime rolling restart. See{' '}
+        <Link href="/docs/waffle">Waffle &amp; Auto-Rebuilding</Link> for details.
+      </p>
+
       <h2>Growing a K3s cluster</h2>
       <p>
         With <code>THIS_K8S_TYPE=k3s</code>, nodes join across machines, VMs,

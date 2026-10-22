@@ -100,6 +100,11 @@ describe('command surface', () => {
     assert.equal(engine.defaultValue, 'argocd');
     const doctor = commandInfo('doctor');
     assert.ok(doctor.options.some((o) => o.long === '--fix'));
+    const waffle = commandInfo('waffle');
+    assert.ok(waffle.options.some((o) => o.long === '--dry-run'));
+    assert.ok(waffle.options.some((o) => o.long === '--interval'));
+    assert.ok(waffle.options.some((o) => o.long === '--once'));
+    assert.ok(waffle.options.some((o) => o.long === '--targets'));
   });
 
   it('unknown commands are rejected by the parser', () => {

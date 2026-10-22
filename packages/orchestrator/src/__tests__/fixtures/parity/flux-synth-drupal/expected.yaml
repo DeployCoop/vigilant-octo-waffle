@@ -206,7 +206,7 @@ spec:
           enabled: true
           method: LOGIN
           password: POmF$ON=XXcp@5p=Zc
-          user: townhall@bokbot.com
+          user: admin@example.com
         host: cheetah.webhosting.coop
         port: "465"
         starttls: true

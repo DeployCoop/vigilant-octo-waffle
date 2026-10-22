@@ -79,7 +79,7 @@ fi
 set -a && source ./src/default.env && set +a
 set -u
 
-SECRET_FILE_NAME="${SECRET_FILE:-./.secrets/${THIS_SECRETS:-monitaur-secrets}.yaml}"
+SECRET_FILE_NAME="${SECRET_FILE:-./.secrets/${THIS_SECRETS:-vow-secrets}.yaml}"
 
 echo -e "\n${BOLD}${CYAN}================================================================${NC}"
 echo -e "${BOLD}${CYAN}   🥞 Vigilant Octo Waffle - Secrets Distribution Engine       ${NC}"
@@ -100,9 +100,9 @@ if [[ -n "${CUSTOM_NAMESPACES}" ]]; then
   done
 else
   # Auto-discover based on active configurations
-  TARGET_NAMESPACES+=("${THIS_NAME:-monitaur}")
-  if [[ "${THIS_NAMESPACE:-monitaur}" != "${THIS_NAME:-monitaur}" ]]; then
-    TARGET_NAMESPACES+=("${THIS_NAMESPACE:-monitaur}")
+  TARGET_NAMESPACES+=("${THIS_NAME:-vow}")
+  if [[ "${THIS_NAMESPACE:-vow}" != "${THIS_NAME:-vow}" ]]; then
+    TARGET_NAMESPACES+=("${THIS_NAMESPACE:-vow}")
   fi
   TARGET_NAMESPACES+=("monitoring")
   TARGET_NAMESPACES+=("nfs-server")
@@ -160,7 +160,7 @@ for ns in "${UNIQUE_NAMESPACES[@]}"; do
   sed "s/namespace: .*/namespace: ${ns}/g" "${SECRET_FILE_NAME}" > "${SYNC_TEMP_DIR}/${ns}-secret.yaml"
 
   if [[ "${DRY_RUN}" == "true" ]]; then
-    echo -e "  [DRY-RUN] Would apply ${THIS_SECRETS:-monitaur-secrets} to namespace: ${BOLD}${ns}${NC}"
+    echo -e "  [DRY-RUN] Would apply ${THIS_SECRETS:-vow-secrets} to namespace: ${BOLD}${ns}${NC}"
   elif [[ "${CLUSTER_REACHABLE}" == "true" ]]; then
     # Ensure namespace exists
     if ! kubectl get namespace "${ns}" >/dev/null 2>&1; then

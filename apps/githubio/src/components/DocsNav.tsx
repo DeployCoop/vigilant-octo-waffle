@@ -15,6 +15,7 @@ export const DOCS_NAV = [
   {
     group: 'Guides',
     items: [
+      { href: '/docs/waffle', label: 'Waffle & Auto-Rebuilding' },
       { href: '/docs/gitops', label: 'GitOps: ArgoCD & FluxCD' },
       { href: '/docs/web-control-plane', label: 'Web control plane' },
       { href: '/docs/cli', label: 'CLI & the vow TUI' },

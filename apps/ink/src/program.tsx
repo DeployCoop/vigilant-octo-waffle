@@ -12,6 +12,7 @@ import {
   parseWaffleYaml,
   validateWafflePipeline,
   WaffleRunner,
+  WaffleWatcher,
   getBuiltinBlueprints,
   getIngressFabricStatus,
   deployIngressFabric,
@@ -124,8 +125,14 @@ export function createProgram(): Command {
   // Command: waffle
   program
     .command('waffle <subaction> [pipelineFile]')
-    .description('Execute or validate Waffle meta-package pipelines')
-    .option('--dry-run', 'Simulate pipeline execution')
+    .description('Execute, validate, or watch Waffle meta-package pipelines')
+    .option('--dry-run', 'Simulate pipeline execution or watch rebuilds')
+    .option('--interval <seconds>', 'Polling interval in seconds for watch mode', '5')
+    .option('--fetch', 'Fetch remote git origin during watch loop', false)
+    .option('--once', 'Run a single watch check/rebuild pass and exit', false)
+    .option('--targets <targets>', 'Comma-separated target names to filter (e.g. web,api)')
+    .option('--no-deploy', 'Skip automatic helm upgrade/rollout after image rebuild')
+    .option('--umbrella', 'Rebuild umbrella chart dependencies after updates', false)
     .action(async (subaction, pipelineFile, opts) => {
       if (subaction === 'blueprints') {
         const list = getBuiltinBlueprints();
@@ -136,7 +143,14 @@ export function createProgram(): Command {
         return;
       }
 
-      const filePath = pipelineFile || path.join(process.cwd(), 'charts', 'waffle.yaml');
+      const filePath =
+        pipelineFile ||
+        (fs.existsSync(path.join(process.cwd(), 'charts', 'waffle.yaml'))
+          ? path.join(process.cwd(), 'charts', 'waffle.yaml')
+          : fs.existsSync('/root/charts/waffle.yaml')
+          ? '/root/charts/waffle.yaml'
+          : path.join(process.cwd(), 'waffle.yaml'));
+
       if (!fs.existsSync(filePath)) {
         console.error(`File not found: ${filePath}`);
         process.exit(1);
@@ -165,6 +179,56 @@ export function createProgram(): Command {
           dryRun: opts.dryRun,
         });
         console.log(`✔ Pipeline finished with status: ${record.status.toUpperCase()}`);
+      } else if (subaction === 'watch') {
+        const intervalMs = Math.max(1000, (parseInt(opts.interval, 10) || 5) * 1000);
+        const targetList = opts.targets ? String(opts.targets).split(',').map((s: string) => s.trim()) : undefined;
+
+        console.log(`==> Initializing Waffle Watcher for pipeline '${pipe.metadata.name}'...`);
+        const watcher = new WaffleWatcher({
+          projectRoot: process.cwd(),
+          pipelinePath: resolvedPath,
+          intervalMs,
+          fetchRemote: Boolean(opts.fetch),
+          autoDeploy: opts.deploy !== false,
+          rebuildUmbrella: Boolean(opts.umbrella),
+          dryRun: Boolean(opts.dryRun),
+          targets: targetList,
+        });
+
+        await watcher.init();
+
+        if (opts.once) {
+          console.log('==> Running single-pass repository check...');
+          const result = await watcher.checkOnce();
+          console.log(
+            `✔ Watch pass completed at ${result.timestamp}: ${result.changesDetected} change(s) detected, ${result.rebuilds.length} rebuild(s) executed.`
+          );
+          for (const r of result.rebuilds) {
+            console.log(
+              `  • [${r.target}] image=${r.image} duration=${(r.durationMs / 1000).toFixed(1)}s deployed=${
+                r.deployed ? 'yes' : 'no'
+              }${r.error ? ` error=${r.error}` : ''}`
+            );
+          }
+          return;
+        }
+
+        console.log(`==> Watching repositories every ${opts.interval || 5}s (press Ctrl+C to exit)...`);
+        watcher.start();
+
+        const handleShutdown = () => {
+          console.log('\n==> Shutting down Waffle Watcher...');
+          watcher.stop();
+          process.exit(0);
+        };
+        process.on('SIGINT', handleShutdown);
+        process.on('SIGTERM', handleShutdown);
+
+        // Keep process running until signal
+        await new Promise(() => {});
+      } else {
+        console.error(`Unknown waffle subaction: '${subaction}'. Expected: run, validate, blueprints, watch.`);
+        process.exit(1);
       }
     });
 
