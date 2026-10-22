@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ClusterBringUpEngine, createBringUpEngine } from '../bringup.js';
+import { ClusterBringUpEngine, createBringUpEngine, type BringUpProgress } from '../bringup.js';
 
 describe('Cluster BringUp Engine (TypeScript Native)', () => {
   it('instantiates bringup engine with default options', () => {
@@ -10,7 +10,7 @@ describe('Cluster BringUp Engine (TypeScript Native)', () => {
 
   it('executes full bring-up in dry-run mode and emits progress events', async () => {
     const engine = createBringUpEngine(process.cwd());
-    const events: any[] = [];
+    const events: Array<{ status: BringUpProgress['status']; step: string | undefined; index: number }> = [];
 
     engine.on('progress', (p) => {
       events.push({ status: p.status, step: p.currentStepId, index: p.currentStepIndex });

@@ -308,7 +308,7 @@ describe('authz CASL ability consistency', () => {
   });
 
   it('authzSubject tags targets with the AuthzTarget subject type', () => {
-    const tagged = authzSubject({ appId: 'harbor' }) as any;
+    const tagged = authzSubject({ appId: 'harbor' });
     assert.equal(tagged.appId, 'harbor');
   });
 });
@@ -471,8 +471,10 @@ describe('authz store mutations', () => {
 
   it('rejects invalid principals at upsert time', () => {
     const store = createEmptyStore();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- deliberately invalid role: upsertPrincipal must reject it at runtime
     assert.throws(() => upsertPrincipal(store, principal({ role: 'nope' as any })));
     assert.throws(() =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- deliberately invalid permission: upsertPrincipal must reject it at runtime
       upsertPrincipal(store, principal({ grants: [{ permission: 'bogus' as any }] }))
     );
   });

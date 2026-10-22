@@ -45,7 +45,7 @@ describe('TaskStore regressions', () => {
     const store = new TaskStore(dbPath);
     store.upsert(record({ id: 'a' }));
     const raw = new DatabaseSync(dbPath);
-    const row = raw.prepare('PRAGMA busy_timeout').get() as any;
+    const row: unknown = raw.prepare('PRAGMA busy_timeout').get();
     raw.close();
     store.close();
     // The pragma is per-connection; what matters is that opening through

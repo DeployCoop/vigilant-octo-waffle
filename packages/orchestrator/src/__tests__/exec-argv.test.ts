@@ -13,6 +13,7 @@ import {
   assertK8sLabel,
   assertK8sObjectName,
   assertImageRef,
+  ExecArgvError,
 } from '../exec-argv.js';
 
 describe('execFileAsync (argv execution)', () => {
@@ -25,7 +26,7 @@ describe('execFileAsync (argv execution)', () => {
   it('rejects on non-zero exit and carries stderr', async () => {
     await assert.rejects(
       execFileAsync('sh', ['-c', 'echo out; echo err 1>&2; exit 3']),
-      (err: any) => {
+      (err: ExecArgvError) => {
         assert.equal(err.code, 3);
         assert.match(err.stderr, /err/);
         return true;

@@ -26,7 +26,9 @@ function runCli(args: string[], root: string): Promise<CliResult> {
       { env: { ...process.env, VOW_PROJECT_ROOT: root } },
       (error, stdout, stderr) => {
         resolve({
-          code: error ? ((error as any).code ?? 1) : 0,
+          // ExecFileException.code is string | number; CliResult.code is the
+          // numeric exit code, so a non-numeric (spawn-error) code maps to 1.
+          code: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
           stdout: stdout.toString(),
           stderr: stderr.toString(),
         });

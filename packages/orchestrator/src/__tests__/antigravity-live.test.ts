@@ -7,6 +7,7 @@ import {
   runClusterWatchdogScan,
   findProjectRoot,
 } from '../index.js';
+import { type StreamEvent } from '../antigravity/types.js';
 
 /**
  * Live-provider Antigravity tests — OPT-IN, never part of the
@@ -117,7 +118,7 @@ describe('Antigravity Live Provider Integration', () => {
   });
 
   testLive('streams real-time events and incremental chunks with streamAntigravity', async () => {
-    const events: any[] = [];
+    const events: StreamEvent[] = [];
     const result = await streamAntigravity(
       {
         prompt: 'What is the cluster status?',
@@ -139,6 +140,7 @@ describe('Antigravity Live Provider Integration', () => {
     );
     assert.ok(events.some((e) => e.type === 'done'));
     const doneEvt = events.find((e) => e.type === 'done');
+    assert.ok(doneEvt, 'expected a done event');
     assert.ok(doneEvt.response);
     assert.equal(doneEvt.response.response, result.response);
     // Behind the gate the stream must come from a live engine too.

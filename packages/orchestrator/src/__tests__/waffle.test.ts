@@ -12,6 +12,7 @@ import {
   type WafflePipeline,
   findProjectRoot,
 } from '../index.js';
+import { type WaffleSecretKey } from '../waffle/schema.js';
 
 describe('Waffle Meta-Package Engine Tests', () => {
   const projectRoot = findProjectRoot();
@@ -301,7 +302,13 @@ stages:
   });
 
   it('refuses to provision secrets from unset env vars or placeholder values', async () => {
-    const runner = new WaffleRunner(process.cwd()) as any;
+    // provisionSecrets is private; this view declares exactly the surface
+    // the test drives (the unknown hop is the standard private-access
+    // workaround — the signature itself is the real one, checked above).
+    interface RunnerSecretProvisioning {
+      provisionSecrets(secrets: WaffleSecretKey[], defaultNamespace: string, dryRun?: boolean): Promise<void>;
+    }
+    const runner = new WaffleRunner(process.cwd()) as unknown as RunnerSecretProvisioning;
     const saved = { ...process.env };
     try {
       delete process.env.WAFFLE_TEST_UNSET_PW;
