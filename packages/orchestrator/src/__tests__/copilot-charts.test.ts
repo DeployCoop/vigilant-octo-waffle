@@ -17,7 +17,7 @@ import {
   uninstallLocalChart,
   findProjectRoot,
 } from '../index.js';
-import { binaryAvailable } from './helpers.js';
+import { skipOrFailBinary } from './helpers.js';
 
 /**
  * Antigravity copilot (offline-safe parts), tool-calling copilot, and
@@ -25,9 +25,6 @@ import { binaryAvailable } from './helpers.js';
  * Plan III §5.2 — test bodies are verbatim moves. The live-provider
  * Antigravity tests live in antigravity-live.test.ts (opt-in).
  */
-
-// Plan II §7.2: skip cleanly when helm is absent (see helpers.ts).
-const hasHelm = binaryAvailable('helm');
 
 describe('Copilot & Local Charts Smoke Tests', () => {
   const projectRoot = findProjectRoot();
@@ -177,13 +174,15 @@ kubectl get ingress -A
       assert.equal(sampleApp.isLocalChart, true);
     });
 
-    it('runs helm lint against the example chart and reports 0 errors', { skip: hasHelm ? false : 'helm binary not available' }, async () => {
+    it('runs helm lint against the example chart and reports 0 errors', async (t) => {
+      if (skipOrFailBinary(t, 'helm')) return;
       const lintResult = await lintLocalChart(projectRoot, 'sample-app');
       assert.equal(lintResult.valid, true);
       assert.ok(lintResult.output.includes('0 chart(s) failed'));
     });
 
-    it('renders Kubernetes manifests via helm template', { skip: hasHelm ? false : 'helm binary not available' }, async () => {
+    it('renders Kubernetes manifests via helm template', async (t) => {
+      if (skipOrFailBinary(t, 'helm')) return;
       const rendered = await templateLocalChart(projectRoot, 'sample-app');
       assert.ok(rendered.includes('kind: Deployment'));
       assert.ok(rendered.includes('kind: Service'));

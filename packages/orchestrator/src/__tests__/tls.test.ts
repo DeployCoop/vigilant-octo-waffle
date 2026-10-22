@@ -8,10 +8,7 @@ import {
   hasDevCertificate,
   ensureDevCertificate,
 } from '../tls.js';
-import { binaryAvailable } from './helpers.js';
-
-// Plan II §7.2: skip cleanly when mkcert is absent (see helpers.ts).
-const hasMkcert = binaryAvailable('mkcert');
+import { skipOrFailBinary } from './helpers.js';
 
 describe('TLS & mkcert helper', () => {
   it('discovers local hostnames including localhost and IPs', () => {
@@ -26,7 +23,8 @@ describe('TLS & mkcert helper', () => {
     assert.equal(hasDevCertificate(tmp), false);
   });
 
-  it('generates dev certificate via mkcert', { skip: hasMkcert ? false : 'mkcert binary not available' }, async () => {
+  it('generates dev certificate via mkcert', async (t) => {
+    if (skipOrFailBinary(t, 'mkcert')) return;
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-tls-test-'));
     const info = await ensureDevCertificate(tmp, { hostnames: ['test.local'] });
 
