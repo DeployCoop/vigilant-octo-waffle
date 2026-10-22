@@ -11,10 +11,7 @@ import {
   deployOpenEBS,
 } from '../storage.js';
 import { findProjectRoot } from '../config.js';
-import { binaryAvailable } from './helpers.js';
-
-// Plan II §7.2: skip cleanly when helm is absent (see helpers.ts).
-const hasHelm = binaryAvailable('helm');
+import { skipOrFailBinary } from './helpers.js';
 
 describe('Storage Fabric Engine', () => {
   const projectRoot = findProjectRoot();
@@ -75,7 +72,8 @@ describe('Storage Fabric Engine', () => {
     assert.strictEqual(isReady, status.isReady);
   });
 
-  it('skips redundant Helm upgrade when OpenEBS is already active', { skip: hasHelm ? false : 'helm binary not available' }, async () => {
+  it('skips redundant Helm upgrade when OpenEBS is already active', async (t) => {
+    if (skipOrFailBinary(t, 'helm')) return;
     const res = await deployOpenEBS(projectRoot);
     assert.ok(res);
     assert.strictEqual(typeof res.success, 'boolean');

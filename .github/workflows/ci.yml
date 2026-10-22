@@ -105,25 +105,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # VOW_BINARY_REQUIRED gives the helm/mkcert-gated tests the same
+      # skip-or-fail semantics as parity (skipOrFailBinary in
+      # packages/orchestrator/src/__tests__/helpers.ts): a binary that
+      # vanishes from the runner fails the suite itself, instead of a
+      # separate step re-running the tests and grepping captured output
+      # for `skipped 0` (that assertion flaked twice on empty captures).
       - name: Orchestrator tests
         env:
           VOW_PARITY_REQUIRED: '1'
+          VOW_BINARY_REQUIRED: '1'
         run: |
           pnpm --filter @vow/orchestrator build
           pnpm --filter @vow/orchestrator test
-
-      # Plan II §7.2: helm/mkcert-dependent tests skip when the binary is
-      # absent (developer machines); CI installs both, so a skip here
-      # means the coverage silently vanished. The helm-gated tests live
-      # in copilot-charts.test.js since the Plan III §5.2 smoke split
-      # (the opt-in antigravity-live.test.js is deliberately excluded:
-      # its skips are by design, not missing binaries).
-      - name: Assert binary-dependent tests ran (no skips in CI)
-        run: |
-          cd packages/orchestrator
-          out=$(node --test dist/__tests__/copilot-charts.test.js dist/__tests__/storage.test.js dist/__tests__/tls.test.js 2>&1)
-          echo "$out" | grep -E '^ℹ (tests|pass|fail|skipped)'
-          echo "$out" | grep -qE '^ℹ skipped 0$'
 
       - name: Web tests
         run: pnpm --filter @vow/web test
