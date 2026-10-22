@@ -6,6 +6,18 @@ import { processManager, type TaskRun } from './executor.js';
 import { substituteVariables } from './template.js';
 import { deepMergeYaml } from './yaml.js';
 
+// The Argo CD Application fields the Argo-to-Flux conversion reads.
+interface ArgoApplicationYaml {
+  spec?: {
+    source?: {
+      repoURL?: string;
+      path?: string;
+      helm?: { valuesObject?: unknown; values?: unknown };
+    };
+    destination?: { namespace?: string };
+  };
+}
+
 export interface PreparedFluxManifest {
   baseManifest: string;
   overrideManifest?: string;
@@ -85,7 +97,7 @@ export class FluxManager {
     // get the historical placeholder text.
     const interval = resolved.interval ?? '${THIS_FLUX_INTERVAL:-5m}';
     const branch = resolved.branch ?? '${THIS_FLUX_BRANCH:-main}';
-    let parsed: any;
+    let parsed: ArgoApplicationYaml;
     try {
       // uniqueKeys off: yq (the bash engine) tolerates duplicate map
       // keys last-wins, and real chart values in this repo use them.
@@ -119,7 +131,7 @@ export class FluxManager {
     };
 
     if (isHelm) {
-      let helmValues: any = {};
+      let helmValues: unknown = {};
       const rawValues = source.helm?.valuesObject || source.helm?.values;
       if (rawValues) {
         try {
