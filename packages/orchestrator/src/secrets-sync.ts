@@ -303,8 +303,8 @@ export async function syncSecretsAcrossNamespaces(
         await execFileAsync('kubectl', ['apply', '-f', '-'], { input: manifest });
 
         syncedNamespaces.push(ns);
-      } catch (err: any) {
-        errors.push({ namespace: ns, error: err.message });
+      } catch (err) {
+        errors.push({ namespace: ns, error: err instanceof Error ? err.message : String(err) });
       }
     } else {
       syncedNamespaces.push(ns);

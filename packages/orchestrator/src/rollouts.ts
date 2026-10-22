@@ -1,3 +1,4 @@
+import * as k8s from '@kubernetes/client-node';
 import { execFileAsync } from './exec-argv.js';
 
 export interface RolloutInfo {
@@ -63,8 +64,8 @@ export async function listRollouts(namespace?: string): Promise<RolloutInfo[]> {
     try {
       const { stdout } = await execFileAsync('kubectl', ['get', 'deployments', ...nsArgs, '-o', 'json']).catch(() => ({ stdout: '' }));
       if (stdout.trim().startsWith('{')) {
-        const parsed = JSON.parse(stdout);
-        const items = (parsed.items || []).filter((d: any) => {
+        const parsed = JSON.parse(stdout) as k8s.V1DeploymentList;
+        const items = (parsed.items || []).filter((d) => {
           const ns = d.metadata?.namespace || '';
           return ns !== 'kube-system' && ns !== 'local-path-storage';
         });

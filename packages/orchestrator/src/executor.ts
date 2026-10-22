@@ -517,13 +517,13 @@ export class ProcessManager {
         }
         finalize('failed', null, `Process error: ${err.message}`);
       });
-    } catch (err: any) {
+    } catch (err) {
       // Spawn threw synchronously: the caller has not had a chance to
       // attach any listener yet, so emitting 'error' here would throw.
       // Record the failure on the task instead (status is the contract).
       task.status = 'failed';
       task.finishedAt = new Date().toISOString();
-      this.appendLog(task, 'system', `Failed to spawn: ${err.message}`);
+      this.appendLog(task, 'system', `Failed to spawn: ${err instanceof Error ? err.message : String(err)}`);
       this.persist(task);
       task.emitter.emit('close', null);
     }

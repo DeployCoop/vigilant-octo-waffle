@@ -49,7 +49,7 @@ export async function buildClusterContext(root: string): Promise<{
     } catch {}
   }
 
-  let projectConfig: any = null;
+  let projectConfig: ReturnType<typeof loadProjectConfig> | null = null;
   try {
     projectConfig = loadProjectConfig(root);
   } catch {}
