@@ -37,7 +37,7 @@ export interface CopilotToolParam {
   type: string;
   description: string;
   required?: boolean;
-  default?: any;
+  default?: string | number | boolean;
 }
 
 export interface CopilotTool {
@@ -154,8 +154,8 @@ export function getCopilotTools(): CopilotTool[] {
 export async function executeCopilotTool(
   root: string,
   toolId: string,
-  params: Record<string, any> = {}
-): Promise<{ success: boolean; message: string; taskId?: string; data?: any }> {
+  params: Record<string, unknown> = {}
+): Promise<{ success: boolean; message: string; taskId?: string; data?: unknown }> {
   switch (toolId) {
     case 'run_cluster_healer': {
       const scriptPath = path.join(root, 'src', 'k3s_healer.sh');
