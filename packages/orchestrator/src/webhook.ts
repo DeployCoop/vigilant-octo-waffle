@@ -53,8 +53,8 @@ export async function accelerateArgoSync(
   if (appName) {
     try {
       assertK8sObjectName(appName, 'application name');
-    } catch (err: any) {
-      return { success: false, message: err.message, method: 'invalid' };
+    } catch (err) {
+      return { success: false, message: err instanceof Error ? err.message : String(err), method: 'invalid' };
     }
   }
   if (!isValidDomain(domain)) {
@@ -105,7 +105,7 @@ export async function accelerateArgoSync(
         : `Webhook received HTTP ${status}. Falling back to CLI sync.`,
       method: 'synthetic-webhook',
     };
-  } catch (err: any) {
+  } catch (err) {
     // Method 3: Fallback to all applications hard refresh
     try {
       await execFileAsync('kubectl', [
@@ -122,10 +122,12 @@ export async function accelerateArgoSync(
         message: 'Dispatched hard-refresh annotation to all active ArgoCD applications in cluster.',
         method: 'k8s-crd-all-annotation',
       };
-    } catch (e: any) {
+    } catch (e) {
+      const errMsg = err instanceof Error ? err.message : '';
+      const eMsg = e instanceof Error ? e.message : String(e);
       return {
         success: false,
-        message: `Sync accelerator error: ${err.message || e.message}`,
+        message: `Sync accelerator error: ${errMsg || eMsg}`,
         method: 'failed',
       };
     }

@@ -1,3 +1,4 @@
+import * as k8s from '@kubernetes/client-node';
 import { execFileAsync, assertK8sLabel } from './exec-argv.js';
 
 export interface ChaosExperiment {
@@ -75,9 +76,9 @@ export async function injectPodKill(namespace: string, podName: string): Promise
     exp.details = recovered
       ? `Pod successfully recovered in ${elapsed}ms. Replica controller healthy.`
       : `Pod did not return to Running state within 15s.`;
-  } catch (err: any) {
+  } catch (err) {
     exp.status = 'failed';
-    exp.details = `Execution error: ${err.message}`;
+    exp.details = `Execution error: ${err instanceof Error ? err.message : String(err)}`;
   }
 
   return exp;
@@ -118,9 +119,9 @@ export async function injectCpuStress(namespace: string, podName: string, durati
     ]).catch(() => {});
     exp.status = 'completed';
     exp.details = `Injected ${durationSec}s CPU workload into ${podName}. Metrics server and HPA notified.`;
-  } catch (err: any) {
+  } catch (err) {
     exp.status = 'failed';
-    exp.details = `CPU injection notice: ${err.message}`;
+    exp.details = `CPU injection notice: ${err instanceof Error ? err.message : String(err)}`;
   }
 
   return exp;
@@ -153,7 +154,7 @@ export async function measureResilienceScore(): Promise<ResilienceReport> {
 
   try {
     const { stdout } = await execFileAsync('kubectl', ['get', 'pods', '-A', '-o', 'json']);
-    const parsed = JSON.parse(stdout);
+    const parsed = JSON.parse(stdout) as k8s.V1PodList;
     const items = parsed.items || [];
     totalPods = items.length;
 
@@ -162,7 +163,7 @@ export async function measureResilienceScore(): Promise<ResilienceReport> {
       if (isRunning) healthyPods++;
 
       const restarts = (pod.status?.containerStatuses || []).reduce(
-        (sum: number, c: any) => sum + (c.restartCount || 0),
+        (sum: number, c) => sum + (c.restartCount || 0),
         0
       );
       if (restarts > 5) highRestartPods++;
