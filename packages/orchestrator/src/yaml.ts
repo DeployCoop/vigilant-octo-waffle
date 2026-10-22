@@ -5,7 +5,7 @@ import * as YAML from 'yaml';
  * Follows yq-style merge behavior where nested maps are recursively merged,
  * and primitive values or matching keys are overwritten.
  */
-export function deepMerge(base: any, override: any): any {
+export function deepMerge(base: unknown, override: unknown): unknown {
   if (override === undefined || override === null) {
     return base;
   }
@@ -18,14 +18,17 @@ export function deepMerge(base: any, override: any): any {
     return [...base, ...override];
   }
 
-  // If both are objects (and not arrays), merge recursively
+  // If both are objects (and not arrays), merge recursively. The typeof /
+  // Array.isArray guards above have done the runtime narrowing; the
+  // Record view is how the merge walks the pair.
   if (typeof base === 'object' && typeof override === 'object' && !Array.isArray(base) && !Array.isArray(override)) {
-    const result: Record<string, any> = { ...base };
-    for (const key of Object.keys(override)) {
+    const overrideObj = override as Record<string, unknown>;
+    const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+    for (const key of Object.keys(overrideObj)) {
       if (key in result) {
-        result[key] = deepMerge(result[key], override[key]);
+        result[key] = deepMerge(result[key], overrideObj[key]);
       } else {
-        result[key] = override[key];
+        result[key] = overrideObj[key];
       }
     }
     return result;
@@ -50,13 +53,13 @@ export const deepMergeYaml = mergeYamlStrings;
 /**
  * Parses a YAML string into a JS object.
  */
-export function parseYaml<T = any>(yamlString: string): T {
+export function parseYaml<T = unknown>(yamlString: string): T {
   return YAML.parse(yamlString) as T;
 }
 
 /**
  * Serializes a JS object into a YAML string.
  */
-export function stringifyYaml(data: any): string {
+export function stringifyYaml(data: unknown): string {
   return YAML.stringify(data);
 }
