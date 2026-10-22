@@ -1042,11 +1042,11 @@ spec:
       stepProg.status = 'failed';
       stepProg.finishedAt = new Date().toISOString();
       stepProg.durationMs = Date.now() - startTimer;
-      stepProg.error = err.message;
+      stepProg.error = errMsg;
       runProgress.failedSteps++;
 
-      log(`[ERROR] Step failed: ${err.message}`);
-      this.emit('step_complete', { stepId: step.id, status: 'failed', error: err.message });
+      log(`[ERROR] Step failed: ${errMsg}`);
+      this.emit('step_complete', { stepId: step.id, status: 'failed', error: errMsg });
       this.emit('progress', runProgress);
       return false;
     }
