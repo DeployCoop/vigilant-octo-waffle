@@ -15,6 +15,10 @@ import { execFileAsync, pipeExecs, killActiveChildren, isIpAddressLiteral } from
 import { type WaffleSecretKey, type WaffleGitSource, type WaffleStep, type WafflePipeline, type WaffleBuildTarget } from './schema.js';
 import { getWaffleRunHistory } from './registry.js';
 
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // ============================================================================
 // 4. WAFFLE RUNNER & REAL-TIME PROGRESS TRACKING
 // ============================================================================
@@ -248,13 +252,13 @@ export class WaffleRunner extends EventEmitter {
       }
 
       runProgress.status = this.aborted ? 'cancelled' : runProgress.failedSteps > 0 ? 'failed' : 'completed';
-    } catch (err: any) {
+    } catch (err) {
       if (this.aborted) {
         runProgress.status = 'cancelled';
       } else {
         runProgress.status = 'failed';
-        runProgress.error = err.message;
-        this.logToRun(`[FATAL] Pipeline halted: ${err.message}`);
+        runProgress.error = errMessage(err);
+        this.logToRun(`[FATAL] Pipeline halted: ${errMessage(err)}`);
       }
     } finally {
       runProgress.finishedAt = new Date().toISOString();
@@ -263,8 +267,8 @@ export class WaffleRunner extends EventEmitter {
       // Recording history must not turn a finished run into a rejection.
       try {
         await getWaffleRunHistory().recordRun(runProgress);
-      } catch (recErr: any) {
-        console.error('[waffle] failed to record run history:', recErr?.message ?? recErr);
+      } catch (recErr) {
+        console.error('[waffle] failed to record run history:', recErr instanceof Error ? recErr.message : recErr);
       }
     }
 
@@ -391,8 +395,8 @@ export class WaffleRunner extends EventEmitter {
             input: manifestJson,
           });
           this.logToRun(`[KEYS] Secret "${sec.name}" synchronized in namespace "${ns}".`);
-        } catch (err: any) {
-          this.logToRun(`[KEYS] Notice: Secret sync encountered: ${err.message}`);
+        } catch (err) {
+          this.logToRun(`[KEYS] Notice: Secret sync encountered: ${errMessage(err)}`);
         }
       }
     }
@@ -526,8 +530,8 @@ export class WaffleRunner extends EventEmitter {
             await execFileAsync('git', ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`]);
           }
         }
-      } catch (gitErr: any) {
-        this.logToRun(`[BUILDS] Warning: Git operation for target "${target.name}" failed: ${gitErr.message}`);
+      } catch (gitErr) {
+        this.logToRun(`[BUILDS] Warning: Git operation for target "${target.name}" failed: ${errMessage(gitErr)}`);
       }
     }
 
@@ -575,8 +579,8 @@ export class WaffleRunner extends EventEmitter {
       await this.importImageToCluster(target, fullTag);
 
       this.logToRun(`[BUILDS] Target "${target.name}" successfully built and published.`);
-    } catch (err: any) {
-      this.logToRun(`[BUILDS] ERROR: Build/import for target "${target.name}" failed: ${err.message}`);
+    } catch (err) {
+      this.logToRun(`[BUILDS] ERROR: Build/import for target "${target.name}" failed: ${errMessage(err)}`);
       throw err;
     }
   }
@@ -691,8 +695,8 @@ spec:
         }
       }
       this.logToRun(`[BUILDS] Notice: registry deployed but ${registry} not reachable yet; relying on containerd import.`);
-    } catch (e: any) {
-      this.logToRun(`[BUILDS] Notice: could not deploy in-cluster registry: ${String(e.message).split('\n')[0]}`);
+    } catch (e) {
+      this.logToRun(`[BUILDS] Notice: could not deploy in-cluster registry: ${errMessage(e).split('\n')[0]}`);
     }
   }
 
@@ -743,8 +747,8 @@ spec:
           { env }
         );
         this.logToRun(`[BUILDS] Imported ${fullTag} into node ${ip}.`);
-      } catch (e: any) {
-        throw new Error(`failed to import ${fullTag} into node ${ip}: ${String(e.message).split('\n')[0]}`, { cause: e });
+      } catch (e) {
+        throw new Error(`failed to import ${fullTag} into node ${ip}: ${errMessage(e).split('\n')[0]}`, { cause: e });
       }
     }
   }
@@ -791,7 +795,7 @@ spec:
           try {
             await execFileAsync('helm', ['upgrade', '--install', 'openebs', localOpenEBSChart, '--namespace', 'openebs', '--create-namespace', '--wait', '--timeout', '5m']);
             this.logToRun('[PREFLIGHT] Successfully deployed OpenEBS Dynamic LocalPV provisioner.');
-          } catch (err: any) {
+          } catch (err) {
             const recheck = await checkOpenEbsStatus(this.projectRoot);
             if (recheck.isReady) {
               this.logToRun(`[PREFLIGHT] OpenEBS is verified active despite Helm upgrade notice: ${recheck.message}`);
@@ -906,8 +910,9 @@ spec:
 
       // Step-level secrets synchronization
       if (step.keys) {
-        const stepSec: WaffleSecretKey = typeof (step.keys as any).name === 'string'
-          ? (step.keys as WaffleSecretKey)
+        const keysAsSecret = step.keys as WaffleSecretKey;
+        const stepSec: WaffleSecretKey = typeof keysAsSecret.name === 'string'
+          ? keysAsSecret
           : {
               name: `${step.id}-secrets`,
               namespace,
@@ -991,8 +996,8 @@ spec:
       this.emit('step_complete', { stepId: step.id, status: 'completed' });
       this.emit('progress', runProgress);
       return true;
-    } catch (err: any) {
-      const errMsg = err?.message || String(err);
+    } catch (err) {
+      const errMsg = err instanceof Error && err.message ? err.message : String(err);
       const releaseName = step.releaseName || step.id;
       const isOpenEbsStep =
         step.id.toLowerCase().includes('openebs') ||
