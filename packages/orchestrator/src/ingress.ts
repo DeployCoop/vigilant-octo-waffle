@@ -8,7 +8,36 @@ import { applyInitializerDirectory } from './initializer.js';
 import { ensureNamespaceWithSecurity } from './namespaces.js';
 
 const execAsync = promisify(exec);
-import { execFileAsync } from './exec-argv.js';
+import { execFileAsync, ExecArgvError } from './exec-argv.js';
+import * as k8s from '@kubernetes/client-node';
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// execFileAsync failures carry the child's stderr on ExecArgvError; any
+// other error contributes no stderr (matching the old `err.stderr || ''`).
+function errorStderr(err: unknown): string {
+  return err instanceof ExecArgvError ? err.stderr : '';
+}
+
+// Wire shape for the cert-manager ClusterIssuer objects read in
+// getIngressFabricStatus (kubectl JSON of a custom resource).
+interface ClusterIssuerObject {
+  metadata?: { name?: string };
+  spec?: {
+    acme?: unknown;
+    ca?: unknown;
+  };
+  status?: {
+    conditions?: Array<{
+      type?: string;
+      status?: string;
+      message?: string;
+      reason?: string;
+    }>;
+  };
+}
 
 function getIngressExecutionEnv(extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const kubeconfig =
@@ -90,8 +119,8 @@ export async function deployCertManager(
       success: true,
       output: (stdout + '\n' + stderr).trim(),
     };
-  } catch (err: any) {
-    throw new Error(`Cert-Manager installation failed: ${err.message}\n${err.stderr || ''}`, { cause: err });
+  } catch (err) {
+    throw new Error(`Cert-Manager installation failed: ${errorMessage(err)}\n${errorStderr(err)}`, { cause: err });
   }
 }
 
@@ -128,8 +157,8 @@ export async function setupMkcert(
       success: true,
       output: 'Successfully installed mkcert CA secret and ClusterIssuer mkcert-issuer',
     };
-  } catch (err: any) {
-    throw new Error(`mkcert setup failed: ${err.message}`, { cause: err });
+  } catch (err) {
+    throw new Error(`mkcert setup failed: ${errorMessage(err)}`, { cause: err });
   }
 }
 
@@ -148,8 +177,8 @@ export async function setupLetsEncrypt(
       success: true,
       output: 'Successfully applied Let\'s Encrypt staging and production ClusterIssuers',
     };
-  } catch (err: any) {
-    throw new Error(`Let's Encrypt setup failed: ${err.message}`, { cause: err });
+  } catch (err) {
+    throw new Error(`Let's Encrypt setup failed: ${errorMessage(err)}`, { cause: err });
   }
 }
 
@@ -218,12 +247,12 @@ export async function deployIngressNginx(
       message: 'Ingress-Nginx deployed successfully',
       output: (stdout + '\n' + stderr).trim(),
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       provider: 'nginx',
       success: false,
       message: 'Ingress-Nginx deployment failed',
-      error: err.message + '\n' + (err.stderr || ''),
+      error: errorMessage(err) + '\n' + errorStderr(err),
     };
   }
 }
@@ -239,7 +268,8 @@ export async function deployTraefik(
   } = {}
 ): Promise<IngressDeploymentResult> {
   const config = loadProjectConfig(projectRoot);
-  const method = options.method || (config.raw.THIS_TRAEFIK_METHOD as any) || 'helm';
+  const rawMethod = config.raw.THIS_TRAEFIK_METHOD;
+  const method = options.method || (rawMethod === 'init' || rawMethod === 'main' ? rawMethod : 'helm');
   const timeout = options.timeout || config.raw.THIS_HELM_TIMEOUT || '15m0s';
 
   // Ensure namespace
@@ -300,12 +330,12 @@ export async function deployTraefik(
       message: 'Traefik deployed successfully via Helm',
       output: (stdout + '\n' + stderr).trim(),
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       provider: 'traefik',
       success: false,
       message: 'Traefik deployment failed',
-      error: err.message + '\n' + (err.stderr || ''),
+      error: errorMessage(err) + '\n' + errorStderr(err),
     };
   }
 }
@@ -362,12 +392,12 @@ export async function deployHAProxy(
       message: 'HAProxy Ingress deployed successfully',
       output: (stdout + '\n' + stderr).trim(),
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       provider: 'haproxy',
       success: false,
       message: 'HAProxy Ingress deployment failed',
-      error: err.message + '\n' + (err.stderr || ''),
+      error: errorMessage(err) + '\n' + errorStderr(err),
     };
   }
 }
@@ -435,12 +465,12 @@ export async function getIngressFabricStatus(projectRoot: string): Promise<Ingre
   try {
     // Check Ingress Classes
     const { stdout: icOut } = await execAsync('kubectl get ingressclass -o json').catch(() => ({ stdout: '{"items":[]}' }));
-    const icData = JSON.parse(icOut);
-    ingressClasses = (icData.items || []).map((i: any) => i.metadata?.name || '');
+    const icData = JSON.parse(icOut) as k8s.V1IngressClassList;
+    ingressClasses = (icData.items || []).map((i) => i.metadata?.name || '');
 
     // Check Ingresses
     const { stdout: ingOut } = await execAsync('kubectl get ingress -A -o json').catch(() => ({ stdout: '{"items":[]}' }));
-    const ingData = JSON.parse(ingOut);
+    const ingData = JSON.parse(ingOut) as k8s.V1IngressList;
     for (const item of ingData.items || []) {
       const name = item.metadata?.name || '';
       const namespace = item.metadata?.namespace || '';
@@ -453,16 +483,16 @@ export async function getIngressFabricStatus(projectRoot: string): Promise<Ingre
     const { stdout: cmOut } = await execAsync('kubectl get deployment cert-manager -n cert-manager -o json').catch(() => ({ stdout: '' }));
     if (cmOut) {
       certManager.isInstalled = true;
-      const cmData = JSON.parse(cmOut);
+      const cmData = JSON.parse(cmOut) as k8s.V1Deployment;
       const readyReplicas = cmData.status?.readyReplicas || 0;
       certManager.podsReady = readyReplicas > 0;
     }
 
     // Check ClusterIssuers
     const { stdout: ciOut } = await execAsync('kubectl get clusterissuer -o json').catch(() => ({ stdout: '{"items":[]}' }));
-    const ciData = JSON.parse(ciOut);
-    certManager.issuers = (ciData.items || []).map((i: any) => {
-      const cond = i.status?.conditions?.find((c: any) => c.type === 'Ready');
+    const ciData = JSON.parse(ciOut) as { items?: ClusterIssuerObject[] };
+    certManager.issuers = (ciData.items || []).map((i) => {
+      const cond = i.status?.conditions?.find((c) => c.type === 'Ready');
       return {
         name: i.metadata?.name || '',
         type: i.spec?.acme ? 'ACME' : i.spec?.ca ? 'CA' : 'SelfSigned',
@@ -474,8 +504,8 @@ export async function getIngressFabricStatus(projectRoot: string): Promise<Ingre
     // Check active controller readiness
     const ns = activeProvider === 'nginx' ? 'ingress-nginx' : activeProvider === 'haproxy' ? 'ingress-haproxy' : 'traefik';
     const { stdout: podsOut } = await execFileAsync('kubectl', ['get', 'pods', '-n', ns, '-o', 'json']).catch(() => ({ stdout: '{"items":[]}' }));
-    const podsData = JSON.parse(podsOut);
-    isControllerReady = (podsData.items || []).some((p: any) => p.status?.phase === 'Running');
+    const podsData = JSON.parse(podsOut) as k8s.V1PodList;
+    isControllerReady = (podsData.items || []).some((p) => p.status?.phase === 'Running');
   } catch {
     // Cluster offline
   }
