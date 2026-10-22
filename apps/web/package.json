@@ -21,7 +21,7 @@
     "@vow/orchestrator": "workspace:*",
     "clsx": "^2.1.1",
     "lucide-react": "^1.49.0",
-    "next": "16.4.0",
+    "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "^3.0.2"
@@ -33,7 +33,7 @@
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "eslint": "^10.12.0",
-    "eslint-config-next": "^16.4.0",
+    "eslint-config-next": "^16.4.2",
     "postcss": "^8.5.29",
     "tailwindcss": "^4.0.9",
     "typescript": "^6.0.3",
