@@ -3,7 +3,7 @@ import { execFileAsync, assertK8sObjectName } from './exec-argv.js';
 
 // One row of `k3d node list --output json`.
 interface K3dNodeListEntry {
-  name?: string;
+  name: string;
   cluster?: string;
   role?: string;
 }
