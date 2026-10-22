@@ -8,7 +8,22 @@ import { loadProjectConfig, getChartsDirectory } from './config.js';
 import type { AppCategory } from './registry.js';
 
 const execAsync = promisify(exec);
-import { execFileAsync } from './exec-argv.js';
+import { execFileAsync, ExecArgvError } from './exec-argv.js';
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// One row of `helm list -o json` output.
+interface HelmReleaseEntry {
+  name?: string;
+  namespace?: string;
+  revision?: string | number;
+  updated?: string;
+  status?: string;
+  chart?: string;
+  app_version?: string;
+}
 
 export interface HelmReleaseInfo {
   name: string;
@@ -57,10 +72,10 @@ export interface LocalChartDetail extends LocalChartDefinition {
 export async function listHelmReleases(): Promise<HelmReleaseInfo[]> {
   try {
     const { stdout } = await execAsync('helm list -A -o json');
-    const parsed = JSON.parse(stdout);
+    const parsed: HelmReleaseEntry[] = JSON.parse(stdout);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.map((item: any) => ({
+    return parsed.map((item) => ({
       name: item.name || '',
       namespace: item.namespace || '',
       revision: String(item.revision || '1'),
@@ -81,8 +96,8 @@ export async function getHelmReleaseValues(name: string, namespace: string): Pro
   try {
     const { stdout } = await execFileAsync('helm', ['get', 'values', name, '-n', namespace, '-a']);
     return stdout;
-  } catch (err: any) {
-    return `# Failed to retrieve values: ${err.message}`;
+  } catch (err) {
+    return `# Failed to retrieve values: ${errorMessage(err)}`;
   }
 }
 
@@ -100,7 +115,7 @@ function parseChartDirectory(chartDir: string, projectRoot: string): LocalChartD
 
   try {
     const rawContent = fs.readFileSync(chartYamlPath, 'utf-8');
-    const parsed = (YAML.parse(rawContent) || {}) as Record<string, any>;
+    const parsed = (YAML.parse(rawContent) || {}) as Record<string, unknown>;
 
     const folderName = path.basename(chartDir);
     const chartName = String(parsed.name || folderName);
@@ -132,10 +147,10 @@ function parseChartDirectory(chartDir: string, projectRoot: string): LocalChartD
       name: chartName,
       version: String(parsed.version || '0.1.0'),
       appVersion: parsed.appVersion ? String(parsed.appVersion) : undefined,
-      description: parsed.description || `Local Helm chart (${chartName})`,
+      description: typeof parsed.description === 'string' && parsed.description ? parsed.description : `Local Helm chart (${chartName})`,
       category: 'Custom & Local Charts',
-      icon: parsed.icon || 'Ship',
-      home: parsed.home,
+      icon: typeof parsed.icon === 'string' && parsed.icon ? parsed.icon : 'Ship',
+      home: typeof parsed.home === 'string' ? parsed.home : undefined,
       sources: Array.isArray(parsed.sources) ? parsed.sources : undefined,
       keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
       dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies : [],
@@ -149,13 +164,13 @@ function parseChartDirectory(chartDir: string, projectRoot: string): LocalChartD
       enablerVar,
       isLocalChart: true,
     };
-  } catch (err: any) {
+  } catch (err) {
     const folderName = path.basename(chartDir);
     return {
       id: folderName,
       name: folderName,
       version: '0.0.0',
-      description: `Invalid Chart.yaml: ${err.message}`,
+      description: `Invalid Chart.yaml: ${errorMessage(err)}`,
       category: 'Custom & Local Charts',
       icon: 'AlertCircle',
       chartPath: chartDir,
@@ -164,7 +179,7 @@ function parseChartDirectory(chartDir: string, projectRoot: string): LocalChartD
       hasTemplates: false,
       templateCount: 0,
       valid: false,
-      error: err.message,
+      error: errorMessage(err),
       enablerVar: `${folderName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_ENABLED`,
       isLocalChart: true,
     };
@@ -385,10 +400,13 @@ export async function lintLocalChart(
       valid: true,
       output: (stdout + '\n' + stderr).trim(),
     };
-  } catch (err: any) {
+  } catch (err) {
+    // execFileAsync failures are ExecArgvError (stdout/stderr attached).
+    // The expression shape (including its || grouping) is preserved.
+    const execErr = err instanceof ExecArgvError ? err : null;
     return {
       valid: false,
-      output: (err.stdout || '' + '\n' + (err.stderr || err.message)).trim(),
+      output: (execErr?.stdout || '' + '\n' + (execErr?.stderr || errorMessage(err))).trim(),
     };
   }
 }
@@ -450,7 +468,8 @@ export async function templateLocalChart(
       'template', releaseName, chartDetail.chartPath, '--namespace', namespace, ...valuesArgs, ...setArgs,
     ]);
     return stdout;
-  } catch (err: any) {
-    throw new Error(`Helm template failed: ${err.message}\n${err.stderr || ''}`, { cause: err });
+  } catch (err) {
+    const stderr = err instanceof ExecArgvError ? err.stderr : '';
+    throw new Error(`Helm template failed: ${errorMessage(err)}\n${stderr}`, { cause: err });
   }
 }

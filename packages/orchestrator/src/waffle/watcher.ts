@@ -16,6 +16,10 @@ import {
 import { WaffleRunner } from './runner.js';
 import { getChartsDirectory } from '../config.js';
 
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export interface WaffleWatchTarget {
   name: string;
   context: string;
@@ -342,9 +346,9 @@ export class WaffleWatcher extends EventEmitter {
           target.lastSha = changeInfo.newSha || target.lastSha;
           target.lastMtime = changeInfo.newMtime || target.lastMtime;
         }
-      } catch (err: any) {
-        this.log(`[WATCHER] Error inspecting target "${target.name}": ${err.message}`);
-        this.emit('error', { target: target.name, error: err.message });
+      } catch (err) {
+        this.log(`[WATCHER] Error inspecting target "${target.name}": ${errMessage(err)}`);
+        this.emit('error', { target: target.name, error: errMessage(err) });
       }
     }
 
@@ -477,17 +481,17 @@ export class WaffleWatcher extends EventEmitter {
         releaseName: target.releaseName,
         namespace: target.namespace,
       };
-    } catch (err: any) {
+    } catch (err) {
       const durationMs = Date.now() - start;
-      this.log(`[WATCHER] [${target.name}] ERROR during rebuild: ${err.message}`);
-      this.emit('error', { target: target.name, error: err.message });
+      this.log(`[WATCHER] [${target.name}] ERROR during rebuild: ${errMessage(err)}`);
+      this.emit('error', { target: target.name, error: errMessage(err) });
       return {
         target: target.name,
         image: `${registry}/${target.image}:${target.tag}`,
         durationMs,
         chartSynced,
         deployed: false,
-        error: err.message,
+        error: errMessage(err),
       };
     }
   }
@@ -578,8 +582,8 @@ export class WaffleWatcher extends EventEmitter {
         this.log(`[WATCHER] [${target.name}] Notice: No active deployment matched "${release}" in namespace "${ns}".`);
         return false;
       }
-    } catch (err: any) {
-      this.log(`[WATCHER] [${target.name}] Rollout notice: ${err.message}`);
+    } catch (err) {
+      this.log(`[WATCHER] [${target.name}] Rollout notice: ${errMessage(err)}`);
       return false;
     }
   }
@@ -594,8 +598,8 @@ export class WaffleWatcher extends EventEmitter {
         this.log('[WATCHER] Rebuilding umbrella chart dependencies: helm dependency update ./ecosystem...');
         await execAsync('helm dependency update ./ecosystem', { cwd: this.baseDir });
         this.log('[WATCHER] Umbrella ecosystem dependencies updated.');
-      } catch (err: any) {
-        this.log(`[WATCHER] Warning: Umbrella dependency update failed: ${err.message}`);
+      } catch (err) {
+        this.log(`[WATCHER] Warning: Umbrella dependency update failed: ${errMessage(err)}`);
       }
     }
   }
@@ -612,8 +616,8 @@ export class WaffleWatcher extends EventEmitter {
       this.isChecking = true;
       try {
         await this.checkOnce();
-      } catch (err: any) {
-        this.log(`[WATCHER] Polling cycle error: ${err.message}`);
+      } catch (err) {
+        this.log(`[WATCHER] Polling cycle error: ${errMessage(err)}`);
       } finally {
         this.isChecking = false;
       }
