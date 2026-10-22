@@ -53,7 +53,6 @@ export async function POST(req: Request) {
   try {
     const root = getProjectRoot();
     const config = loadProjectConfig(root);
-    const fluxNs = config.cluster.fluxNamespace || 'flux-system';
     const body = await req.json().catch(() => ({}));
     const { action, name, namespace, cdRunner } = body;
 

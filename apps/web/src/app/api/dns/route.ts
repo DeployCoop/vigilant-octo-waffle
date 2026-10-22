@@ -11,7 +11,9 @@ import {
   K8sClient,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
-import { apiError, routeError } from '@/lib/route-error';
+// No apiError import: this route has no deliberate-error responses (all
+// inputs are defaulted) — failures are thrown and enveloped by routeError.
+import { routeError } from '@/lib/route-error';
 
 export async function GET(req: Request) {
   // DNS records are generated from config; the only DNS key is dns:update.

@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { applyClusterNamespaces } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
-import { apiError, routeError } from '@/lib/route-error';
+// No apiError import: this route has no deliberate-error responses (the
+// only body field, dryRun, is defaulted) — failures are thrown and
+// enveloped by routeError.
+import { routeError } from '@/lib/route-error';
 
 export async function POST(req: Request) {
   const denied = await authorizeRequest(req, 'namespaces:manage');

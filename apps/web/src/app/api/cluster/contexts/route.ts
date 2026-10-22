@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const k8sClient = new K8sClient();
     const data = k8sClient.getContexts();
     return NextResponse.json(data);
-  } catch (err: any) {
+  } catch (err) {
     return routeError(err, { route: 'GET /api/cluster/contexts' });
   }
 }

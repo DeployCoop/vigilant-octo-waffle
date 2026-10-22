@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getPodMetrics, getNodeMetrics } from '@vow/orchestrator';
+import {
+  getPodMetrics,
+  getNodeMetrics,
+  type NodeMetric,
+  type PodMetric,
+  type SparklinePoint,
+} from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { routeError } from '@/lib/route-error';
 
@@ -13,8 +19,11 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type') || 'all';
 
-    let podsData: any = { metrics: [], history: {} };
-    let nodes: any[] = [];
+    let podsData: { metrics: PodMetric[]; history: Record<string, SparklinePoint[]> } = {
+      metrics: [],
+      history: {},
+    };
+    let nodes: NodeMetric[] = [];
 
     if (type === 'pod' || type === 'all') {
       podsData = await getPodMetrics();

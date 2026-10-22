@@ -217,7 +217,7 @@ export async function POST(req: Request) {
     }
 
     return apiError(400, `Unknown action '${action}'`);
-  } catch (err: any) {
+  } catch (err) {
     return routeError(err, { route: 'POST /api/storage' });
   }
 }

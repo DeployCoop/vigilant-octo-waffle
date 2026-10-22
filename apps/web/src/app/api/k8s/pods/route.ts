@@ -15,7 +15,10 @@ export async function GET(req: Request) {
     const k8sClient = new K8sClient();
     const pods = await k8sClient.getPods(namespace);
     return NextResponse.json({ pods });
-  } catch (err: any) {
-    return NextResponse.json({ pods: [], error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json(
+      { pods: [], error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
