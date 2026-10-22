@@ -498,7 +498,13 @@ check_contains "cd_status: db release ready flag" '"ready": false' "${db_ready}"
 check_contains "cd_status: summary counts argo apps" '"totalArgo": 2' "${out}"
 check_contains "cd_status: summary counts flux releases" '"totalFluxReleases": 2' "${out}"
 check_contains "cd_status: summary counts kustomizations" '"totalFluxKustomizations": 1' "${out}"
-out=$(cd "${P2}" && /usr/bin/env -i PATH="/usr/bin:/bin" bash src/cd_status.sh 2>&1); rc=$?
+# kubectl-absence case: /usr/bin:/bin is NOT a kubectl-free PATH (GitHub
+# runners ship kubectl in /usr/bin), so build a PATH that provably has no
+# kubectl in it — only the bash + dirname the script needs before its check.
+mkdir -p "${WORK}/nokubectl"
+ln -sf "$(command -v bash)" "${WORK}/nokubectl/bash"
+ln -sf "$(command -v dirname)" "${WORK}/nokubectl/dirname"
+out=$(cd "${P2}" && /usr/bin/env -i PATH="${WORK}/nokubectl" bash src/cd_status.sh 2>&1); rc=$?
 check_rc "cd_status: missing kubectl exits 1" 1 "${rc}"
 check_contains "cd_status: missing kubectl is reported" \
   "Error: kubectl is not available in PATH" "${out}"
