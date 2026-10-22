@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createSession, hashToken, loadAuthzStore, saveAuthzStore } from '../authz.js';
 
 const cliPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -153,5 +154,233 @@ describe('vow authz CLI', () => {
     const fail = await runCli(['check', 'WrongPass', 'users:manage_permissions'], customRoot);
     assert.equal(fail.code, 1);
   });
+
+  it('init rejects a password below the floor and writes no store', async () => {
+    const shortRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-short-'));
+    const res = await runCli(['init', '--password', 'short'], shortRoot);
+    assert.equal(res.code, 1);
+    assert.match(res.stderr, /at least 12 characters/);
+    assert.equal(fs.existsSync(path.join(shortRoot, '.vow', 'authz.yaml')), false);
+  });
 });
 
+
+describe('vow authz CLI — WS5 grant context', () => {
+  let root: string;
+
+  before(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-cli-ws5-'));
+  });
+
+  it('add --context lands in the store, list renders it, check honors the window', async () => {
+    const init = await runCli(['init', '--name', 'Owner'], root);
+    assert.equal(init.code, 0, init.stderr);
+
+    const add = await runCli(
+      [
+        'add', 'Windowed',
+        '--role', 'viewer',
+        '--grant', 'apps:deploy',
+        '--context', '{"notAfter":"2020-01-01T00:00:00.000Z","source":"loopback"}',
+      ],
+      root
+    );
+    assert.equal(add.code, 0, add.stderr);
+    const token = extractToken(add.stdout);
+
+    const list = await runCli(['list'], root);
+    assert.match(list.stdout, /apps:deploy\[global\]\{src=loopback until=2020-01-01T00:00:00\.000Z\}/);
+
+    // Default check context (now, non-loopback, token): expired window denies.
+    const denied = await runCli(['check', token, 'apps:deploy'], root);
+    assert.equal(denied.code, 1, denied.stdout);
+    assert.match(denied.stdout, /DENY apps:deploy .*deny_context/);
+
+    // Inside the window AND loopback: allows.
+    const allowed = await runCli(
+      ['check', token, 'apps:deploy', '--at', '2019-06-01T00:00:00.000Z', '--loopback'],
+      root
+    );
+    assert.equal(allowed.code, 0, allowed.stdout);
+    assert.match(allowed.stdout, /ALLOW apps:deploy/);
+
+    // Inside the window but not loopback: still denied by source.
+    const wrongSource = await runCli(
+      ['check', token, 'apps:deploy', '--at', '2019-06-01T00:00:00.000Z'],
+      root
+    );
+    assert.equal(wrongSource.code, 1);
+    assert.match(wrongSource.stdout, /deny_context/);
+  });
+
+  it('rejects malformed --context values', async () => {
+    const badJson = await runCli(
+      ['add', 'Bad', '--grant', 'apps:deploy', '--context', '{nope'],
+      root
+    );
+    assert.equal(badJson.code, 1);
+    const badShape = await runCli(
+      ['add', 'Bad2', '--grant', 'apps:deploy', '--context', '{"source":"moon"}'],
+      root
+    );
+    assert.equal(badShape.code, 1);
+    assert.match(badShape.stderr, /source must be/);
+  });
+});
+
+
+describe('vow authz CLI — grant-context validation parity (single-sourced)', () => {
+  let root: string;
+  let ownerToken: string;
+
+  before(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-cli-parity-'));
+    const init = await runCli(['init', '--name', 'Owner'], root);
+    assert.equal(init.code, 0, init.stderr);
+    ownerToken = extractToken(init.stdout);
+  });
+
+  it('keeps the established --context error messages and accepts a valid context', async () => {
+    const badMethod = await runCli(
+      ['add', 'M', '--grant', 'apps:deploy', '--context', '{"authMethod":"smoke-signals"}'],
+      root
+    );
+    assert.equal(badMethod.code, 1);
+    assert.match(badMethod.stderr, /authMethod must be "session", "token", "oidc", or "any"/);
+
+    const unknownField = await runCli(
+      ['add', 'U', '--grant', 'apps:deploy', '--context', '{"planet":"earth"}'],
+      root
+    );
+    assert.equal(unknownField.code, 1);
+    assert.match(unknownField.stderr, /unknown field: planet/);
+
+    const notObject = await runCli(
+      ['add', 'N', '--grant', 'apps:deploy', '--context', '["loopback"]'],
+      root
+    );
+    assert.equal(notObject.code, 1);
+    assert.match(notObject.stderr, /must be a JSON object/);
+
+    const badTime = await runCli(
+      ['add', 'T', '--grant', 'apps:deploy', '--context', '{"notAfter":"next tuesday"}'],
+      root
+    );
+    assert.equal(badTime.code, 1);
+    assert.match(badTime.stderr, /notAfter must be an ISO timestamp/);
+
+    const good = await runCli(
+      [
+        'add', 'G', '--grant', 'apps:deploy',
+        '--context', '{"authMethod":"oidc","notBefore":"2020-01-01T00:00:00.000Z"}',
+      ],
+      root
+    );
+    assert.equal(good.code, 0, good.stderr);
+  });
+
+  it('check --auth-method still accepts only session|token|oidc', async () => {
+    const wildcard = await runCli(
+      ['check', ownerToken, 'apps:read', '--auth-method', 'any'],
+      root
+    );
+    assert.equal(wildcard.code, 1);
+    assert.match(wildcard.stderr, /--auth-method must be session, token, or oidc/);
+
+    const bogus = await runCli(
+      ['check', ownerToken, 'apps:read', '--auth-method', 'smoke-signals'],
+      root
+    );
+    assert.equal(bogus.code, 1);
+    assert.match(bogus.stderr, /--auth-method must be session, token, or oidc/);
+
+    const session = await runCli(
+      ['check', ownerToken, 'apps:read', '--auth-method', 'session'],
+      root
+    );
+    assert.equal(session.code, 0, session.stdout);
+    assert.match(session.stdout, /ALLOW apps:read/);
+  });
+});
+
+
+describe('vow authz CLI — sessions', () => {
+  let root: string;
+  let ownerId: string;
+  let liveIdHash: string;
+
+  before(async () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-cli-sessions-'));
+    const init = await runCli(['init', '--name', 'Boss'], root);
+    assert.equal(init.code, 0, init.stderr);
+
+    const list = await runCli(['list'], root);
+    ownerId = list.stdout.split('\n').find((line) => line.includes('owner'))?.split(/\s+/)[0] ?? '';
+    assert.ok(ownerId, `expected an owner row in list output:\n${list.stdout}`);
+
+    // One live session via the store layer, plus one long-expired record
+    // written directly (createSession would prune it on sight).
+    const loaded = loadAuthzStore(root);
+    if (loaded.status !== 'ready') throw new Error(`store not ready: ${loaded.status}`);
+    const created = createSession(loaded.store, ownerId, new Date());
+    liveIdHash = created.session.idHash;
+    saveAuthzStore(root, {
+      ...created.store,
+      sessions: [
+        ...(created.store.sessions ?? []),
+        {
+          idHash: hashToken('stale-session-id'),
+          principalId: ownerId,
+          createdAt: '2020-01-01T00:00:00.000Z',
+          expiresAt: '2020-01-01T12:00:00.000Z',
+        },
+      ],
+    });
+  });
+
+  it('sessions lists the live session (hash prefix only) and hides expired ones', async () => {
+    const res = await runCli(['sessions'], root);
+    assert.equal(res.code, 0, res.stderr);
+    assert.ok(res.stdout.includes(ownerId), res.stdout);
+    assert.ok(res.stdout.includes('Boss'), res.stdout);
+    assert.ok(res.stdout.includes(liveIdHash.slice(0, 19)), res.stdout);
+    // Only a prefix — the full stored hash must stay out of the output.
+    assert.ok(!res.stdout.includes(liveIdHash), res.stdout);
+    // The expired record is not listed.
+    assert.ok(!res.stdout.includes('2020-01-01'), res.stdout);
+
+    const filtered = await runCli(['sessions', '--principal', ownerId], root);
+    assert.equal(filtered.code, 0, filtered.stderr);
+    assert.ok(filtered.stdout.includes(liveIdHash.slice(0, 19)), filtered.stdout);
+  });
+
+  it('sessions on a fresh store prints an empty state', async () => {
+    const freshRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-authz-cli-nosessions-'));
+    const init = await runCli(['init', '--name', 'Solo'], freshRoot);
+    assert.equal(init.code, 0, init.stderr);
+    const res = await runCli(['sessions'], freshRoot);
+    assert.equal(res.code, 0, res.stderr);
+    assert.match(res.stdout, /No active sessions\./);
+  });
+
+  it('revoke-sessions removes every stored session for the principal and reports the count', async () => {
+    const res = await runCli(['revoke-sessions', ownerId], root);
+    assert.equal(res.code, 0, res.stderr);
+    // Both the live session and the expired record are removed.
+    assert.match(res.stdout, /Revoked 2 sessions for /);
+
+    const after = await runCli(['sessions'], root);
+    assert.equal(after.code, 0, after.stderr);
+    assert.match(after.stdout, /No active sessions\./);
+
+    const loaded = loadAuthzStore(root);
+    if (loaded.status !== 'ready') throw new Error(`store not ready: ${loaded.status}`);
+    assert.equal(loaded.store.sessions, undefined);
+  });
+
+  it('revoke-sessions rejects an unknown principal', async () => {
+    const res = await runCli(['revoke-sessions', 'p_nobody'], root);
+    assert.equal(res.code, 1);
+    assert.match(res.stderr, /Unknown principal: p_nobody/);
+  });
+});

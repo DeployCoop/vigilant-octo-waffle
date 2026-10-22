@@ -1,0 +1,41 @@
+name: Dependabot auto-merge
+
+# Plan II §5.2 (§16 Q6): patch-level *grouped* Dependabot PRs land on their
+# own: this workflow posts the required approval and arms auto-merge, so the
+# PR merges as soon as the required checks pass. Minor/major updates and
+# ungrouped (e.g. security-update) PRs stay fully manual.
+#
+# The approval works because the DeployCoop org setting "Allow GitHub
+# Actions to create and approve pull requests" and the matching repo-level
+# workflow permission are both enabled (2026-10-16); if either is turned
+# off, the approve step fails loudly on the next grouped patch PR.
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Never cancel an in-progress run: it may be mid-merge (Plan III §8.5).
+concurrency:
+  group: dependabot-automerge-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  automerge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Approve and enable auto-merge for grouped patch updates
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch' && steps.meta.outputs.dependency-group != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --merge "$PR_URL"

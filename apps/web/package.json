@@ -13,30 +13,30 @@
     "build": "rm -rf .next && next build",
     "start": "next start",
     "test": "vitest run",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 376",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@casl/ability": "^7.0.1",
+    "@casl/ability": "^7.0.2",
     "@vow/orchestrator": "workspace:*",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.49.0",
+    "lucide-react": "^1.57.0",
     "next": "16.4.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "tailwind-merge": "^3.0.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4.0.9",
-    "@types/node": "^26.6.4",
+    "@types/node": "^24",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "eslint": "^10.12.0",
     "eslint-config-next": "^16.4.2",
-    "postcss": "^8.5.29",
+    "postcss": "^8.5.30",
     "tailwindcss": "^4.0.9",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }

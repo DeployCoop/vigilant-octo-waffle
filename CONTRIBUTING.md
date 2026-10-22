@@ -17,19 +17,31 @@ Each package has its own suite; CI runs all of them.
 | `packages/orchestrator` | `pnpm --filter @vow/orchestrator build && pnpm --filter @vow/orchestrator test` (compiles, then `node --test` on `dist`) |
 | `apps/web` | `pnpm --filter @vow/web test` (vitest) and `pnpm --filter @vow/web typecheck` |
 | `apps/ink` | `pnpm --filter @vow/ink build && pnpm --filter @vow/ink test` |
+| `apps/githubio` | `pnpm --filter @vow/githubio test` (node --test) and `pnpm --filter @vow/githubio typecheck`; built by its own workflow |
+| Shell scripts (`src/`) | `scripts/tests/run.sh` (behavioral harness, runs as the **Shell tests** CI job) plus ShellCheck in CI |
 
 ## CI and merging
 
 - `main` is protected: pull requests are required, branches must be up to
-  date, and the **Tests & typecheck** and **Production build** checks must
-  pass. If a PR suddenly reports *no checks at all*, it has usually gone
-  merge-conflicted — GitHub cannot build the test-merge commit, so rebase
-  onto `main` first.
+  date, one approving review is required (an approval is dismissed when
+  new commits are pushed), conversations must be resolved, and **seven**
+  checks must pass: **Tests & typecheck**, **Production build**, **Lint**,
+  **ShellCheck**, **Secrets scan**, **Analyze (javascript-typescript)**,
+  and **Shell tests**. If a PR suddenly reports *no checks at all*, it has
+  usually gone merge-conflicted — GitHub cannot build the test-merge
+  commit, so rebase onto `main` first.
 - New CI jobs start out **non-required** and are only promoted to required
   checks after they have run green on `main` at least once.
 - Releases are annotated tags (`vX.Y.Z`) with notes kept in
   `CHANGELOG.md` (Keep-a-Changelog format) — add an entry under
   *Unreleased* with your change.
+
+Warning budgets (Plan II §6.2/§7.1): lint warnings and ShellCheck warnings
+are ratcheted. Each package's `lint` script carries a `--max-warnings`
+budget set at the count when the ratchet landed (web 376, orchestrator
+152, ink 13, githubio 1), and `.github/shellcheck-warning-budget.txt`
+holds the ShellCheck warning budget (70). CI fails if a count rises;
+when you lower a count, lower its budget in the same PR.
 
 ## A note on native dependencies (allowBuilds)
 

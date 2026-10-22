@@ -9,9 +9,8 @@ import {
   abilityFromMe,
   abilityFromRules,
   subjectFor,
-  readStoredToken,
-  storeToken,
-  PRINCIPAL_TOKEN_KEY,
+  endSession,
+  exchangeTokenForSession,
   type MeResponse,
 } from './ability-core';
 
@@ -113,25 +112,46 @@ describe('abilityFromMe', () => {
   });
 });
 
-describe('token storage', () => {
+describe('session exchange', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('round-trips through localStorage', () => {
-    const backing = new Map<string, string>();
-    vi.stubGlobal('window', {
-      localStorage: {
-        getItem: (k: string) => backing.get(k) ?? null,
-        setItem: (k: string, v: string) => void backing.set(k, v),
-        removeItem: (k: string) => void backing.delete(k),
-      },
-    });
-    expect(readStoredToken()).toBeNull();
-    storeToken('vow_abc');
-    expect(backing.get(PRINCIPAL_TOKEN_KEY)).toBe('vow_abc');
-    expect(readStoredToken()).toBe('vow_abc');
-    storeToken(null);
-    expect(readStoredToken()).toBeNull();
+  it('posts the token to the session endpoint and reports success', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(exchangeTokenForSession('vow_abc')).resolves.toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/authz/session');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ token: 'vow_abc' });
+  });
+
+  it('reports failure on a non-OK exchange and on network errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
+    await expect(exchangeTokenForSession('vow_nope')).resolves.toBe(false);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('offline');
+      })
+    );
+    await expect(exchangeTokenForSession('vow_abc')).resolves.toBe(false);
+  });
+
+  it('endSession issues a DELETE and swallows errors', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    await endSession();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/authz/session');
+    expect(init.method).toBe('DELETE');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('offline');
+      })
+    );
+    await expect(endSession()).resolves.toBeUndefined();
   });
 });

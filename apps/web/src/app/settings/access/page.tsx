@@ -12,12 +12,21 @@ import {
   Copy,
   X,
 } from 'lucide-react';
+import type { GrantContext } from '@vow/orchestrator';
 import { useAbilityContext } from '@/lib/ability';
 import { apiErrorMessage } from '@/lib/envelope';
+import {
+  serializeGrantForSave,
+  formatGrantContext,
+  contextToFormValues,
+  formValuesToContext,
+  type GrantContextFormValues,
+} from '@/lib/access-grants';
 
 interface Grant {
   permission: string;
   scope?: { appId?: string; namespace?: string };
+  context?: GrantContext;
 }
 
 interface PublicPrincipal {
@@ -35,15 +44,23 @@ interface PublicPrincipal {
 interface AuditEntry {
   ts: string;
   principalId: string | null;
-  permission: string;
-  allowed: boolean;
-  reason: string;
+  permission?: string;
+  allowed?: boolean;
+  reason?: string;
   route: string;
+  event?: string;
 }
 
 interface TokenReveal {
   title: string;
   token: string;
+}
+
+interface SessionInfo {
+  idHashPrefix: string;
+  principalId: string;
+  createdAt: string;
+  expiresAt: string;
 }
 
 const inputCls =
@@ -62,6 +79,7 @@ export default function AccessPage() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reveal, setReveal] = useState<TokenReveal | null>(null);
@@ -106,6 +124,11 @@ export default function AccessPage() {
         if (auditRes.ok) {
           const auditData = await auditRes.json();
           setAudit(auditData.entries ?? []);
+        }
+        const sessRes = await fetch('/api/authz/session');
+        if (sessRes.ok) {
+          const sessData = await sessRes.json();
+          setSessions(sessData.sessions ?? []);
         }
       }
     } catch (err: any) {
@@ -182,21 +205,20 @@ export default function AccessPage() {
     setEditingId(p.id);
     setEditRole(p.role);
     setEditDisabled(p.disabled);
-    setEditGrants(p.grants.map((g) => ({ ...g, scope: g.scope ? { ...g.scope } : undefined })));
+    setEditGrants(
+      p.grants.map((g) => ({
+        ...g,
+        scope: g.scope ? { ...g.scope } : undefined,
+        context: g.context ? { ...g.context } : undefined,
+      }))
+    );
     setEditRevocations([...p.revocations]);
     setError(null);
   };
 
   const handleSaveEdit = async (p: PublicPrincipal) => {
     setError(null);
-    const grants = editGrants
-      .filter((g) => g.permission)
-      .map((g) => {
-        const scope: Grant['scope'] = {};
-        if (g.scope?.appId?.trim()) scope.appId = g.scope.appId.trim();
-        if (g.scope?.namespace?.trim()) scope.namespace = g.scope.namespace.trim();
-        return Object.keys(scope).length ? { permission: g.permission, scope } : { permission: g.permission };
-      });
+    const grants = editGrants.filter((g) => g.permission).map(serializeGrantForSave);
     const res = await fetch(`/api/authz/principals/${encodeURIComponent(p.id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -248,6 +270,18 @@ export default function AccessPage() {
     });
     if (!res.ok) return await fail(res);
     setMessage(`${p.name} removed.`);
+    await load();
+  };
+
+  const handleRevokeSession = async (s: SessionInfo) => {
+    setError(null);
+    const res = await fetch('/api/authz/session', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idHashPrefix: s.idHashPrefix }),
+    });
+    if (!res.ok) return await fail(res);
+    setMessage('Session revoked.');
     await load();
   };
 
@@ -468,13 +502,16 @@ export default function AccessPage() {
                     <p>
                       Grants:{' '}
                       {p.grants
-                        .map(
-                          (g) =>
+                        .map((g) => {
+                          const ctx = formatGrantContext(g.context);
+                          return (
                             g.permission +
                             (g.scope
                               ? ` (${[g.scope.appId && `app=${g.scope.appId}`, g.scope.namespace && `ns=${g.scope.namespace}`].filter(Boolean).join(', ')})`
-                              : '')
-                        )
+                              : '') +
+                            (ctx ? ` {${ctx}}` : '')
+                          );
+                        })
                         .join(' · ')}
                     </p>
                   )}
@@ -518,8 +555,21 @@ export default function AccessPage() {
                           <span>Add grant</span>
                         </button>
                       </div>
-                      {editGrants.map((g, i) => (
-                        <div key={i} className="flex flex-wrap gap-2 items-center">
+                      {editGrants.map((g, i) => {
+                        const ctxForm = contextToFormValues(g.context);
+                        const setCtx = (patch: Partial<GrantContextFormValues>) =>
+                          setEditGrants(
+                            editGrants.map((x, j) =>
+                              j === i
+                                ? { ...x, context: formValuesToContext({ ...ctxForm, ...patch }) }
+                                : x
+                            )
+                          );
+                        const ctxInputCls =
+                          'rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 [color-scheme:dark]';
+                        return (
+                        <div key={i} className="space-y-2">
+                          <div className="flex flex-wrap gap-2 items-center">
                           <select
                             value={g.permission}
                             onChange={(e) =>
@@ -553,8 +603,78 @@ export default function AccessPage() {
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                          </div>
+                          <div className="flex flex-wrap gap-2 items-end pl-1">
+                            <label className="space-y-0.5">
+                              <span className="block text-[11px] text-slate-500">Not before</span>
+                              <input
+                                type="datetime-local"
+                                value={ctxForm.notBefore}
+                                onChange={(e) => setCtx({ notBefore: e.target.value })}
+                                className={ctxInputCls}
+                              />
+                            </label>
+                            <label className="space-y-0.5">
+                              <span className="block text-[11px] text-slate-500">Not after</span>
+                              <input
+                                type="datetime-local"
+                                value={ctxForm.notAfter}
+                                onChange={(e) => setCtx({ notAfter: e.target.value })}
+                                className={ctxInputCls}
+                              />
+                            </label>
+                            <label className="space-y-0.5">
+                              <span className="block text-[11px] text-slate-500">Source</span>
+                              <select
+                                value={ctxForm.source}
+                                onChange={(e) =>
+                                  setCtx({ source: e.target.value as GrantContextFormValues['source'] })
+                                }
+                                className={ctxInputCls}
+                              >
+                                <option value="any">any</option>
+                                <option value="loopback">loopback only</option>
+                              </select>
+                            </label>
+                            <label className="space-y-0.5">
+                              <span className="block text-[11px] text-slate-500">Auth method</span>
+                              <select
+                                value={ctxForm.authMethod}
+                                onChange={(e) =>
+                                  setCtx({
+                                    authMethod: e.target.value as GrantContextFormValues['authMethod'],
+                                  })
+                                }
+                                className={ctxInputCls}
+                              >
+                                <option value="any">any</option>
+                                <option value="session">session</option>
+                                <option value="token">token</option>
+                                <option value="oidc">oidc</option>
+                              </select>
+                            </label>
+                            {g.context && (
+                              <button
+                                className={btnCls}
+                                onClick={() =>
+                                  setEditGrants(
+                                    editGrants.map((x, j) =>
+                                      j === i ? { ...x, context: undefined } : x
+                                    )
+                                  )
+                                }
+                              >
+                                Clear context
+                              </button>
+                            )}
+                            <span className="text-[11px] text-slate-500 pb-1.5">
+                              Context (WS5): the grant counts only when the request matches.
+                              Empty / any = unconstrained.
+                            </span>
+                          </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <div className="space-y-2">
@@ -598,6 +718,53 @@ export default function AccessPage() {
                 )}
               </div>
             ))}
+          </div>
+
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-3">
+            <h3 className="text-base font-semibold text-white">Active sessions</h3>
+            {sessions.length === 0 ? (
+              <p className="text-sm text-slate-400">No active sessions.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-800">
+                      <th className="py-2 pr-3 font-medium">Principal</th>
+                      <th className="py-2 pr-3 font-medium">Session</th>
+                      <th className="py-2 pr-3 font-medium">Created</th>
+                      <th className="py-2 pr-3 font-medium">Expires</th>
+                      <th className="py-2 font-medium"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessions.map((s) => {
+                      const owner = principals.find((p) => p.id === s.principalId);
+                      return (
+                        <tr key={s.idHashPrefix} className="border-b border-slate-800/60 text-slate-300">
+                          <td className="py-2 pr-3">
+                            {owner ? owner.name : s.principalId}
+                            {s.principalId === me?.id ? ' (you)' : ''}
+                            {owner && <span className="text-slate-500"> · {s.principalId}</span>}
+                          </td>
+                          <td className="py-2 pr-3 font-mono">{s.idHashPrefix}…</td>
+                          <td className="py-2 pr-3 whitespace-nowrap">{new Date(s.createdAt).toLocaleString()}</td>
+                          <td className="py-2 pr-3 whitespace-nowrap">{new Date(s.expiresAt).toLocaleString()}</td>
+                          <td className="py-2 text-right">
+                            <button className={btnCls} onClick={() => void handleRevokeSession(s)}>
+                              Revoke
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-xs text-slate-500">
+              Browser sign-ins (WS5 httpOnly sessions, 12h absolute). Revoking a session
+              signs that browser out; the underlying token is unaffected.
+            </p>
           </div>
 
           <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl space-y-4">
@@ -661,13 +828,17 @@ export default function AccessPage() {
                       <tr key={i} className="border-b border-slate-800/60 text-slate-300">
                         <td className="py-2 pr-3 whitespace-nowrap">{new Date(entry.ts).toLocaleString()}</td>
                         <td className="py-2 pr-3">{entry.principalId ?? '—'}</td>
-                        <td className="py-2 pr-3">{entry.permission}</td>
+                        <td className="py-2 pr-3">{entry.event ? `session · ${entry.event.replace('session_', '')}` : entry.permission}</td>
                         <td className="py-2 pr-3">
-                          <span className={entry.allowed ? 'text-emerald-300' : 'text-red-300'}>
-                            {entry.allowed ? 'allow' : 'DENY'}
-                          </span>
+                          {entry.event ? (
+                            <span className="text-slate-400">event</span>
+                          ) : (
+                            <span className={entry.allowed ? 'text-emerald-300' : 'text-red-300'}>
+                              {entry.allowed ? 'allow' : 'DENY'}
+                            </span>
+                          )}
                         </td>
-                        <td className="py-2 pr-3">{entry.reason}</td>
+                        <td className="py-2 pr-3">{entry.reason ?? '—'}</td>
                         <td className="py-2">{entry.route}</td>
                       </tr>
                     ))}

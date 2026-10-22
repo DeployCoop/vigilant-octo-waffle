@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { checkOpenEbsStatus } from '../storage.js';
 import { getChartsDirectory } from '../config.js';
 import { getWaffleExecutionEnv } from './shared.js';
-import { execFileAsync, pipeExecs, killActiveChildren } from '../exec-argv.js';
+import { execFileAsync, pipeExecs, killActiveChildren, isIpAddressLiteral } from '../exec-argv.js';
 import { type WaffleSecretKey, type WaffleGitSource, type WaffleStep, type WafflePipeline, type WaffleBuildTarget } from './schema.js';
 import { getWaffleRunHistory } from './registry.js';
 
@@ -728,7 +728,7 @@ spec:
         ['get', 'nodes', '-o', 'jsonpath={range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\\n"}{end}'],
         { env }
       );
-      peers = stdout.split('\n').map((l) => l.trim()).filter((ip) => ip && !localIps.has(ip));
+      peers = stdout.split('\n').map((l) => l.trim()).filter((ip) => ip && !localIps.has(ip) && isIpAddressLiteral(ip));
     } catch {
       // cannot list nodes; single-node assumption
     }

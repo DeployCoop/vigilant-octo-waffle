@@ -6,6 +6,7 @@ import {
   DEPLOYMENT_PRESETS,
   loadProjectConfig,
   saveEnablerFile,
+  isValidEnablerName,
   validateDependencies,
   getTopologicalOrder,
 } from '@vow/orchestrator';
@@ -112,6 +113,9 @@ export async function POST(req: Request) {
     const { enablerVar, enabled } = body;
     if (!enablerVar) {
       return apiError(400, 'Missing enablerVar or presetId');
+    }
+    if (typeof enablerVar !== 'string' || !isValidEnablerName(enablerVar)) {
+      return apiError(400, 'Invalid enablerVar');
     }
 
     const updatedEnablers = {

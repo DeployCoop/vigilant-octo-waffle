@@ -11,6 +11,7 @@ import {
   deployOpenEBS,
 } from '../storage.js';
 import { findProjectRoot } from '../config.js';
+import { skipOrFailBinary } from './helpers.js';
 
 describe('Storage Fabric Engine', () => {
   const projectRoot = findProjectRoot();
@@ -71,7 +72,8 @@ describe('Storage Fabric Engine', () => {
     assert.strictEqual(isReady, status.isReady);
   });
 
-  it('skips redundant Helm upgrade when OpenEBS is already active', async () => {
+  it('skips redundant Helm upgrade when OpenEBS is already active', async (t) => {
+    if (skipOrFailBinary(t, 'helm')) return;
     const res = await deployOpenEBS(projectRoot);
     assert.ok(res);
     assert.strictEqual(typeof res.success, 'boolean');

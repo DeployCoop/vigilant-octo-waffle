@@ -31,6 +31,8 @@ export interface AIProviderInfo {
   name: string;
   available: boolean;
   baseUrl?: string;
+  /** Antigravity only: true when the operator opted into agy permission-skipping (Plan II §4.1). */
+  skipPermissions?: boolean;
   models: string[];
   defaultModel: string;
 }

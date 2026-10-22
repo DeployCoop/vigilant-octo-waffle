@@ -27,11 +27,14 @@ paths = ['^(src/default\.env|src/example\.env|\.env\.example|example\.env)$']
 rules = ["generic-api-key"]
 
 # Orchestrator source + tests: a hostname list and a list of script
-# filenames that trip the generic rule's entropy/name heuristics.
+# filenames that trip the generic rule's entropy/name heuristics, plus the
+# audited fake K3s join-token fixture (K10abcd1234efgh5678 — sequential fake
+# characters, asserted verbatim by the masking test) that moved from
+# smoke.test.ts to k3s-orchestration.test.ts in the Plan III PR-9 split.
 [[allowlists]]
-description = "Hostname and filename lists in orchestrator code/tests"
+description = "Hostname/filename lists and fake join-token fixture in orchestrator code/tests"
 condition = "AND"
-paths = ['^packages/orchestrator/src/(hosts\.ts|__tests__/smoke\.test\.ts)$']
+paths = ['^packages/orchestrator/src/(hosts\.ts|__tests__/(smoke|k3s-orchestration)\.test\.ts)$']
 rules = ["generic-api-key"]
 
 # Vendored upstream chart values and example app manifests: commented

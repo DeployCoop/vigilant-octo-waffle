@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 13",
     "dev": "tsc --watch",
     "start": "node ./dist/cli.js",
     "typecheck": "tsc --noEmit",
@@ -21,13 +21,13 @@
     "@vow/orchestrator": "workspace:*",
     "chalk": "^6.0.1",
     "commander": "^15.0.0",
-    "ink": "^7.1.1",
+    "ink": "^8.0.0",
     "ink-select-input": "^6.2.0",
     "ink-spinner": "^5.0.0",
-    "react": "19.3.0"
+    "react": "19.3.1"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^24",
     "@types/react": "^19.0.8",
     "typescript": "^6.0.3"
   }

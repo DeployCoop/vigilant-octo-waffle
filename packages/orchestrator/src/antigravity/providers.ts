@@ -7,6 +7,72 @@ import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 import { type AIProvider, type AIProviderInfo, type AntigravityEngineStatus } from './types.js';
 
+/**
+ * Strips trailing slashes without a regex: /\/+$/ backtracks quadratically
+ * on slash-heavy input (CodeQL js/polynomial-redos).
+ */
+export function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
+}
+
+/**
+ * Whether a caller-supplied model endpoint may be fetched server-side.
+ * Status checks run with a low-privilege principal, so a custom endpoint is
+ * an SSRF primitive unless it is confined to the operator's own machine and
+ * LAN: http/https only, loopback / RFC1918 / unique-local addresses, or a
+ * local-style hostname (single-label, .local/.lan/.internal/.home/.svc).
+ * Public hosts and link-local/metadata addresses (169.254.0.0/16,
+ * fe80::/10) are rejected. Operator-configured env endpoints are trusted
+ * and do not pass through here.
+ */
+/**
+ * Plan II §4.1 (§16 Q1): agy may skip its tool-call permission prompts only
+ * when the operator explicitly opts in with VOW_AGY_SKIP_PERMISSIONS=1.
+ * Default off — the same default-false rule the paperclip agy adapter uses.
+ */
+export function agySkipPermissionsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.VOW_AGY_SKIP_PERMISSIONS === '1';
+}
+
+export function isAllowedCustomEndpoint(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost') return true;
+  if (!host.includes('.') && !host.includes(':')) return true;
+  if (
+    host.endsWith('.local') ||
+    host.endsWith('.lan') ||
+    host.endsWith('.internal') ||
+    host.endsWith('.home') ||
+    host.endsWith('.svc') ||
+    host.endsWith('.cluster.local')
+  ) {
+    return true;
+  }
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (v4) {
+    if (v4.slice(1).some((octet) => Number(octet) > 255)) return false;
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  }
+  if (host.includes(':')) {
+    if (host === '::1') return true;
+    const first = parseInt(host.split(':')[0] || '0', 16);
+    return (first & 0xfe00) === 0xfc00;
+  }
+  return false;
+}
+
+
 const DEFAULT_ANTIGRAVITY_MODELS = [
   'gemini-3.8-flash-high',
   'gemini-3.8-flash-medium',
@@ -75,7 +141,10 @@ export async function checkOllamaStatus(customUrl?: string): Promise<{
   models: string[];
   baseUrl: string;
 }> {
-  const baseUrl = (customUrl || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/+$/, '');
+  if (customUrl && !isAllowedCustomEndpoint(customUrl)) {
+    return { available: false, models: [], baseUrl: stripTrailingSlashes(customUrl) };
+  }
+  const baseUrl = stripTrailingSlashes(customUrl || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434');
 
   try {
     const controller = new AbortController();
@@ -114,7 +183,10 @@ export async function checkVllmStatus(customUrl?: string): Promise<{
   models: string[];
   baseUrl: string;
 }> {
-  const baseUrl = (customUrl || process.env.VLLM_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+  if (customUrl && !isAllowedCustomEndpoint(customUrl)) {
+    return { available: false, models: [], baseUrl: stripTrailingSlashes(customUrl) };
+  }
+  const baseUrl = stripTrailingSlashes(customUrl || process.env.VLLM_BASE_URL || 'http://localhost:8000');
 
   try {
     const controller = new AbortController();
@@ -167,6 +239,7 @@ export async function getAntigravityEngineStatus(endpoints?: {
       id: 'antigravity',
       name: 'Google Antigravity (AGY)',
       available: agyAvailable,
+      skipPermissions: agySkipPermissionsEnabled(),
       models: DEFAULT_ANTIGRAVITY_MODELS,
       defaultModel: 'gemini-3.8-flash-high',
     },

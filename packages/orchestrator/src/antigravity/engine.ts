@@ -6,8 +6,19 @@ import * as path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { APP_CATALOG } from '../registry.js';
 import { type AIProvider, type DetectedManifest, type StreamEvent, type AntigravityResponse, type AskAntigravityOptions, type StreamAntigravityOptions } from './types.js';
-import { findAgyBinary } from './providers.js';
+import { agySkipPermissionsEnabled, findAgyBinary } from './providers.js';
 import { buildClusterContext } from './context.js';
+
+/**
+ * Strips trailing slashes without a regex: /\/+$/ backtracks quadratically
+ * on slash-heavy input (CodeQL js/polynomial-redos).
+ */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
+}
+
 
 /**
  * Queries Ollama via REST API (`/api/chat`).
@@ -18,7 +29,7 @@ async function queryOllama(options: {
   model: string;
   baseUrl?: string;
 }): Promise<{ response: string; usage?: any; durationSeconds: number }> {
-  const baseUrl = (options.baseUrl || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/+$/, '');
+  const baseUrl = stripTrailingSlashes(options.baseUrl || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434');
   const startTime = Date.now();
 
   const controller = new AbortController();
@@ -77,7 +88,7 @@ async function queryVllm(options: {
   model: string;
   baseUrl?: string;
 }): Promise<{ response: string; usage?: any; durationSeconds: number }> {
-  const baseUrl = (options.baseUrl || process.env.VLLM_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+  const baseUrl = stripTrailingSlashes(options.baseUrl || process.env.VLLM_BASE_URL || 'http://localhost:8000');
   const startTime = Date.now();
 
   const controller = new AbortController();
@@ -133,7 +144,7 @@ export function detectManifestPatch(markdown: string): DetectedManifest[] {
   if (!markdown) return manifests;
 
   // Match ```yaml or ```yml or ``` containing YAML blocks
-  const codeBlockRegex = /```(?:ya?ml)?\s*\n([\s\S]*?)```/gi;
+  const codeBlockRegex = /```(?:ya?ml)?[ \t]*\n([\s\S]*?)```/gi;
   let match: RegExpExecArray | null;
 
   while ((match = codeBlockRegex.exec(markdown)) !== null) {
@@ -144,15 +155,15 @@ export function detectManifestPatch(markdown: string): DetectedManifest[] {
     const docs = rawBlock.split(/^---$/m).map((d) => d.trim()).filter(Boolean);
 
     for (const raw of docs) {
-      const hasKind = /(?:^|\n)\s*kind:\s*([A-Za-z0-9_-]+)/.test(raw);
-      const hasApiVersion = /(?:^|\n)\s*apiVersion:\s*([A-Za-z0-9_/.-]+)/.test(raw);
-      const hasMetadata = /(?:^|\n)\s*metadata:\s*/.test(raw);
-      const hasSpec = /(?:^|\n)\s*spec:\s*/.test(raw);
+      const hasKind = /^[ \t]*kind:[ \t]*([A-Za-z0-9_-]+)/m.test(raw);
+      const hasApiVersion = /^[ \t]*apiVersion:[ \t]*([A-Za-z0-9_/.-]+)/m.test(raw);
+      const hasMetadata = /^[ \t]*metadata:[ \t]*/m.test(raw);
+      const hasSpec = /^[ \t]*spec:[ \t]*/m.test(raw);
 
       if ((hasKind && hasMetadata) || (hasApiVersion && (hasKind || hasMetadata)) || (hasSpec && hasMetadata)) {
-        const kindMatch = /(?:^|\n)\s*kind:\s*([A-Za-z0-9_-]+)/.exec(raw);
-        const nameMatch = /(?:^|\n)\s*name:\s*([A-Za-z0-9_.-]+)/.exec(raw);
-        const nsMatch = /(?:^|\n)\s*namespace:\s*([A-Za-z0-9_.-]+)/.exec(raw);
+        const kindMatch = /^[ \t]*kind:[ \t]*([A-Za-z0-9_-]+)/m.exec(raw);
+        const nameMatch = /^[ \t]*name:[ \t]*([A-Za-z0-9_.-]+)/m.exec(raw);
+        const nsMatch = /^[ \t]*namespace:[ \t]*([A-Za-z0-9_.-]+)/m.exec(raw);
 
         const kind = kindMatch ? kindMatch[1] : undefined;
         const name = nameMatch ? nameMatch[1] : undefined;
@@ -340,6 +351,27 @@ Need specific details on certificates, ArgoCD applications, network security, or
  * - vLLM (`/v1/chat/completions` REST)
  * - Automatic Heuristic Cluster Copilot fallback
  */
+/**
+ * Builds the agy CLI argument list. The permission-skipping flag is included
+ * only when the operator opted in (VOW_AGY_SKIP_PERMISSIONS=1, Plan II §4.1);
+ * both the one-shot and streaming call sites share this builder so the policy
+ * cannot drift between them.
+ */
+export function buildAgyArgs(
+  outputFormat: 'json' | 'stream-json',
+  effort: string,
+  opts: { conversationId?: string; model?: string; prompt: string },
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const args: string[] = [];
+  if (agySkipPermissionsEnabled(env)) args.push('--dangerously-skip-permissions');
+  args.push('--effort', effort, '--output-format', outputFormat);
+  if (opts.conversationId) args.push('--conversation', opts.conversationId);
+  if (opts.model) args.push('--model', opts.model);
+  args.push('-p', opts.prompt);
+  return args;
+}
+
 export async function askAntigravity(options: AskAntigravityOptions): Promise<AntigravityResponse> {
   const {
     prompt,
@@ -466,17 +498,8 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
 
   const fullPrompt = `${systemInstructions}\n\nUser Question:\n${prompt}`;
 
-  const args: string[] = ['--dangerously-skip-permissions', '--effort', effort, '--output-format', 'json'];
 
-  if (conversationId) {
-    args.push('--conversation', conversationId);
-  }
-
-  if (model) {
-    args.push('--model', model);
-  }
-
-  args.push('-p', fullPrompt);
+  const args = buildAgyArgs('json', effort, { conversationId, model, prompt: fullPrompt });
 
   return new Promise<AntigravityResponse>((resolve) => {
     const startTime = Date.now();
@@ -599,7 +622,7 @@ Instructions:
   // 1. Ollama Provider Streaming
   if (provider === 'ollama') {
     const targetModel = model || 'llama3:latest';
-    const baseUrl = (customEndpoint || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/+$/, '');
+    const baseUrl = stripTrailingSlashes(customEndpoint || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434');
     const startTime = Date.now();
 
     try {
@@ -688,7 +711,7 @@ ${generateHeuristicResponse(prompt, snapshot, 'Ollama (Heuristic Fallback)')}`;
   // 2. vLLM Provider Streaming
   if (provider === 'vllm') {
     const targetModel = model || 'meta-llama/Meta-Llama-3-8B-Instruct';
-    const baseUrl = (customEndpoint || process.env.VLLM_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+    const baseUrl = stripTrailingSlashes(customEndpoint || process.env.VLLM_BASE_URL || 'http://localhost:8000');
     const startTime = Date.now();
 
     try {
@@ -777,15 +800,7 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
   }
 
   const fullPrompt = `${systemInstructions}\n\nUser Question:\n${prompt}`;
-  const args: string[] = ['--dangerously-skip-permissions', '--effort', effort, '--output-format', 'stream-json'];
-
-  if (conversationId) {
-    args.push('--conversation', conversationId);
-  }
-  if (model) {
-    args.push('--model', model);
-  }
-  args.push('-p', fullPrompt);
+  const args = buildAgyArgs('stream-json', effort, { conversationId, model, prompt: fullPrompt });
 
   return new Promise<AntigravityResponse>((resolve) => {
     const startTime = Date.now();

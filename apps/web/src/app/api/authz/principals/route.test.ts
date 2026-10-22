@@ -299,3 +299,43 @@ describe('POST /api/authz/principals/[id]/rotate', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('grant context (WS5)', () => {
+  it('round-trips grant context through create + list + the YAML store', async () => {
+    const owner = await initOwner();
+    const context = {
+      notAfter: '2027-01-01T00:00:00.000Z',
+      source: 'loopback',
+      authMethod: 'session',
+    };
+    const created = await createPrincipal(owner.token, {
+      name: 'Windowed Wendy',
+      role: 'viewer',
+      grants: [{ permission: 'apps:deploy', context }],
+    });
+    expect(created.res.status).toBe(201);
+    expect(created.data.principal.grants).toEqual([{ permission: 'apps:deploy', context }]);
+
+    const listRes = await GET(listReq(owner.token));
+    expect(listRes.status).toBe(200);
+    const list = await listRes.json();
+    const wendy = list.principals.find((p: { id: string }) => p.id === created.data.principal.id);
+    expect(wendy.grants).toEqual([{ permission: 'apps:deploy', context }]);
+
+    const raw = fs.readFileSync(path.join(hoisted.root, '.vow', 'authz.yaml'), 'utf-8');
+    expect(raw).toContain('authMethod: session');
+    expect(raw).toContain('source: loopback');
+  });
+
+  it('rejects a malformed grant context with a 400', async () => {
+    const owner = await initOwner();
+    const res = await POST(
+      req('POST', 'http://localhost:3000/api/authz/principals', owner.token, {
+        name: 'Bad Context',
+        role: 'viewer',
+        grants: [{ permission: 'apps:deploy', context: { notBefore: 'not-a-date' } }],
+      })
+    );
+    expect(res.status).toBe(400);
+  });
+});

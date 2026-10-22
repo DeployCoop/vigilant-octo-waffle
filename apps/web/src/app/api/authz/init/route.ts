@@ -5,7 +5,9 @@ import {
   upsertPrincipal,
   createEmptyStore,
   generatePrincipalToken,
+  hashPassword,
   hashToken,
+  MIN_PASSWORD_LENGTH,
   ensureDevCertificate,
   type Principal,
 } from '@vow/orchestrator';
@@ -68,6 +70,12 @@ export async function POST(req: Request) {
         ? body.token.trim()
         : null;
 
+  if (customPassword && customPassword.length < MIN_PASSWORD_LENGTH) {
+    return apiError(400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, {
+      reason: 'password_too_short',
+    });
+  }
+
   const store = loaded.status === 'ready' ? loaded.store : createEmptyStore();
   const token = customPassword ?? generatePrincipalToken();
   const owner: Principal = {
@@ -75,7 +83,8 @@ export async function POST(req: Request) {
     name,
     kind: 'human',
     role: 'owner',
-    tokenHash: hashToken(token),
+    // A human-chosen password gets the scrypt scheme; a generated token sha256.
+    tokenHash: customPassword ? hashPassword(customPassword) : hashToken(token),
   };
 
   const next = upsertPrincipal(store, owner);

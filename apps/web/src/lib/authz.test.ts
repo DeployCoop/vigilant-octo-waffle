@@ -94,6 +94,21 @@ describe('extractRequestToken', () => {
     expect(extractRequestToken(request(undefined, { 'x-vow-token': 'xyz' }))).toBe('xyz');
     expect(extractRequestToken(request())).toBeNull();
   });
+
+  it('ignores query tokens on every route (WS5: streams ride the session cookie)', () => {
+    const q = new URLSearchParams({ token: 'abc' }).toString();
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/waffle/stream?${q}`))).toBeNull();
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/tasks/stream?${q}`))).toBeNull();
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/k8s/exec?${q}`))).toBeNull();
+    expect(extractRequestToken(request(undefined, {}, `http://localhost:3000/api/flux?${q}`))).toBeNull();
+    // Header credentials keep working on every route.
+    expect(extractRequestToken(request('abc', {}, 'http://localhost:3000/api/flux'))).toBe('abc');
+  });
+
+  it('ignores the legacy vow_token cookie (WS5: only the session cookie authenticates)', () => {
+    expect(extractRequestToken(request(undefined, { cookie: 'vow_token=abc' }))).toBeNull();
+    expect(extractRequestToken(request('abc', { cookie: 'vow_token=zzz' }))).toBe('abc');
+  });
 });
 
 describe('isLocalBoardRequest', () => {
@@ -325,5 +340,47 @@ describe('audit logging', () => {
       expect(entries.length).toBeGreaterThanOrEqual(2);
       expect(entries.every((e) => e.permission === 'k8s:exec')).toBe(true);
     });
+  });
+});
+
+describe('session resolution (WS5)', () => {
+  it('resolves a vow_session cookie to its principal with authMethod session', async () => {
+    const { createSession } = await import('@vow/orchestrator');
+    const { store: withSession, sessionId } = createSession(store(viewer), viewer.id);
+    hoisted.load = { status: 'ready', store: withSession };
+    const ctx = await resolveAuthzContext(
+      request(undefined, { cookie: `vow_session=${sessionId}` })
+    );
+    expect(ctx.principal?.id).toBe('p_viewer');
+    expect(ctx.authMethod).toBe('session');
+    expect(ctx.expiredSession).toBe(false);
+  });
+
+  it('flags an expired session instead of resolving it', async () => {
+    const { createSession, SESSION_TTL_MS } = await import('@vow/orchestrator');
+    const past = new Date(Date.now() - SESSION_TTL_MS - 60_000);
+    const { store: withSession, sessionId } = createSession(store(viewer), viewer.id, past);
+    hoisted.load = { status: 'ready', store: withSession };
+    const ctx = await resolveAuthzContext(
+      request(undefined, { cookie: `vow_session=${sessionId}` })
+    );
+    expect(ctx.principal).toBeNull();
+    expect(ctx.expiredSession).toBe(true);
+  });
+
+  it('ignores an unknown session id', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    const ctx = await resolveAuthzContext(
+      request(undefined, { cookie: 'vow_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' })
+    );
+    expect(ctx.principal).toBeNull();
+    expect(ctx.expiredSession).toBe(false);
+  });
+
+  it('still resolves bearer tokens with authMethod token', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer) };
+    const ctx = await resolveAuthzContext(request(viewerToken));
+    expect(ctx.principal?.id).toBe('p_viewer');
+    expect(ctx.authMethod).toBe('token');
   });
 });

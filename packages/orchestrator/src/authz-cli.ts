@@ -12,12 +12,19 @@ import {
   upsertPrincipal,
   removePrincipal,
   generatePrincipalToken,
+  hashPassword,
+  MIN_PASSWORD_LENGTH,
   hashToken,
   findPrincipalByToken,
   decide,
   isPermission,
+  validateGrantContext,
+  pruneExpiredSessions,
+  revokePrincipalSessions,
+  type AuthMethod,
   type AuthzStore,
   type Grant,
+  type GrantContext,
   type Permission,
   type Principal,
   type Role,
@@ -33,7 +40,9 @@ import { ensureDevCertificate } from './tls.js';
  *                    [--oidc-subject <sub>] [--grant <permission>]...
  *                    [--scope-app <appId>] [--scope-namespace <ns>]
  *   vow authz list                                          list principals (never prints token hashes)
+ *   vow authz sessions [--principal <id>]                   list active browser sessions (hash prefixes only)
  *   vow authz revoke <principal-id>                         remove a principal
+ *   vow authz revoke-sessions <principal-id>                revoke every browser session for a principal
  *   vow authz rotate <principal-id>                         issue a new token (printed once)
  *   vow authz check  <token> <permission> [--app <id>] [--namespace <ns>]
  *
@@ -64,11 +73,20 @@ Commands:
     --grant <permission>          Extra permission grant (repeatable)
     --scope-app <appId>           Scope all --grant entries to an app
     --scope-namespace <ns>        Scope all --grant entries to a namespace
+    --context <json>              Context conditions for all --grant entries (WS5):
+                                  {"notBefore": iso, "notAfter": iso,
+                                   "source": "loopback"|"any",
+                                   "authMethod": "session"|"token"|"oidc"|"any"}
   list                            List principals
+  sessions [--principal <id>]     List active browser sessions (id-hash prefix, principal, expiry)
   revoke <principal-id>           Remove a principal
+  revoke-sessions <principal-id>  Revoke every browser session for a principal
   rotate <principal-id>           Issue a replacement token (printed once)
   check <token> <permission> [--app <appId>] [--namespace <ns>]
-                                  Dry-run a permission check, prints the decision reason`;
+                                  Dry-run a permission check, prints the decision reason
+    --at <iso>                    Evaluate context grants at this instant (default: now)
+    --loopback                    Evaluate as a loopback (local board) request
+    --auth-method <m>             session | token | oidc (default: token)`;
 
 function parseFlags(args: string[]): { positional: string[]; flags: Map<string, string[]> } {
   const positional: string[] = [];
@@ -149,13 +167,19 @@ async function cmdInit(root: string, args: string[], io: AuthzCliIo): Promise<nu
     }
   }
 
-  const token = customPassword && customPassword.trim() ? customPassword.trim() : generatePrincipalToken();
+  const hasCustomPassword = Boolean(customPassword && customPassword.trim());
+  const token = hasCustomPassword ? customPassword!.trim() : generatePrincipalToken();
+  if (hasCustomPassword && token.length < MIN_PASSWORD_LENGTH) {
+    io.err(`Error: the initial owner password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+    return 1;
+  }
   const owner: Principal = {
     id: newPrincipalId(createEmptyStore(), name),
     name,
     kind: 'human',
     role: 'owner',
-    tokenHash: hashToken(token),
+    // A human-chosen password gets the scrypt scheme; a generated token sha256.
+    tokenHash: hasCustomPassword ? hashPassword(token) : hashToken(token),
   };
   saveAuthzStore(root, { version: 1, principals: [owner] });
   io.out(`Created authorization store at ${file}`);
@@ -198,6 +222,23 @@ async function cmdAdd(root: string, args: string[], io: AuthzCliIo): Promise<num
 
   const scopeApp = flag(flags, 'scope-app');
   const scopeNamespace = flag(flags, 'scope-namespace');
+  let context: GrantContext | undefined;
+  const contextRaw = flag(flags, 'context');
+  if (contextRaw !== undefined) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(contextRaw);
+    } catch {
+      io.err('--context must be valid JSON, e.g. --context \'{"source":"loopback"}\'');
+      return 1;
+    }
+    const problem = validateGrantContext(parsed);
+    if (problem) {
+      io.err(`--context: ${problem}`);
+      return 1;
+    }
+    context = parsed as GrantContext;
+  }
   const grants: Grant[] = [];
   for (const permission of flags.get('grant') ?? []) {
     if (!isPermission(permission)) {
@@ -208,7 +249,11 @@ async function cmdAdd(root: string, args: string[], io: AuthzCliIo): Promise<num
       scopeApp || scopeNamespace
         ? { ...(scopeApp ? { appId: scopeApp } : {}), ...(scopeNamespace ? { namespace: scopeNamespace } : {}) }
         : undefined;
-    grants.push({ permission: permission as Permission, ...(scope ? { scope } : {}) });
+    grants.push({
+      permission: permission as Permission,
+      ...(scope ? { scope } : {}),
+      ...(context ? { context } : {}),
+    });
   }
 
   const oidcSubject = flag(flags, 'oidc-subject');
@@ -247,7 +292,16 @@ async function cmdList(root: string, io: AuthzCliIo): Promise<number> {
               .map(([k, v]) => `${k}=${v}`)
               .join(',')
           : 'global';
-        return `${g.permission}[${scope}]`;
+        const ctx: string[] = [];
+        if (g.context) {
+          if (g.context.source && g.context.source !== 'any') ctx.push(`src=${g.context.source}`);
+          if (g.context.authMethod && g.context.authMethod !== 'any') {
+            ctx.push(`auth=${g.context.authMethod}`);
+          }
+          if (g.context.notBefore) ctx.push(`from=${g.context.notBefore}`);
+          if (g.context.notAfter) ctx.push(`until=${g.context.notAfter}`);
+        }
+        return `${g.permission}[${scope}]${ctx.length > 0 ? `{${ctx.join(' ')}}` : ''}`;
       })
       .join(' ');
     io.out(
@@ -255,6 +309,55 @@ async function cmdList(root: string, io: AuthzCliIo): Promise<number> {
         `${p.disabled ? ' (disabled)' : ''}${p.oidcSubject ? ` oidc:${p.oidcSubject}` : ''}${grants ? ` grants: ${grants}` : ''}`
     );
   }
+  return 0;
+}
+
+async function cmdSessions(root: string, args: string[], io: AuthzCliIo): Promise<number> {
+  const { flags } = parseFlags(args);
+  const store = requireStore(root, io);
+  if (!store) return 1;
+  const principalId = flag(flags, 'principal');
+  if (principalId && !store.principals.some((p) => p.id === principalId)) {
+    io.err(`Unknown principal: ${principalId}`);
+    return 1;
+  }
+  const active = (pruneExpiredSessions(store).sessions ?? []).filter(
+    (sess) => !principalId || sess.principalId === principalId
+  );
+  if (active.length === 0) {
+    io.out(principalId ? `No active sessions for ${principalId}.` : 'No active sessions.');
+    return 0;
+  }
+  for (const sess of active) {
+    const principal = store.principals.find((p) => p.id === sess.principalId);
+    const who = principal ? `${sess.principalId} (${principal.name})` : sess.principalId;
+    // Only ever a prefix of the stored hash — session ids are never stored,
+    // and the full hash stays out of terminal output like token hashes do.
+    const prefix = `${sess.idHash.slice(0, 19)}…`;
+    io.out(`${prefix.padEnd(22)} ${who.padEnd(28)} created ${sess.createdAt}  expires ${sess.expiresAt}`);
+  }
+  return 0;
+}
+
+async function cmdRevokeSessions(root: string, args: string[], io: AuthzCliIo): Promise<number> {
+  const { positional } = parseFlags(args);
+  const id = positional[0];
+  if (!id) {
+    io.err('Usage: vow authz revoke-sessions <principal-id>');
+    return 1;
+  }
+  const store = requireStore(root, io);
+  if (!store) return 1;
+  if (!store.principals.some((p) => p.id === id)) {
+    io.err(`Unknown principal: ${id}`);
+    return 1;
+  }
+  const countFor = (s: AuthzStore) =>
+    (s.sessions ?? []).filter((sess) => sess.principalId === id).length;
+  const next = revokePrincipalSessions(store, id);
+  const revoked = countFor(store) - countFor(next);
+  saveAuthzStore(root, next);
+  io.out(`Revoked ${revoked} session${revoked === 1 ? '' : 's'} for ${id}.`);
   return 0;
 }
 
@@ -316,7 +419,25 @@ async function cmdCheck(root: string, args: string[], io: AuthzCliIo): Promise<n
     ...(flag(flags, 'app') ? { appId: flag(flags, 'app') } : {}),
     ...(flag(flags, 'namespace') ? { namespace: flag(flags, 'namespace') } : {}),
   };
-  const decision = decide(loaded, principal, permission, target);
+  const atRaw = flag(flags, 'at');
+  const at = atRaw ? new Date(atRaw) : new Date();
+  if (Number.isNaN(at.getTime())) {
+    io.err(`--at must be an ISO timestamp, got: ${atRaw}`);
+    return 1;
+  }
+  const authMethodRaw = flag(flags, 'auth-method') ?? 'token';
+  // Membership comes from the shared grant-context validator (which also
+  // accepts the 'any' wildcard — meaningless for a concrete check, so it
+  // is rejected here with this command's own message, as before).
+  if (authMethodRaw === 'any' || validateGrantContext({ authMethod: authMethodRaw }) !== null) {
+    io.err(`--auth-method must be session, token, or oidc, got: ${authMethodRaw}`);
+    return 1;
+  }
+  const authMethod = authMethodRaw as AuthMethod;
+  const decision = decide(loaded, principal, permission, target, {
+    localBoard: flags.has('loopback'),
+    requestContext: { now: at, loopback: flags.has('loopback'), authMethod },
+  });
   io.out(
     `${decision.allowed ? 'ALLOW' : 'DENY'} ${permission}` +
       `${principal ? ` for ${principal.id}` : ' (no matching principal)'}` +
@@ -347,8 +468,12 @@ export async function runAuthzCommand(
         return await cmdAdd(root, rest, io);
       case 'list':
         return await cmdList(root, io);
+      case 'sessions':
+        return await cmdSessions(root, rest, io);
       case 'revoke':
         return await cmdRevoke(root, rest, io);
+      case 'revoke-sessions':
+        return await cmdRevokeSessions(root, rest, io);
       case 'rotate':
         return await cmdRotate(root, rest, io);
       case 'check':
