@@ -66,7 +66,12 @@ RUN pnpm build
 # prune devDependencies from every workspace importer after the build.
 # CI=true: the Docker build has no TTY, and pnpm otherwise aborts the
 # modules-directory purge it cannot confirm interactively.
-RUN CI=true pnpm prune --prod
+# --ignore-scripts: prune re-runs workspace lifecycle scripts at the
+# end, and the orchestrator's `prepare` is `tsc` — but TypeScript is a
+# devDependency that has just been pruned. The dist output is already
+# built above, and surviving packages keep the artifacts their install
+# scripts produced during `pnpm install`; nothing needs to re-run.
+RUN CI=true pnpm prune --prod --ignore-scripts
 
 FROM base AS runner
 WORKDIR /app
