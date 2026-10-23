@@ -12,21 +12,12 @@ import {
   Layers,
   Terminal,
   Activity,
-  Trash2,
-  Download,
   AlertTriangle,
   CheckCircle2,
-  Cpu,
-  ArrowRight,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
-  X,
   Play,
-  Flame,
   Shield,
-  Settings2,
-  Check,
   Zap,
   GitCompare,
   Wrench,
@@ -34,66 +25,11 @@ import {
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { YamlDiffModal, type DetectedManifestPayload } from '@/components/YamlDiffModal';
 import { useTerminal } from '@/context/TerminalContext';
-
-type AIProvider = 'antigravity' | 'ollama' | 'vllm';
-
-interface AIProviderInfo {
-  id: AIProvider;
-  name: string;
-  available: boolean;
-  baseUrl?: string;
-  models: string[];
-  defaultModel: string;
-}
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: string;
-  provider?: AIProvider;
-  durationSeconds?: number;
-  tokensUsed?: number;
-  modelUsed?: string;
-  detectedManifests?: DetectedManifestPayload[];
-  clusterSnapshot?: {
-    connected: boolean;
-    context: string;
-    platform: string;
-    nodeCount: number;
-    podCount: number;
-    unhealthyPods: string[];
-    applicationsCount: number;
-  };
-}
-
-interface EngineInfo {
-  available: boolean;
-  version?: string;
-  defaultProvider: AIProvider;
-  defaultModel: string;
-  availableModels: string[];
-  providers: Record<AIProvider, AIProviderInfo>;
-  platform: string;
-}
-
-interface ClusterSnapshot {
-  connected: boolean;
-  context: string;
-  platform: string;
-  nodeCount: number;
-  podCount: number;
-  unhealthyPods: string[];
-  applicationsCount: number;
-}
-
-interface CopilotToolItem {
-  id: string;
-  name: string;
-  description: string;
-  category: 'remediation' | 'inspection' | 'scaling' | 'diagnostics';
-  parameters?: Record<string, any>;
-}
+import HeaderControls from './components/HeaderControls';
+import EndpointDrawer from './components/EndpointDrawer';
+import TelemetryBanner from './components/TelemetryBanner';
+import CommandFeedbackDrawer from './components/CommandFeedbackDrawer';
+import type { AIProvider, ChatMessage, ClusterSnapshot, CopilotToolItem, EngineInfo } from './components/types';
 
 const SAMPLE_PROMPTS = [
   {
@@ -581,284 +517,46 @@ export default function AntigravityPage() {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center flex-wrap gap-2.5 text-xs">
-          {/* Provider Tabs */}
-          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5">
-            <button
-              onClick={() => handleProviderChange('antigravity')}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                selectedProvider === 'antigravity'
-                  ? 'bg-sky-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Sparkles className="w-3 h-3 text-sky-300" />
-              <span>Antigravity</span>
-            </button>
-
-            <button
-              onClick={() => handleProviderChange('ollama')}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                selectedProvider === 'ollama'
-                  ? 'bg-sky-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <span className="text-xs">🦙</span>
-              <span>Ollama</span>
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  engine?.providers?.ollama?.available ? 'bg-emerald-400' : 'bg-slate-600'
-                }`}
-                title={engine?.providers?.ollama?.available ? 'Ollama Online' : 'Ollama Standby / Offline'}
-              />
-            </button>
-
-            <button
-              onClick={() => handleProviderChange('vllm')}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                selectedProvider === 'vllm'
-                  ? 'bg-sky-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Zap className="w-3 h-3 text-amber-400" />
-              <span>vLLM</span>
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  engine?.providers?.vllm?.available ? 'bg-emerald-400' : 'bg-slate-600'
-                }`}
-                title={engine?.providers?.vllm?.available ? 'vLLM Online' : 'vLLM Standby / Offline'}
-              />
-            </button>
-          </div>
-
-          {/* Model Selector */}
-          <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5">
-            <Cpu className="w-3.5 h-3.5 text-sky-400" />
-            <select
-              value={selectedModel}
-              onChange={(e) => {
-                setSelectedModel(e.target.value);
-                setCustomModel('');
-              }}
-              className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer pr-1 max-w-[160px] truncate"
-            >
-              {currentProviderInfo?.models ? (
-                currentProviderInfo.models.map((m) => (
-                  <option key={m} value={m} className="bg-slate-900 text-slate-200">
-                    {m}
-                  </option>
-                ))
-              ) : (
-                <option value={selectedModel}>{selectedModel}</option>
-              )}
-            </select>
-          </div>
-
-          {/* Effort Selector for Antigravity */}
-          {selectedProvider === 'antigravity' && (
-            <div className="flex items-center space-x-1 bg-slate-950 border border-slate-800 rounded-lg p-0.5">
-              {(['low', 'medium', 'high'] as const).map((lvl) => (
-                <button
-                  key={lvl}
-                  onClick={() => setSelectedEffort(lvl)}
-                  className={`px-2 py-1 rounded text-[11px] font-medium capitalize transition-colors ${
-                    selectedEffort === lvl
-                      ? 'bg-sky-600 text-white'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  title={`Reasoning effort: ${lvl}`}
-                >
-                  {lvl}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Endpoint Settings Button */}
-          {(selectedProvider === 'ollama' || selectedProvider === 'vllm') && (
-            <button
-              onClick={() => setShowEndpointSettings(!showEndpointSettings)}
-              className={`p-1.5 rounded-lg border transition-colors ${
-                showEndpointSettings
-                  ? 'bg-sky-600 border-sky-500 text-white'
-                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-              }`}
-              title="Configure Endpoint URL & Custom Model"
-            >
-              <Settings2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {/* Context Injection Toggle */}
-          <label className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer text-slate-300 select-none">
-            <input
-              type="checkbox"
-              checked={includeClusterContext}
-              onChange={(e) => setIncludeClusterContext(e.target.checked)}
-              className="rounded border-slate-700 text-sky-600 focus:ring-0 cursor-pointer"
-            />
-            <span className="text-[11px]">Live Cluster Telemetry</span>
-          </label>
-
-          {/* Watchdog Scan Button */}
-          <button
-            onClick={() =>
-              handleSendMessage(
-                'Perform a comprehensive cluster health and reliability inspection. Analyze active node resource saturation, check pod crash loops, inspect recent warning events, verify ingress routes, and highlight top 3 risk factors with concrete kubectl fix commands.'
-              )
-            }
-            disabled={loading}
-            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-medium transition-colors disabled:opacity-50 shadow-sm"
-            title="Trigger deep automated Cluster Watchdog inspection"
-          >
-            <Flame className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Watchdog Scan</span>
-          </button>
-
-          {/* Clear & Export Buttons */}
-          {messages.length > 0 && (
-            <div className="flex items-center space-x-1">
-              <button
-                onClick={handleExportChat}
-                className="p-1.5 rounded-lg border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-                title="Export Conversation (.md)"
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={handleClearChat}
-                className="p-1.5 rounded-lg border border-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 transition-colors"
-                title="Clear Chat"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
+        <HeaderControls
+          selectedProvider={selectedProvider}
+          engine={engine}
+          currentProviderInfo={currentProviderInfo}
+          selectedModel={selectedModel}
+          selectedEffort={selectedEffort}
+          showEndpointSettings={showEndpointSettings}
+          includeClusterContext={includeClusterContext}
+          loading={loading}
+          messages={messages}
+          handleProviderChange={handleProviderChange}
+          setSelectedModel={setSelectedModel}
+          setCustomModel={setCustomModel}
+          setSelectedEffort={setSelectedEffort}
+          setShowEndpointSettings={setShowEndpointSettings}
+          setIncludeClusterContext={setIncludeClusterContext}
+          handleSendMessage={handleSendMessage}
+          handleExportChat={handleExportChat}
+          handleClearChat={handleClearChat}
+        />
       </div>
 
       {/* Endpoint Configuration Dropdown Drawer */}
-      {showEndpointSettings && (selectedProvider === 'ollama' || selectedProvider === 'vllm') && (
-        <div className="bg-slate-900 border-b border-slate-800 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 text-xs animate-in slide-in-from-top-2">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center space-x-2">
-              <span className="text-slate-400 font-semibold uppercase">
-                {selectedProvider} Base URL:
-              </span>
-              <input
-                type="text"
-                value={selectedProvider === 'ollama' ? ollamaUrl : vllmUrl}
-                onChange={(e) =>
-                  selectedProvider === 'ollama'
-                    ? setOllamaUrl(e.target.value)
-                    : setVllmUrl(e.target.value)
-                }
-                className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-sky-400 font-mono text-xs w-64 focus:outline-none focus:border-sky-500"
-                placeholder={selectedProvider === 'ollama' ? 'http://localhost:11434' : 'http://localhost:8000'}
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <span className="text-slate-400">Custom Model Tag:</span>
-              <input
-                type="text"
-                value={customModel}
-                onChange={(e) => setCustomModel(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-slate-200 font-mono text-xs w-48 focus:outline-none focus:border-sky-500"
-                placeholder="e.g. qwen2.5-coder:7b"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={async () => {
-                setEndpointTesting(true);
-                await fetchStatus();
-                setEndpointTesting(false);
-              }}
-              disabled={endpointTesting}
-              className="px-3 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-semibold flex items-center space-x-1"
-            >
-              <RefreshCw className={`w-3 h-3 ${endpointTesting ? 'animate-spin' : ''}`} />
-              <span>Probe Endpoint</span>
-            </button>
-            <button
-              onClick={() => setShowEndpointSettings(false)}
-              className="p-1 text-slate-400 hover:text-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <EndpointDrawer
+        showEndpointSettings={showEndpointSettings}
+        selectedProvider={selectedProvider}
+        ollamaUrl={ollamaUrl}
+        vllmUrl={vllmUrl}
+        customModel={customModel}
+        endpointTesting={endpointTesting}
+        setOllamaUrl={setOllamaUrl}
+        setVllmUrl={setVllmUrl}
+        setCustomModel={setCustomModel}
+        setEndpointTesting={setEndpointTesting}
+        setShowEndpointSettings={setShowEndpointSettings}
+        fetchStatus={fetchStatus}
+      />
 
       {/* Cluster Telemetry Pill Banner */}
-      <div className="bg-slate-900/50 border-b border-slate-800/80 px-6 py-2 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-3">
-        <div className="flex items-center flex-wrap gap-4">
-          <div className="flex items-center space-x-1.5">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                clusterSnapshot?.connected
-                  ? 'bg-emerald-400 animate-pulse'
-                  : 'bg-amber-400'
-              }`}
-            />
-            <span className="font-semibold text-slate-200">
-              {clusterSnapshot?.connected ? 'Cluster Connected' : 'Cluster Offline / Initializing'}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-1 font-mono text-[11px]">
-            <span className="text-slate-500">Context:</span>
-            <span className="text-sky-400 font-semibold">{clusterSnapshot?.context || 'none'}</span>
-          </div>
-
-          <div className="flex items-center space-x-1 font-mono text-[11px]">
-            <span className="text-slate-500">Platform:</span>
-            <span className="text-slate-300 uppercase font-semibold">
-              {clusterSnapshot?.platform || 'KIND'}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-1 text-[11px]">
-            <span className="text-slate-500">Nodes:</span>
-            <span className="text-slate-200 font-semibold">{clusterSnapshot?.nodeCount ?? 0}</span>
-          </div>
-
-          <div className="flex items-center space-x-1 text-[11px]">
-            <span className="text-slate-500">Pods:</span>
-            <span className="text-slate-200 font-semibold">{clusterSnapshot?.podCount ?? 0}</span>
-          </div>
-
-          {clusterSnapshot && clusterSnapshot.unhealthyPods.length > 0 && (
-            <div className="flex items-center space-x-1 text-rose-400 bg-rose-950/40 border border-rose-800/60 px-2 py-0.5 rounded text-[11px] font-semibold animate-pulse">
-              <AlertTriangle className="w-3 h-3" />
-              <span>{clusterSnapshot.unhealthyPods.length} Unhealthy</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={fetchStatus}
-            className="flex items-center space-x-1 text-slate-400 hover:text-sky-400 transition-colors text-[11px]"
-            title="Refresh Cluster Telemetry"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>Refresh</span>
-          </button>
-          <Link
-            href="/cluster"
-            className="text-sky-400 hover:text-sky-300 flex items-center space-x-1 text-[11px]"
-          >
-            <span>Cluster Control</span>
-            <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
-      </div>
+      <TelemetryBanner clusterSnapshot={clusterSnapshot} fetchStatus={fetchStatus} />
 
       {/* Main Chat Messages Container */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -1060,32 +758,7 @@ export default function AntigravityPage() {
       </div>
 
       {/* Quick Command Execution Feedback Drawer */}
-      {commandOutput && (
-        <div className="bg-slate-900/95 border-t border-slate-800 px-6 py-3 flex items-center justify-between text-xs font-mono">
-          <div className="flex items-center space-x-3 overflow-hidden">
-            <Terminal className="w-4 h-4 text-sky-400 shrink-0" />
-            <div className="truncate">
-              <span className="text-slate-400 font-semibold">$ {commandOutput.command}</span>
-              <p className="text-slate-300 text-[11px] truncate">{commandOutput.output}</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2 shrink-0">
-            <Link
-              href="/terminal"
-              className="px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-sans flex items-center space-x-1"
-            >
-              <span>Open Console</span>
-              <ExternalLink className="w-3 h-3" />
-            </Link>
-            <button
-              onClick={() => setCommandOutput(null)}
-              className="p-1 text-slate-400 hover:text-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <CommandFeedbackDrawer commandOutput={commandOutput} setCommandOutput={setCommandOutput} />
 
       {/* Input Area */}
       <div className="p-4 bg-slate-900/90 border-t border-slate-800 shrink-0">
