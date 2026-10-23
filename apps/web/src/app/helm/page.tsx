@@ -94,7 +94,7 @@ export default function HelmPage() {
     type: 'lint' | 'template' | 'values';
     valid?: boolean;
   } | null>(null);
-  const [loadingViewer, setLoadingViewer] = useState(false);
+  const [, setLoadingViewer] = useState(false);
 
   // Latest-value ref: fetchData reads the current input only for its
   // don't-override-the-user guard, so the read must not become a fetch
