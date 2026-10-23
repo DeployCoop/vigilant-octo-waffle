@@ -20,6 +20,11 @@ import {
 } from '../antigravity/providers.js';
 import { detectManifestPatch } from '../antigravity/engine.js';
 import { isIpAddressLiteral } from '../exec-argv.js';
+import {
+  WaffleRunner,
+  resolvePathWithinBase,
+  assertSafeGitValue,
+} from '../waffle/runner.js';
 
 test('.env values with shell metacharacters are inert when sourced and round-trip exactly', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-env-'));
@@ -134,4 +139,134 @@ test('isIpAddressLiteral accepts real IPs and rejects option-smuggling values', 
   for (const bad of ['-oProxyCommand=id', '256.1.1.1', 'example.com', '', '1.2.3', '1.2.3.4.5', '-o']) {
     assert.equal(isIpAddressLiteral(bad), false, bad);
   }
+});
+
+// ---------------------------------------------------------------------------
+// CodeQL round 3 (2026-10-22): WaffleRunner.buildSingleTarget hardening
+// (js/path-injection, js/shell-command-constructed-from-input). Execution
+// there is argv-form (no shell), but blueprint-supplied paths could escape
+// the project directory via ../ segments, and blueprint-supplied git
+// values beginning with '-' would be parsed as git options by clone /
+// checkout / pull. buildSingleTarget now validates both before any
+// subprocess runs; these tests pin the rejections. None of them spawns
+// git or docker: validation precedes every exec, and the dockerfile case
+// passes a non-localhost registry so ensureLocalRegistry is a no-op.
+// ---------------------------------------------------------------------------
+
+test('resolvePathWithinBase keeps build paths inside their base directory', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-confine-'));
+  assert.equal(resolvePathWithinBase(base, '.', 'tgt', 'context'), path.resolve(base));
+  assert.equal(
+    resolvePathWithinBase(base, 'app/sub', 'tgt', 'context'),
+    path.join(base, 'app', 'sub')
+  );
+  assert.throws(
+    () => resolvePathWithinBase(base, '../outside', 'tgt', 'context'),
+    /Build target "tgt": context path "\.\.\/outside" resolves outside its base directory/
+  );
+  assert.throws(
+    () => resolvePathWithinBase(base, '/etc', 'tgt', 'context'),
+    /resolves outside its base directory/
+  );
+});
+
+test('assertSafeGitValue rejects git option smuggling and accepts real refs', () => {
+  for (const bad of ['-c', '--upload-pack=touch /tmp/pwn', '-oProxyCommand=id']) {
+    assert.throws(
+      () => assertSafeGitValue('tgt', 'repo', bad),
+      /Build target "tgt": git repo .* must not begin with '-'/
+    );
+  }
+  for (const ok of [
+    'https://github.com/org/repo.git',
+    'git@github.com:org/repo.git',
+    'main',
+    'v1.2.3',
+    '0123456789abcdef0123456789abcdef01234567',
+  ]) {
+    assert.doesNotThrow(() => assertSafeGitValue('tgt', 'branch', ok));
+  }
+});
+
+test('buildSingleTarget rejects an escaping build context before any subprocess runs', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-build-'));
+  const runner = new WaffleRunner(base);
+  await assert.rejects(
+    runner.buildSingleTarget({ name: 'evil', context: '../outside', image: 'app' }, base),
+    /Build target "evil": context path "\.\.\/outside" resolves outside its base directory/
+  );
+  await assert.rejects(
+    runner.buildSingleTarget(
+      { name: 'evil', context: 'app', image: 'app', git: { repo: 'https://example.com/r.git', dir: '../clone' } },
+      base
+    ),
+    /Build target "evil": git dir path "\.\.\/clone" resolves outside its base directory/
+  );
+});
+
+test('buildSingleTarget rejects git values that would be parsed as options', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-build-'));
+  const runner = new WaffleRunner(base);
+  await assert.rejects(
+    runner.buildSingleTarget(
+      { name: 'evil', context: 'app', image: 'app', git: '--upload-pack=touch /tmp/pwn' },
+      base
+    ),
+    /Build target "evil": git repo .* must not begin with '-'/
+  );
+  await assert.rejects(
+    runner.buildSingleTarget(
+      {
+        name: 'evil',
+        context: 'app',
+        image: 'app',
+        git: { repo: 'https://example.com/r.git', branch: '-c core.sshCommand=id' },
+      },
+      base
+    ),
+    /Build target "evil": git branch .* must not begin with '-'/
+  );
+  await assert.rejects(
+    runner.buildSingleTarget(
+      {
+        name: 'evil',
+        context: 'app',
+        image: 'app',
+        git: { repo: 'https://example.com/r.git', tag: '-d' },
+      },
+      base
+    ),
+    /Build target "evil": git tag .* must not begin with '-'/
+  );
+});
+
+test('buildSingleTarget rejects a dockerfile that escapes the build context', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-build-'));
+  const runner = new WaffleRunner(base);
+  await assert.rejects(
+    runner.buildSingleTarget(
+      { name: 'evil', context: 'app', dockerfile: '../../etc/Dockerfile', image: 'app' },
+      base,
+      'example.invalid:5000'
+    ),
+    /Build target "evil": dockerfile path .* resolves outside its base directory/
+  );
+});
+
+test('buildSingleTarget still accepts a well-formed target (dry run)', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-build-'));
+  const runner = new WaffleRunner(base);
+  // Passes the new validation and reaches the dry-run simulation unchanged.
+  await runner.buildSingleTarget(
+    {
+      name: 'ok',
+      context: 'app',
+      dockerfile: 'Dockerfile.web',
+      image: 'app',
+      git: { repo: 'https://github.com/org/repo.git', branch: 'main', dir: 'app' },
+    },
+    base,
+    'localhost:5001',
+    true
+  );
 });
