@@ -166,8 +166,8 @@ jobs:
           grep -E '^v24\.' /tmp/nodever
           docker images vow-web:ci
           # §8.4: the runner stage's default user is node (uid 1000).
-          docker run --rm --entrypoint id vow-web:ci -u | tee /tmp/imguser
-          grep -E '^uid=1000\(' /tmp/imguser
+          docker run --rm --entrypoint id vow-web:ci | tee /tmp/imguser
+          grep -E '^uid=1000\(node\)' /tmp/imguser
           # Boot smoke: start the image with its default CMD and poll
           # until the control plane answers HTTP. 200 / a redirect to
           # the login page / 401 all prove the server is up; a refused
