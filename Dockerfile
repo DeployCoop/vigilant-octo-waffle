@@ -81,6 +81,15 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+# pnpm's deps-status check (verifyDepsBeforeRun, default "install")
+# judges the production tree recorded by the builder stage as out of
+# sync in this stage and would answer `pnpm start` by reinstalling —
+# network and store writes at every boot. The tree is built from the
+# frozen lockfile in this same Dockerfile and is immutable at runtime,
+# so demote the check to a boot-log warning. (The env name is pnpm's
+# own override, read verbatim by @pnpm/config; the npm_config_ form
+# and .npmrc key do not reach this setting in pnpm 11.)
+ENV pnpm_config_verify_deps_before_run=warn
 
 # Run as the image's non-root node user (uid 1000, Plan III §8.4). The
 # app writes runtime state (.vow/) under /app, so the copy is chowned.
@@ -90,17 +99,6 @@ COPY --from=builder --chown=node:node /app ./
 # not that directory inode. The app creates state directories directly
 # under /app at runtime, so the directory must be node-owned too.
 RUN chown node:node /app
-# pnpm's deps-status check vs a copied production tree: the COPY
-# flattens file timestamps, so the lockfile/manifests no longer read
-# as older than the recorded install state, and `pnpm start` concludes
-# the deps are stale and reinstalls at boot (network + store writes).
-# The image's node_modules are finalized in the builder and immutable
-# at runtime, so: refresh the state files' timestamps past the copied
-# manifests, and switch the check off for the runtime stage via the
-# project .npmrc pnpm reads at the workspace root.
-RUN find /app -name .modules.yaml -exec touch {} + \
-    && printf 'verify-deps-before-run=false\n' > /app/.npmrc \
-    && chown node:node /app/.npmrc
 USER node
 
 EXPOSE 3000
