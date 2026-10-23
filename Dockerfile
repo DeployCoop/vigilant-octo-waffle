@@ -81,6 +81,12 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+# The image's node_modules are finalized in the builder and immutable
+# at runtime, but pnpm's deps-status check cannot see that: faced with
+# a production tree recorded by another stage, it "repairs" it with a
+# production install at every `pnpm start` (network + store writes at
+# boot). Disable the check for the runtime stage only.
+ENV npm_config_verify_deps_before_run=false
 
 # Run as the image's non-root node user (uid 1000, Plan III §8.4). The
 # app writes runtime state (.vow/) under /app, so the copy is chowned.
