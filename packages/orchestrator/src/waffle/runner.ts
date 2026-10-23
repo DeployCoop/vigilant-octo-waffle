@@ -1,59 +1,39 @@
 /**
  * Waffle pipeline runner: progress model and the WaffleRunner engine (WS6 split of waffle.ts).
- * Behavior-preserving file motion only — see the WS6 decomposition PR.
+ * Plan III §7.3: secrets provisioning, image build/registry, and health
+ * verification live in ./secrets.js, ./images.js, and ./health.js;
+ * WaffleRunner orchestrates them through the thin delegating methods
+ * below, so its surface — and every call site — is unchanged.
  */
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { createHmac } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import { checkOpenEbsStatus } from '../storage.js';
 import { getChartsDirectory } from '../config.js';
-import { getWaffleExecutionEnv } from './shared.js';
-import { execFileAsync, pipeExecs, killActiveChildren, isIpAddressLiteral } from '../exec-argv.js';
-import { type WaffleSecretKey, type WaffleGitSource, type WaffleStep, type WafflePipeline, type WaffleBuildTarget } from './schema.js';
+import { getWaffleExecutionEnv, errMessage } from './shared.js';
+import { execFileAsync, killActiveChildren } from '../exec-argv.js';
+import { type WaffleSecretKey, type WaffleStep, type WafflePipeline, type WaffleBuildTarget } from './schema.js';
 import { getWaffleRunHistory } from './registry.js';
-
-function errMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-/**
- * CodeQL round 3 (js/path-injection): blueprint-supplied paths must stay
- * inside the directory they are resolved against. Mirrors the confinement
- * check in executor.ts (validateCommand): resolve, then require the result
- * to be the base itself or strictly beneath it.
- */
-export function resolvePathWithinBase(
-  baseDir: string,
-  relPath: string,
-  targetName: string,
-  field: string
-): string {
-  const resolvedBase = path.resolve(baseDir);
-  const resolved = path.resolve(resolvedBase, relPath);
-  if (resolved !== resolvedBase && !resolved.startsWith(resolvedBase + path.sep)) {
-    throw new Error(
-      `Build target "${targetName}": ${field} path "${relPath}" resolves outside its base directory (${resolvedBase})`
-    );
-  }
-  return resolved;
-}
+import {
+  deriveSupabaseJwt as deriveSupabaseJwtImpl,
+  provisionSecrets as provisionSecretsImpl,
+  loadProjectEnvFiles as loadProjectEnvFilesImpl,
+} from './secrets.js';
+import {
+  buildImages as buildImagesImpl,
+  buildSingleTarget as buildSingleTargetImpl,
+  ensureLocalRegistry as ensureLocalRegistryImpl,
+  importImageToCluster as importImageToClusterImpl,
+} from './images.js';
+import { verifyStepHealth as verifyStepHealthImpl } from './health.js';
 
 /**
- * CodeQL round 3 (js/shell-command-constructed-from-input): execution is
- * argv-form, so there is no shell to inject into — but git parses any argv
- * element beginning with '-' as an option wherever a repo/ref is expected
- * (clone's -c / --upload-pack class). Reject such blueprint values outright.
+ * The CodeQL round-3 guards moved to ./images.js with buildSingleTarget
+ * (§7.3); re-exported here so this module's historical surface —
+ * including the codeql-regressions tests' imports from './runner.js' —
+ * is unchanged. The progress types below likewise stay defined here.
  */
-export function assertSafeGitValue(targetName: string, field: string, value: string): void {
-  if (value.startsWith('-')) {
-    throw new Error(
-      `Build target "${targetName}": git ${field} "${value}" must not begin with '-' (it would be parsed as a git option)`
-    );
-  }
-}
+export { resolvePathWithinBase, assertSafeGitValue } from './images.js';
 
 // ============================================================================
 // 4. WAFFLE RUNNER & REAL-TIME PROGRESS TRACKING
@@ -316,14 +296,7 @@ export class WaffleRunner extends EventEmitter {
    * Returns undefined for any other variable or when the signing secret is not set.
    */
   private deriveSupabaseJwt(envVar: string): string | undefined {
-    const role = envVar === 'SUPABASE_ANON_KEY' ? 'anon' : envVar === 'SUPABASE_SERVICE_ROLE_KEY' ? 'service_role' : undefined;
-    const secret = process.env.SUPABASE_JWT_SECRET || this.loadProjectEnvFiles()['SUPABASE_JWT_SECRET'];
-    if (!role || !secret) return undefined;
-    const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
-    const now = Math.floor(Date.now() / 1000);
-    const unsigned = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ role, iss: 'supabase', iat: now, exp: now + 10 * 365 * 24 * 3600 })}`;
-    const sig = createHmac('sha256', secret).update(unsigned).digest('base64url');
-    return `${unsigned}.${sig}`;
+    return deriveSupabaseJwtImpl(envVar, () => loadProjectEnvFilesImpl(this.projectRoot));
   }
 
   /**
@@ -334,108 +307,7 @@ export class WaffleRunner extends EventEmitter {
     defaultNamespace: string,
     dryRun?: boolean
   ): Promise<void> {
-    for (const sec of secrets) {
-      const ns = sec.namespace || defaultNamespace;
-      this.logToRun(`[KEYS] Ensuring Kubernetes Secret "${sec.name}" in namespace "${ns}"...`);
-      if (dryRun) {
-        this.logToRun(`[KEYS] [DRY-RUN] Secret "${sec.name}" creation simulated.`);
-        continue;
-      }
-
-      const secretData: Record<string, string> = {};
-      if (sec.literals) {
-        const missing = new Set<string>();
-        const malformed = new Set<string>();
-        for (const [k, v] of Object.entries(sec.literals)) {
-          // Interpolate every ${VAR} occurrence (whole-value or embedded in a URL).
-          // Never fall back to a built-in default: published placeholder secrets
-          // (e.g. *_change_me) must not reach a cluster.
-          secretData[k] = String(v).replace(/\$\{([a-zA-Z0-9_]+)\}/g, (_m, envVar: string) => {
-            const fromEnv = process.env[envVar] ?? this.loadProjectEnvFiles()[envVar];
-            if (fromEnv !== undefined && fromEnv !== '') {
-              if (envVar === 'SUPABASE_ANON_KEY' || envVar === 'SUPABASE_SERVICE_ROLE_KEY') {
-                if (fromEnv.split('.').length === 3) return fromEnv;
-                // Set but not JWT-shaped (e.g. a modern sb_publishable_ key):
-                // remember the distinction so the error below does not
-                // claim a set variable is "unset".
-                malformed.add(envVar);
-              } else {
-                return fromEnv;
-              }
-            }
-            const derived = this.deriveSupabaseJwt(envVar);
-            if (derived) return derived;
-            if (!malformed.has(envVar)) missing.add(envVar);
-            return '';
-          });
-        }
-        if (missing.size > 0 || malformed.size > 0) {
-          const parts: string[] = [];
-          if (missing.size > 0) {
-            parts.push(`unset environment variable(s): ${[...missing].sort().join(', ')}`);
-          }
-          if (malformed.size > 0) {
-            parts.push(
-              `variable(s) set but not JWT-shaped (expected 3 dot-separated parts) and no SUPABASE_JWT_SECRET available to derive a JWT from: ${[...malformed].sort().join(', ')}`
-            );
-          }
-          throw new Error(
-            `Secret "${sec.name}" requires ${parts.join('; ')}. ` +
-              `Export them (see charts/production-prep.md) before running the pipeline.`
-          );
-        }
-        for (const [k, val] of Object.entries(secretData)) {
-          if (/change_?me/i.test(val)) {
-            throw new Error(`Secret "${sec.name}" key "${k}" still contains a "change_me" placeholder; refusing to apply.`);
-          }
-        }
-      }
-      if (sec.fromEnv) {
-        for (const envVar of sec.fromEnv) {
-          const val = process.env[envVar] || this.loadProjectEnvFiles()[envVar] || '';
-          secretData[envVar] = val;
-        }
-      }
-
-      if (Object.keys(secretData).length > 0) {
-        try {
-          const nsManifest = await execFileAsync(
-            'kubectl',
-            ['create', 'namespace', ns, '--dry-run=client', '-o', 'yaml'],
-            { env: getWaffleExecutionEnv() }
-          );
-          await execFileAsync('kubectl', ['apply', '-f', '-'], {
-            env: getWaffleExecutionEnv(),
-            input: nsManifest.stdout,
-          });
-          const manifestObj = {
-            apiVersion: 'v1',
-            kind: 'Secret',
-            metadata: {
-              name: sec.name,
-              namespace: ns,
-              labels: {
-                'app.kubernetes.io/managed-by': 'waffle',
-              },
-              annotations: {
-                // Keep Helm from deleting this secret if a previous release rendered one with the same name.
-                'helm.sh/resource-policy': 'keep',
-              },
-            },
-            type: 'Opaque',
-            stringData: secretData,
-          };
-          const manifestJson = JSON.stringify(manifestObj);
-          await execFileAsync('kubectl', ['apply', '-f', '-'], {
-            env: getWaffleExecutionEnv(),
-            input: manifestJson,
-          });
-          this.logToRun(`[KEYS] Secret "${sec.name}" synchronized in namespace "${ns}".`);
-        } catch (err) {
-          this.logToRun(`[KEYS] Notice: Secret sync encountered: ${errMessage(err)}`);
-        }
-      }
-    }
+    return provisionSecretsImpl(secrets, defaultNamespace, (message) => this.logToRun(message), this.projectRoot, dryRun);
   }
 
   /**
@@ -445,21 +317,7 @@ export class WaffleRunner extends EventEmitter {
    * Process env always takes precedence (callers check it first).
    */
   private loadProjectEnvFiles(): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const name of ['.env.production', '.env']) {
-      const file = path.join(this.projectRoot, name);
-      if (!fs.existsSync(file)) continue;
-      for (const raw of fs.readFileSync(file, 'utf-8').split('\n')) {
-        const line = raw.trim();
-        if (!line || line.startsWith('#')) continue;
-        const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
-        if (!m || m[1] in out) continue;
-        let v = m[2].trim();
-        if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) v = v.slice(1, -1);
-        out[m[1]] = v;
-      }
-    }
-    return out;
+    return loadProjectEnvFilesImpl(this.projectRoot);
   }
 
   /**
@@ -470,35 +328,7 @@ export class WaffleRunner extends EventEmitter {
     baseDir: string,
     dryRun?: boolean
   ): Promise<void> {
-    if (!pipeline.builds?.targets || pipeline.builds.targets.length === 0) {
-      return;
-    }
-    const registry = pipeline.builds.registry || 'localhost:5001';
-    this.logToRun(`[BUILDS] Starting builds for ${pipeline.builds.targets.length} target(s) using registry "${registry}"...`);
-
-    if (dryRun) {
-      for (const target of pipeline.builds.targets) {
-        const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
-        const gitInfo = target.git ? ` (git: ${typeof target.git === 'string' ? target.git : target.git.repo})` : '';
-        this.logToRun(`[BUILDS] [DRY-RUN] Target "${target.name}" -> ${fullTag} (context: ${target.context})${gitInfo} simulated.`);
-      }
-      return;
-    }
-
-    const failedTargets: string[] = [];
-    await this.ensureLocalRegistry(registry);
-
-    for (const target of pipeline.builds.targets) {
-      try {
-        await this.buildSingleTarget(target, baseDir, registry, dryRun);
-      } catch {
-        failedTargets.push(target.name);
-      }
-    }
-
-    if (failedTargets.length > 0) {
-      throw new Error(`Image build/import failed for target(s): ${failedTargets.join(', ')}`);
-    }
+    return buildImagesImpl(pipeline, baseDir, (message) => this.logToRun(message), dryRun);
   }
 
   /**
@@ -510,134 +340,7 @@ export class WaffleRunner extends EventEmitter {
     registry: string = 'localhost:5001',
     dryRun?: boolean
   ): Promise<void> {
-    const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
-    // Validate every blueprint-supplied path and git value before any
-    // subprocess runs (CodeQL round 3): paths must stay inside the project
-    // directory, and git repos/refs must not look like git options.
-    const contextPath = resolvePathWithinBase(baseDir, target.context, target.name, 'context');
-    const gitConfig: WaffleGitSource | undefined = target.git
-      ? typeof target.git === 'string'
-        ? { repo: target.git }
-        : target.git
-      : undefined;
-    let cloneDir = contextPath;
-    if (gitConfig) {
-      assertSafeGitValue(target.name, 'repo', gitConfig.repo);
-      if (gitConfig.branch) assertSafeGitValue(target.name, 'branch', gitConfig.branch);
-      if (gitConfig.commit) assertSafeGitValue(target.name, 'commit', gitConfig.commit);
-      if (gitConfig.tag) assertSafeGitValue(target.name, 'tag', gitConfig.tag);
-      if (gitConfig.dir) {
-        cloneDir = resolvePathWithinBase(baseDir, gitConfig.dir, target.name, 'git dir');
-      }
-    }
-
-    if (dryRun) {
-      const gitInfo = target.git ? ` (git: ${typeof target.git === 'string' ? target.git : target.git.repo})` : '';
-      this.logToRun(`[BUILDS] [DRY-RUN] Target "${target.name}" -> ${fullTag} (context: ${target.context})${gitInfo} simulated.`);
-      return;
-    }
-
-    await this.ensureLocalRegistry(registry);
-
-    // 1. Auto-clone or pull from Git if target.git is defined
-    if (gitConfig) {
-      try {
-        const hasGit = fs.existsSync(path.join(cloneDir, '.git'));
-        const isEmpty = !fs.existsSync(cloneDir) || fs.readdirSync(cloneDir).length === 0;
-
-        if (isEmpty) {
-          let repoUrl = gitConfig.repo;
-          // Convert git@github.com:org/repo.git to https://github.com/org/repo.git if SSH key is absent
-          if (repoUrl.startsWith('git@github.com:')) {
-            repoUrl = repoUrl.replace('git@github.com:', 'https://github.com/');
-          }
-
-          this.logToRun(`[BUILDS] Target "${target.name}": Cloning repository from ${repoUrl}...`);
-          fs.mkdirSync(path.dirname(cloneDir), { recursive: true });
-
-          const cloneArgs = ['clone'];
-          if (gitConfig.branch) cloneArgs.push('-b', gitConfig.branch);
-          if (gitConfig.depth && !gitConfig.commit) cloneArgs.push('--depth', String(gitConfig.depth));
-          if (gitConfig.submodules) cloneArgs.push('--recurse-submodules');
-          // '--' ends option parsing: the repo and directory are positional
-          // from here on, whatever they look like (defense in depth behind
-          // the assertSafeGitValue check above).
-          cloneArgs.push('--', repoUrl, cloneDir);
-          await execFileAsync('git', cloneArgs);
-
-          if (gitConfig.commit) {
-            await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.commit]);
-          } else if (gitConfig.tag) {
-            await execFileAsync('git', ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`]);
-          }
-          this.logToRun(`[BUILDS] Target "${target.name}": Repository successfully cloned into ${cloneDir}.`);
-        } else if (hasGit) {
-          this.logToRun(`[BUILDS] Target "${target.name}": Existing repository detected at ${cloneDir}; fetching updates...`);
-          await execFileAsync('git', ['-C', cloneDir, 'fetch', '--tags']).catch(() => {});
-          if (gitConfig.branch) {
-            await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.branch]).catch(() => {});
-            await execFileAsync('git', ['-C', cloneDir, 'pull', 'origin', gitConfig.branch]).catch(() => {});
-          } else if (gitConfig.commit) {
-            await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.commit]).catch(() => {});
-          } else if (gitConfig.tag) {
-            await execFileAsync('git', ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`]);
-          }
-        }
-      } catch (gitErr) {
-        this.logToRun(`[BUILDS] Warning: Git operation for target "${target.name}" failed: ${errMessage(gitErr)}`);
-      }
-    }
-
-    const dockerfilePath = target.dockerfile
-      ? resolvePathWithinBase(contextPath, target.dockerfile, target.name, 'dockerfile')
-      : path.join(contextPath, 'Dockerfile');
-
-    this.logToRun(`[BUILDS] Building target "${target.name}" -> ${fullTag}...`);
-    try {
-      const buildArgs = ['build', '-t', fullTag];
-      if (target.dockerfile) {
-        buildArgs.push('-f', dockerfilePath);
-      }
-      buildArgs.push(contextPath);
-
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn('docker', buildArgs);
-        proc.stdout?.on('data', (d) => {
-          const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
-          for (const line of lines) {
-            this.logToRun(`[DOCKER] [${target.name}] ${line}`);
-          }
-        });
-        proc.stderr?.on('data', (d) => {
-          const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
-          for (const line of lines) {
-            this.logToRun(`[DOCKER] [${target.name}] ${line}`);
-          }
-        });
-        proc.on('close', (code) => {
-          if (code === 0) resolve();
-          else reject(new Error(`docker build exited with code ${code}`));
-        });
-        proc.on('error', reject);
-      });
-
-      // Push to the in-cluster/local registry when it is reachable (best effort; the
-      // containerd import below is what guarantees the cluster can run the image).
-      this.logToRun(`[BUILDS] Pushing image ${fullTag}...`);
-      await execFileAsync('docker', ['push', '--tls-verify=false', fullTag]).catch(async () => {
-        await execFileAsync('docker', ['push', fullTag]).catch((pushErr) => {
-          this.logToRun(`[BUILDS] Notice: Registry push to "${registry}" skipped or unavailable: ${String(pushErr.message).split('\n')[0]}`);
-        });
-      });
-
-      // MANDATORY: make the image available to every cluster node's containerd.
-      await this.importImageToCluster(target, fullTag);
-
-      this.logToRun(`[BUILDS] Target "${target.name}" successfully built and published.`);
-    } catch (err) {
-      this.logToRun(`[BUILDS] ERROR: Build/import for target "${target.name}" failed: ${errMessage(err)}`);
-      throw err;
-    }
+    return buildSingleTargetImpl(target, baseDir, registry, (message) => this.logToRun(message), dryRun);
   }
 
   /**
@@ -645,114 +348,7 @@ export class WaffleRunner extends EventEmitter {
    * registry:2 inside the cluster (hostPort), so kubelet can pull "localhost:<port>/..." images.
    */
   private async ensureLocalRegistry(registry: string): Promise<void> {
-    const m = /^(localhost|127\.0\.0\.1):(\d+)$/.exec(registry);
-    if (!m) return;
-    const port = m[2];
-    const env = getWaffleExecutionEnv();
-    try {
-      await execFileAsync('curl', ['-fsS', '-m', '3', `http://localhost:${port}/v2/`]);
-      return;
-    } catch {
-      // not reachable yet; deploy it
-    }
-    this.logToRun(`[BUILDS] No registry on ${registry}; deploying in-cluster registry (namespace "registry")...`);
-    const manifest = `apiVersion: v1
-kind: Namespace
-metadata:
-  name: registry
-  labels:
-    pod-security.kubernetes.io/enforce: privileged
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: registry
-  namespace: registry
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: registry
-  template:
-    metadata:
-      labels:
-        app: registry
-    spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  # k3s/k3d set this label to "true"; kubeadm sets it to "".
-                  # A nodeSelector can only express one value, so use an
-                  # affinity In-list covering both (registry portability).
-                  - key: node-role.kubernetes.io/control-plane
-                    operator: In
-                    values: ["true", ""]
-      tolerations:
-        - key: "node-role.kubernetes.io/control-plane"
-          operator: "Exists"
-          effect: "NoSchedule"
-        - key: "node-role.kubernetes.io/master"
-          operator: "Exists"
-          effect: "NoSchedule"
-      containers:
-        - name: registry
-          image: registry:2
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 5000
-              hostPort: ${port}
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/registry
-      volumes:
-        - name: data
-          hostPath:
-            path: /var/lib/vow-registry
-            type: DirectoryOrCreate
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: registry
-  namespace: registry
-spec:
-  selector:
-    app: registry
-  ports:
-    - port: 5000
-      targetPort: 5000
-`;
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn('kubectl', ['apply', '-f', '-'], { env });
-        let err = '';
-        // Drain BOTH streams: an undrained stdout pipe fills its buffer
-        // (~64KB) and blocks kubectl forever, hanging the pipeline.
-        proc.stdout?.on('data', () => {});
-        proc.stderr?.on('data', (d) => (err += d.toString()));
-        proc.stdin?.on('error', () => {});
-        proc.on('close', (c) => (c === 0 ? resolve() : reject(new Error(err || `kubectl apply exited ${c}`))));
-        proc.on('error', reject);
-        proc.stdin?.end(manifest);
-      });
-      await execFileAsync('kubectl', ['rollout', 'status', 'deployment/registry', '-n', 'registry', '--timeout=120s'], { env });
-      for (let i = 0; i < 15; i++) {
-        try {
-          await execFileAsync('curl', ['-fsS', '-m', '3', `http://localhost:${port}/v2/`]);
-          this.logToRun(`[BUILDS] In-cluster registry is serving on ${registry}.`);
-          return;
-        } catch {
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-      }
-      this.logToRun(`[BUILDS] Notice: registry deployed but ${registry} not reachable yet; relying on containerd import.`);
-    } catch (e) {
-      this.logToRun(`[BUILDS] Notice: could not deploy in-cluster registry: ${errMessage(e).split('\n')[0]}`);
-    }
+    return ensureLocalRegistryImpl(registry, (message) => this.logToRun(message));
   }
 
   /**
@@ -760,52 +356,7 @@ spec:
    * node and every other cluster node. Throws on failure so the build is not reported as OK.
    */
   private async importImageToCluster(target: { name: string; image: string; tag?: string }, fullTag: string): Promise<void> {
-    const shortName = `${target.image}:${target.tag || 'latest'}`;
-    const names = [fullTag, shortName, `docker.io/${shortName}`];
-    for (const n of names.slice(1)) {
-      await execFileAsync('docker', ['tag', fullTag, n]);
-    }
-    const env = getWaffleExecutionEnv();
-
-    // Local node (control plane / this host): stream docker save into
-    // containerd's importer — no shell, no buffering of the image stream.
-    await pipeExecs(
-      { file: 'docker', args: ['save', ...names] },
-      { file: 'sudo', args: ['k3s', 'ctr', '-n', 'k8s.io', 'images', 'import', '-'] },
-      { env }
-    );
-    this.logToRun(`[BUILDS] Imported ${fullTag} into local containerd.`);
-
-    // Peer nodes, discovered from the cluster (not hardcoded)
-    const localIps = new Set(
-      Object.values(os.networkInterfaces()).flatMap((l) => (l || []).map((a) => a.address))
-    );
-    let peers: string[] = [];
-    try {
-      const { stdout } = await execFileAsync(
-        'kubectl',
-        ['get', 'nodes', '-o', 'jsonpath={range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\\n"}{end}'],
-        { env }
-      );
-      peers = stdout.split('\n').map((l) => l.trim()).filter((ip) => ip && !localIps.has(ip) && isIpAddressLiteral(ip));
-    } catch {
-      // cannot list nodes; single-node assumption
-    }
-    for (const ip of peers) {
-      try {
-        await pipeExecs(
-          { file: 'docker', args: ['save', ...names] },
-          {
-            file: 'ssh',
-            args: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', ip, 'sudo k3s ctr -n k8s.io images import -'],
-          },
-          { env }
-        );
-        this.logToRun(`[BUILDS] Imported ${fullTag} into node ${ip}.`);
-      } catch (e) {
-        throw new Error(`failed to import ${fullTag} into node ${ip}: ${errMessage(e).split('\n')[0]}`, { cause: e });
-      }
-    }
+    return importImageToClusterImpl(target, fullTag, (message) => this.logToRun(message));
   }
 
   /**
@@ -1111,40 +662,7 @@ spec:
    * Verifies health of deployed resources
    */
   private async verifyStepHealth(step: WaffleStep, namespace: string, log: (msg: string) => void): Promise<void> {
-    const health = step.healthCheck;
-    if (!health) {
-      // Default health check: wait for pods in namespace with app label
-      try {
-        await execFileAsync(
-          'kubectl',
-          ['rollout', 'status', `deployment/${step.releaseName || step.id}`, '-n', namespace, '--timeout=60s'],
-          { env: getWaffleExecutionEnv() }
-        );
-        log('Deployment rollout status confirmed ready.');
-      } catch {
-        // Rollout status is optional if chart has no matching single deployment name
-      }
-      return;
-    }
-
-    if (health.type === 'storageClass' && health.name) {
-      log(`Checking StorageClass: "${health.name}"...`);
-      await execFileAsync('kubectl', ['get', 'sc', health.name], { env: getWaffleExecutionEnv() });
-      log(`StorageClass "${health.name}" is verified.`);
-    } else if (health.type === 'podReady') {
-      const releaseName = step.releaseName || step.id;
-      log(`Waiting for pods associated with release "${releaseName}"...`);
-      try {
-        await execFileAsync(
-          'kubectl',
-          ['wait', '--for=condition=ready', 'pod', '-l', `app.kubernetes.io/instance=${releaseName}`, '-n', namespace, `--timeout=${health.timeout || '2m'}`],
-          { env: getWaffleExecutionEnv() }
-        );
-        log('Pod readiness verified.');
-      } catch {
-        log('Warning: Pod readiness wait timed out or matched no pods; proceeding.');
-      }
-    }
+    return verifyStepHealthImpl(step, namespace, log);
   }
 
   private logToRun(message: string): void {
