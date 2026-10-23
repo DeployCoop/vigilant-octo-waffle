@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAbilityContext } from '@/lib/ability';
 import { apiErrorMessage } from '@/lib/envelope';
 import {
@@ -97,7 +97,7 @@ export default function PodsPage() {
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const fetchPods = async () => {
+  const fetchPods = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
     try {
@@ -136,7 +136,7 @@ export default function PodsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedNamespace]);
 
   const openAiDiagnose = async (pod: PodInfo) => {
     setActiveDiagnosePod(pod);
@@ -166,7 +166,7 @@ export default function PodsPage() {
 
   useEffect(() => {
     fetchPods();
-  }, [selectedNamespace]);
+  }, [fetchPods]);
 
   useEffect(() => {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });

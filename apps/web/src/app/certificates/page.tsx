@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   ShieldAlert,
   Copy,
@@ -43,7 +43,7 @@ export default function CertificatesPage() {
   const [switchingDomain, setSwitchingDomain] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const fetchDns = async () => {
+  const fetchDns = useCallback(async () => {
     try {
       const res = await fetch(`/api/dns?ips=${encodeURIComponent(targetIps)}`);
       const result = await res.json();
@@ -51,11 +51,11 @@ export default function CertificatesPage() {
     } catch {
       // offline
     }
-  };
+  }, [targetIps]);
 
   useEffect(() => {
     fetchDns();
-  }, [targetIps]);
+  }, [fetchDns]);
 
   const copyToClipboard = async (text: string, section: string) => {
     await copyText(text);

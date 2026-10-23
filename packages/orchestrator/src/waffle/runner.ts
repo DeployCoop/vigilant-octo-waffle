@@ -19,6 +19,42 @@ function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * CodeQL round 3 (js/path-injection): blueprint-supplied paths must stay
+ * inside the directory they are resolved against. Mirrors the confinement
+ * check in executor.ts (validateCommand): resolve, then require the result
+ * to be the base itself or strictly beneath it.
+ */
+export function resolvePathWithinBase(
+  baseDir: string,
+  relPath: string,
+  targetName: string,
+  field: string
+): string {
+  const resolvedBase = path.resolve(baseDir);
+  const resolved = path.resolve(resolvedBase, relPath);
+  if (resolved !== resolvedBase && !resolved.startsWith(resolvedBase + path.sep)) {
+    throw new Error(
+      `Build target "${targetName}": ${field} path "${relPath}" resolves outside its base directory (${resolvedBase})`
+    );
+  }
+  return resolved;
+}
+
+/**
+ * CodeQL round 3 (js/shell-command-constructed-from-input): execution is
+ * argv-form, so there is no shell to inject into — but git parses any argv
+ * element beginning with '-' as an option wherever a repo/ref is expected
+ * (clone's -c / --upload-pack class). Reject such blueprint values outright.
+ */
+export function assertSafeGitValue(targetName: string, field: string, value: string): void {
+  if (value.startsWith('-')) {
+    throw new Error(
+      `Build target "${targetName}": git ${field} "${value}" must not begin with '-' (it would be parsed as a git option)`
+    );
+  }
+}
+
 // ============================================================================
 // 4. WAFFLE RUNNER & REAL-TIME PROGRESS TRACKING
 // ============================================================================
@@ -475,7 +511,25 @@ export class WaffleRunner extends EventEmitter {
     dryRun?: boolean
   ): Promise<void> {
     const fullTag = `${registry}/${target.image}:${target.tag || 'latest'}`;
-    const contextPath = path.resolve(baseDir, target.context);
+    // Validate every blueprint-supplied path and git value before any
+    // subprocess runs (CodeQL round 3): paths must stay inside the project
+    // directory, and git repos/refs must not look like git options.
+    const contextPath = resolvePathWithinBase(baseDir, target.context, target.name, 'context');
+    const gitConfig: WaffleGitSource | undefined = target.git
+      ? typeof target.git === 'string'
+        ? { repo: target.git }
+        : target.git
+      : undefined;
+    let cloneDir = contextPath;
+    if (gitConfig) {
+      assertSafeGitValue(target.name, 'repo', gitConfig.repo);
+      if (gitConfig.branch) assertSafeGitValue(target.name, 'branch', gitConfig.branch);
+      if (gitConfig.commit) assertSafeGitValue(target.name, 'commit', gitConfig.commit);
+      if (gitConfig.tag) assertSafeGitValue(target.name, 'tag', gitConfig.tag);
+      if (gitConfig.dir) {
+        cloneDir = resolvePathWithinBase(baseDir, gitConfig.dir, target.name, 'git dir');
+      }
+    }
 
     if (dryRun) {
       const gitInfo = target.git ? ` (git: ${typeof target.git === 'string' ? target.git : target.git.repo})` : '';
@@ -486,11 +540,7 @@ export class WaffleRunner extends EventEmitter {
     await this.ensureLocalRegistry(registry);
 
     // 1. Auto-clone or pull from Git if target.git is defined
-    if (target.git) {
-      const gitConfig: WaffleGitSource =
-        typeof target.git === 'string' ? { repo: target.git } : target.git;
-      const cloneDir = gitConfig.dir ? path.resolve(baseDir, gitConfig.dir) : contextPath;
-
+    if (gitConfig) {
       try {
         const hasGit = fs.existsSync(path.join(cloneDir, '.git'));
         const isEmpty = !fs.existsSync(cloneDir) || fs.readdirSync(cloneDir).length === 0;
@@ -509,7 +559,10 @@ export class WaffleRunner extends EventEmitter {
           if (gitConfig.branch) cloneArgs.push('-b', gitConfig.branch);
           if (gitConfig.depth && !gitConfig.commit) cloneArgs.push('--depth', String(gitConfig.depth));
           if (gitConfig.submodules) cloneArgs.push('--recurse-submodules');
-          cloneArgs.push(repoUrl, cloneDir);
+          // '--' ends option parsing: the repo and directory are positional
+          // from here on, whatever they look like (defense in depth behind
+          // the assertSafeGitValue check above).
+          cloneArgs.push('--', repoUrl, cloneDir);
           await execFileAsync('git', cloneArgs);
 
           if (gitConfig.commit) {
@@ -535,7 +588,9 @@ export class WaffleRunner extends EventEmitter {
       }
     }
 
-    const dockerfilePath = target.dockerfile ? path.resolve(contextPath, target.dockerfile) : path.join(contextPath, 'Dockerfile');
+    const dockerfilePath = target.dockerfile
+      ? resolvePathWithinBase(contextPath, target.dockerfile, target.name, 'dockerfile')
+      : path.join(contextPath, 'Dockerfile');
 
     this.logToRun(`[BUILDS] Building target "${target.name}" -> ${fullTag}...`);
     try {

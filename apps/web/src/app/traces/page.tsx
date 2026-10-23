@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Activity,
   Search,
@@ -44,7 +44,15 @@ export default function TracesStudioPage() {
   const [selectedService, setSelectedService] = useState('all');
   const [minDuration, setMinDuration] = useState(0);
 
-  const loadTraces = async () => {
+  // Latest-value ref: loadTraces reads the selected trace only to
+  // re-sync it against the fresh list, so the read must not become a
+  // fetch trigger (see PR-13 notes).
+  const selectedTraceRef = useRef(selectedTrace);
+  useEffect(() => {
+    selectedTraceRef.current = selectedTrace;
+  });
+
+  const loadTraces = useCallback(async () => {
     setLoading(true);
     try {
       const q = new URLSearchParams();
@@ -55,6 +63,7 @@ export default function TracesStudioPage() {
       const data = await res.json();
       const list: TraceWaterfall[] = data.traces || [];
       setTraces(list);
+      const selectedTrace = selectedTraceRef.current;
       if (list.length > 0 && !selectedTrace) {
         setSelectedTrace(list[0]);
       } else if (selectedTrace) {
@@ -66,11 +75,11 @@ export default function TracesStudioPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedService, minDuration]);
 
   useEffect(() => {
     loadTraces();
-  }, [selectedService, minDuration]);
+  }, [loadTraces]);
 
   return (
     <div className="space-y-6">
