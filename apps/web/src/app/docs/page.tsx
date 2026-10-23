@@ -69,6 +69,73 @@ const SECTIONS: DocSection[] = [
   { id: 'cli-env', title: 'Environment Variables (.env)', category: 'CLI & Automation', icon: Settings, keywords: ['env', 'default.env', 'variables', 'config'] },
 ];
 
+// Helper Code Block Component
+interface CodeBlockProps {
+  code: string;
+  language?: string;
+  id: string;
+  allowRun?: boolean;
+  copiedKey: string | null;
+  runningCmd: string | null;
+  onCopy: (text: string, key: string) => void;
+  onRunCommand: (cmd: string) => void;
+}
+
+const CodeBlock = ({
+  code,
+  language = 'bash',
+  id,
+  allowRun = false,
+  copiedKey,
+  runningCmd,
+  onCopy,
+  onRunCommand,
+}: CodeBlockProps) => {
+  const isCopied = copiedKey === id;
+  const isRunning = runningCmd === code;
+
+  return (
+    <div className="my-3 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-900/90 border-b border-slate-800 text-[11px] font-mono">
+        <span className="font-semibold text-slate-400 uppercase tracking-wider">{language}</span>
+        <div className="flex items-center space-x-2">
+          {allowRun && (
+            <button
+              onClick={() => onRunCommand(code)}
+              disabled={isRunning}
+              className="flex items-center space-x-1 px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-sans text-[10px] transition-colors cursor-pointer"
+              title={`Run command in live terminal: ${code}`}
+            >
+              <Play className={`w-2.5 h-2.5 fill-current ${isRunning ? 'animate-spin' : ''}`} />
+              <span>{isRunning ? 'Running...' : 'Run in Terminal'}</span>
+            </button>
+          )}
+          <button
+            onClick={() => onCopy(code, id)}
+            className="flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-sans text-[10px] transition-colors cursor-pointer"
+            title="Copy snippet"
+          >
+            {isCopied ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span className="text-emerald-400">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3 h-3" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+      <pre className="p-4 text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+};
+
 export default function DocumentationPage() {
   const { openTerminal } = useTerminal();
   const [activeSection, setActiveSection] = useState<string>('custom-charts-overview');
@@ -142,63 +209,6 @@ export default function DocumentationPage() {
   });
 
   const categories = Array.from(new Set(SECTIONS.map((s) => s.category)));
-
-  // Helper Code Block Component
-  const CodeBlock = ({
-    code,
-    language = 'bash',
-    id,
-    allowRun = false,
-  }: {
-    code: string;
-    language?: string;
-    id: string;
-    allowRun?: boolean;
-  }) => {
-    const isCopied = copiedKey === id;
-    const isRunning = runningCmd === code;
-
-    return (
-      <div className="my-3 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden shadow-sm">
-        <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-900/90 border-b border-slate-800 text-[11px] font-mono">
-          <span className="font-semibold text-slate-400 uppercase tracking-wider">{language}</span>
-          <div className="flex items-center space-x-2">
-            {allowRun && (
-              <button
-                onClick={() => handleRunCommand(code)}
-                disabled={isRunning}
-                className="flex items-center space-x-1 px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-sans text-[10px] transition-colors cursor-pointer"
-                title={`Run command in live terminal: ${code}`}
-              >
-                <Play className={`w-2.5 h-2.5 fill-current ${isRunning ? 'animate-spin' : ''}`} />
-                <span>{isRunning ? 'Running...' : 'Run in Terminal'}</span>
-              </button>
-            )}
-            <button
-              onClick={() => handleCopy(code, id)}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-sans text-[10px] transition-colors cursor-pointer"
-              title="Copy snippet"
-            >
-              {isCopied ? (
-                <>
-                  <Check className="w-3 h-3 text-emerald-400" />
-                  <span className="text-emerald-400">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-        <pre className="p-4 text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">
-          <code>{code}</code>
-        </pre>
-      </div>
-    );
-  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20">
@@ -416,6 +426,7 @@ export default function DocumentationPage() {
             </p>
 
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="env-charts-dir"
               language="bash"
               code={`# Relative to repo root:
@@ -443,6 +454,7 @@ THIS_CHARTS_DIR="/home/developer/helm-charts"`}
             </p>
 
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="dir-tree"
               language="text"
               code={`charts/ (or whatever path is set in THIS_CHARTS_DIR)
@@ -491,6 +503,7 @@ THIS_CHARTS_DIR="/home/developer/helm-charts"`}
             </p>
 
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="chart-yaml-example"
               language="yaml"
               code={`apiVersion: v2
@@ -575,6 +588,7 @@ maintainers:
             </p>
 
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="values-yaml-example"
               language="yaml"
               code={`replicaCount: 1
@@ -642,6 +656,7 @@ probes:
 
             <h3 className="text-sm font-semibold text-slate-200">1. Standard `templates/_helpers.tpl`</h3>
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="helpers-tpl-example"
               language="gotemplate"
               code={`{{/*
@@ -677,6 +692,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 
             <h3 className="text-sm font-semibold text-slate-200 pt-2">2. Production Deployment (`templates/deployment.yaml`)</h3>
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="deployment-yaml-example"
               language="yaml"
               code={`apiVersion: apps/v1
@@ -740,6 +756,7 @@ spec:
             </p>
 
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="ingress-yaml-example"
               language="yaml"
               code={`{{- if .Values.ingress.enabled -}}
@@ -796,6 +813,7 @@ spec:
             </p>
 
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="pvc-yaml-example"
               language="yaml"
               code={`apiVersion: v1
@@ -837,6 +855,7 @@ spec:
                   Checks for YAML syntax errors, missing <code className="text-slate-300">Chart.yaml</code> fields, and template discrepancies. In the Helm Hub UI, click the shield icon on any chart card.
                 </p>
                 <CodeBlock
+                  copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                   id="cli-lint"
                   language="bash"
                   code="helm lint ./example.charts/sample-app"
@@ -853,6 +872,7 @@ spec:
                   Renders all Go templates with default or custom values, producing the exact Kubernetes manifests that would be submitted to the cluster. In Helm Hub UI, click the code icon.
                 </p>
                 <CodeBlock
+                  copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                   id="cli-template"
                   language="bash"
                   code="helm template sample-app ./example.charts/sample-app"
@@ -896,6 +916,7 @@ spec:
                   You can deploy directly using the standard Helm CLI:
                 </p>
                 <CodeBlock
+                  copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                   id="cli-deploy"
                   language="bash"
                   code="helm upgrade --install sample-app ./example.charts/sample-app --namespace default --create-namespace --wait --timeout 3m"
@@ -912,6 +933,7 @@ spec:
                   Switch to the <strong>In-Cluster Releases</strong> tab in Helm Hub to view all deployed revisions, namespaces, and inspect raw deployed values with one click.
                 </p>
                 <CodeBlock
+                  copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                   id="cli-helm-list"
                   language="bash"
                   code="helm list -A"
@@ -967,6 +989,7 @@ spec:
             <div className="space-y-2 pt-2">
               <h4 className="text-xs font-semibold text-slate-200">How to Copy a Sample Chart into Your Active Directory:</h4>
               <CodeBlock
+                copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                 id="copy-sample-cmd"
                 language="bash"
                 code="cp -r example.charts/sample-app ./charts/my-new-app"
@@ -1001,6 +1024,7 @@ spec:
                   In K3s or KinD on certain networks, unauthenticated pulls of pause images may trigger 400 or 429 errors from Docker Hub. You can pre-pull the image or configure a mirror in <code className="text-slate-200">/etc/rancher/k3s/registries.yaml</code>.
                 </p>
                 <CodeBlock
+                  copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                   id="cli-docker-pause"
                   language="bash"
                   code="docker pull rancher/mirrored-pause:3.10.2 && k3s ctr images import ..."
@@ -1013,6 +1037,7 @@ spec:
                   Occurs on fresh K3s baremetal node starts while the Flannel CNI pod is initializing. Kubelet waits until Flannel allocates the node&apos;s pod CIDR subnet. Verify Flannel daemonset status:
                 </p>
                 <CodeBlock
+                  copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                   id="cli-flannel"
                   language="bash"
                   code="kubectl -n kube-system get pods -l app=flannel"
@@ -1039,6 +1064,7 @@ spec:
             </p>
 
             <CodeBlock
+              copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
               id="arch-flow"
               language="text"
               code={`       [.env / .env.enabler]
@@ -1079,6 +1105,7 @@ spec:
                   Worker nodes execute user workloads. Generate join scripts or copy single-line curl commands from <Link href="/cluster" className="text-sky-400 underline">Cluster Control</Link> or run:
                 </p>
                 <CodeBlock
+                  copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                   id="cli-add-node"
                   language="bash"
                   code="./up k3s:add-node --role agent"
@@ -1092,6 +1119,7 @@ spec:
                   Provision and join remote machines non-interactively over SSH with automatic token distribution:
                 </p>
                 <CodeBlock
+                  copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand}
                   id="cli-ssh-join"
                   language="bash"
                   code="./up k3s:add-node --role agent --ssh ubuntu@192.168.1.50"
@@ -1178,22 +1206,22 @@ spec:
             <div className="space-y-3">
               <div>
                 <span className="text-xs font-semibold text-slate-200">Start the Cluster & Deploy Enabled Workloads:</span>
-                <CodeBlock id="cmd-up" language="bash" code="./up" allowRun />
+                <CodeBlock id="cmd-up" language="bash" code="./up" allowRun copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand} />
               </div>
 
               <div>
                 <span className="text-xs font-semibold text-slate-200">Deploy a Specific Target Application:</span>
-                <CodeBlock id="cmd-up-app" language="bash" code="./up keycloak" allowRun />
+                <CodeBlock id="cmd-up-app" language="bash" code="./up keycloak" allowRun copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand} />
               </div>
 
               <div>
                 <span className="text-xs font-semibold text-slate-200">Check Cluster Health & Pod Status:</span>
-                <CodeBlock id="cmd-status" language="bash" code="./status.sh" allowRun />
+                <CodeBlock id="cmd-status" language="bash" code="./status.sh" allowRun copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand} />
               </div>
 
               <div>
                 <span className="text-xs font-semibold text-slate-200">Scaffold a New Application Template:</span>
-                <CodeBlock id="cmd-newapp" language="bash" code="./newApp.sh my-service" allowRun />
+                <CodeBlock id="cmd-newapp" language="bash" code="./newApp.sh my-service" allowRun copiedKey={copiedKey} runningCmd={runningCmd} onCopy={handleCopy} onRunCommand={handleRunCommand} />
               </div>
             </div>
           </section>

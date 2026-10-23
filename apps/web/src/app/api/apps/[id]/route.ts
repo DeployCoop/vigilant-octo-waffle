@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import {
-  APP_CATALOG,
   getCombinedAppCatalog,
   ArgoManager,
   FluxManager,
@@ -49,8 +48,8 @@ export async function GET(
       let templatedYaml = '';
       try {
         templatedYaml = await templateLocalChart(root, id, { valuesYaml: overrideManifest || undefined });
-      } catch (err: any) {
-        templatedYaml = `# Helm template preview error:\n# ${err.message}`;
+      } catch (err) {
+        templatedYaml = `# Helm template preview error:\n# ${err instanceof Error ? err.message : String(err)}`;
       }
 
       return NextResponse.json({
@@ -78,7 +77,7 @@ export async function GET(
         overrideManifest = prep.overrideManifest || null;
         templatedYaml = prep.templatedYaml;
         source = prep.source;
-      } catch (err: any) {
+      } catch {
         // fallback
       }
 

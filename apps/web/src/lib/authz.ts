@@ -497,7 +497,7 @@ type RouteHandler<Ctx = unknown> = (req: Request, ctx: Ctx) => Promise<Response>
 export function withAuthz<Ctx = unknown>(
   permission: Permission,
   handler: RouteHandler<Ctx>,
-  opts: { targetFromBody?: (body: any) => AuthzTarget | undefined } = {}
+  opts: { targetFromBody?: (body: unknown) => AuthzTarget | undefined } = {}
 ): RouteHandler<Ctx> {
   return async (req, ctx) => {
     let target: AuthzTarget | undefined;

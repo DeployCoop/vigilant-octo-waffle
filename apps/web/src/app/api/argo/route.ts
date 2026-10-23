@@ -12,7 +12,10 @@ export async function GET(req: Request) {
     const k8sClient = new K8sClient();
     const result = await k8sClient.getArgoApplications();
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ installed: false, applications: [], error: err.message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json(
+      { installed: false, applications: [], error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import {
-  APP_CATALOG,
   getCombinedAppCatalog,
   DEPLOYMENT_PRESETS,
   loadProjectConfig,
