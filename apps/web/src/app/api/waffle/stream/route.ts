@@ -1,5 +1,10 @@
 import { getProjectRoot } from '@/lib/project';
-import { getWaffleRunner } from '@vow/orchestrator';
+import {
+  getWaffleRunner,
+  type StageStatus,
+  type StepStatus,
+  type WaffleRunProgress,
+} from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +20,7 @@ export async function GET(req: Request) {
 
   const stream = new ReadableStream({
     start(controller) {
-      const sendEvent = (event: string, data: any) => {
+      const sendEvent = (event: string, data: unknown) => {
         try {
           const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
           controller.enqueue(encoder.encode(payload));
@@ -36,15 +41,20 @@ export async function GET(req: Request) {
         sendEvent('ping', { time: Date.now() });
       }, 15000);
 
-      // Event handlers
-      const onProgress = (data: any) => sendEvent('progress', data);
-      const onStepLog = (data: any) => sendEvent('step_log', data);
-      const onPipelineLog = (data: any) => sendEvent('pipeline_log', { line: typeof data === 'string' ? data : data.line });
-      const onStageStart = (data: any) => sendEvent('stage_start', data);
-      const onStepStart = (data: any) => sendEvent('step_start', data);
-      const onStepComplete = (data: any) => sendEvent('step_complete', data);
-      const onStageComplete = (data: any) => sendEvent('stage_complete', data);
-      const onFinish = (data: any) => sendEvent('finish', data);
+      // Event handlers — payload shapes are the runner's emit contracts
+      // (packages/orchestrator/src/waffle/runner.ts).
+      const onProgress = (data: WaffleRunProgress) => sendEvent('progress', data);
+      const onStepLog = (data: { stepId: string; line: string }) => sendEvent('step_log', data);
+      // pipeline_log is emitted only by WaffleRunner.logToRun(message: string).
+      const onPipelineLog = (line: string) => sendEvent('pipeline_log', { line });
+      const onStageStart = (data: { stageId: string; name: string }) => sendEvent('stage_start', data);
+      const onStepStart = (data: { stepId: string; name: string; stageId: string }) =>
+        sendEvent('step_start', data);
+      const onStepComplete = (data: { stepId: string; status: StepStatus; error?: string }) =>
+        sendEvent('step_complete', data);
+      const onStageComplete = (data: { stageId: string; status: StageStatus }) =>
+        sendEvent('stage_complete', data);
+      const onFinish = (data: WaffleRunProgress) => sendEvent('finish', data);
 
       runner.on('progress', onProgress);
       runner.on('step_log', onStepLog);

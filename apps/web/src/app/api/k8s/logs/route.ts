@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ logs });
-  } catch (err: any) {
+  } catch (err) {
     return routeError(err, { route: 'GET /api/k8s/logs' });
   }
 }

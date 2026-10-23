@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
     const graph = buildTopologyGraph(enabledAppIds, domain);
     return NextResponse.json(graph);
-  } catch (err: any) {
+  } catch (err) {
     return routeError(err, { route: 'GET /api/topology' });
   }
 }

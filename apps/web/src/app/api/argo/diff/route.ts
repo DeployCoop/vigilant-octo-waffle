@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getProjectRoot } from '@/lib/project';
-import { ArgoManager, loadProjectConfig } from '@vow/orchestrator';
+import { ArgoManager } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
 

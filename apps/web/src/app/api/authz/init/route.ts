@@ -93,8 +93,11 @@ export async function POST(req: Request) {
   // Ensure mkcert TLS certificate is generated for HTTPS hosting
   try {
     await ensureDevCertificate(root);
-  } catch (err: any) {
-    console.warn('[authz/init] Note on dev TLS certificate generation:', err?.message);
+  } catch (err) {
+    console.warn(
+      '[authz/init] Note on dev TLS certificate generation:',
+      err instanceof Error ? err.message : String(err)
+    );
   }
 
   return NextResponse.json(

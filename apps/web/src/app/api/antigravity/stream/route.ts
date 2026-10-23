@@ -49,8 +49,9 @@ export async function POST(req: Request) {
               controller.enqueue(encoder.encode(payload));
             }
           );
-        } catch (err: any) {
-          const errorPayload = `data: ${JSON.stringify({ type: 'error', error: err.message || 'Stream error' })}\n\n`;
+        } catch (err) {
+          const message = err instanceof Error && err.message ? err.message : 'Stream error';
+          const errorPayload = `data: ${JSON.stringify({ type: 'error', error: message })}\n\n`;
           controller.enqueue(encoder.encode(errorPayload));
         } finally {
           controller.close();
@@ -66,8 +67,8 @@ export async function POST(req: Request) {
         'X-Accel-Buffering': 'no',
       },
     });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
