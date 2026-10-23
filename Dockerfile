@@ -54,16 +54,27 @@ FROM base AS builder
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/ ./packages/
 COPY apps/ ./apps/
+# The orchestrator shells out to the bash runners and templates under
+# src/ at runtime and locates the workspace root via src/default.env;
+# the tree must ship in the image (Plan III §8.4 runtime contents).
+COPY src/ ./src/
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
+
+# Ship production-only node_modules in the runner stage (Plan III §8.4):
+# prune devDependencies from every workspace importer after the build.
+RUN pnpm prune --prod
 
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-COPY --from=builder /app ./
+# Run as the image's non-root node user (uid 1000, Plan III §8.4). The
+# app writes runtime state (.vow/) under /app, so the copy is chowned.
+COPY --from=builder --chown=node:node /app ./
+USER node
 
 EXPOSE 3000
 CMD ["pnpm", "start"]
