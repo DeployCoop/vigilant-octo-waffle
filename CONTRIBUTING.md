@@ -43,6 +43,16 @@ budget set at the count when the ratchet landed (web 376, orchestrator
 holds the ShellCheck warning budget (70). CI fails if a count rises;
 when you lower a count, lower its budget in the same PR.
 
+File size (Plan III §7.1): keep source files under 1,000 lines. When a
+file grows past the limit, split it along its natural seams — the way
+the big pages, modals, and engine modules in this repo were split —
+rather than letting it keep growing. A step in the **Lint** job lists
+every tracked `apps/`/`packages/` source file over the limit (tests and
+generated files excluded) as a `::warning` annotation. For now the step
+**only warns** and never fails the job; per the decision of 2026-10-21
+it becomes a failure in a later cycle, so treat a warning on a file you
+are already touching as part of the change.
+
 ## A note on native dependencies (allowBuilds)
 
 pnpm 11 refuses to install when a dependency's build script has no

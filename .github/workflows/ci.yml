@@ -170,6 +170,24 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # Plan III §7.1: the 1,000-line rule. WARN ONLY — the step always
+      # exits 0; per the Q3 decision (2026-10-21) it becomes a failure in
+      # a later cycle. It needs no toolchain (git + wc), so it runs
+      # before setup. Tracked source = ts/tsx under apps/ and packages/,
+      # excluding tests and the generated next-env.d.ts (CONTRIBUTING.md).
+      - name: File-size warning (1,000-line rule, non-blocking)
+        run: |
+          offenders=0
+          while IFS= read -r file; do
+            lines=$(wc -l < "$file")
+            if [ "$lines" -gt 1000 ]; then
+              echo "::warning file=$file::Source file is $lines lines, over the 1,000-line rule — split it along its natural seams (Plan III §7.1)"
+              offenders=$((offenders + 1))
+            fi
+          done < <(git ls-files 'apps' 'packages' | grep -E '\.tsx?$' | grep -vE '\.test\.tsx?$|__tests__/|next-env\.d\.ts$')
+          echo "Source files over 1,000 lines: $offenders (warning only — becomes a failure in a later cycle)"
+          exit 0
+
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
