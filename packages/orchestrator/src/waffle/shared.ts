@@ -34,3 +34,16 @@ export function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * Internal debug channel (Plan III §5.7 bare-catch audit): silent unless
+ * VOW_DEBUG is set in the environment. Catch sites whose fallback is
+ * deliberate but whose failure would otherwise be invisible (registry
+ * probe, git refresh, peer discovery, rollout health check) report here.
+ * Writes to stderr only — never to run output — and the gate is read at
+ * call time so it can be toggled per process.
+ */
+export function debug(message: string): void {
+  if (process.env.VOW_DEBUG) {
+    process.stderr.write(`[waffle:debug] ${message}\n`);
+  }
+}

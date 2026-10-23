@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 import { execFileAsync, pipeExecs, isIpAddressLiteral } from '../exec-argv.js';
-import { getWaffleExecutionEnv, errMessage, type WaffleLogFn } from './shared.js';
+import { getWaffleExecutionEnv, errMessage, debug, type WaffleLogFn } from './shared.js';
 import { type WaffleGitSource, type WafflePipeline, type WaffleBuildTarget } from './schema.js';
 
 /**
@@ -162,12 +162,20 @@ export async function buildSingleTarget(
         log(`[BUILDS] Target "${target.name}": Repository successfully cloned into ${cloneDir}.`);
       } else if (hasGit) {
         log(`[BUILDS] Target "${target.name}": Existing repository detected at ${cloneDir}; fetching updates...`);
-        await execFileAsync('git', ['-C', cloneDir, 'fetch', '--tags']).catch(() => {});
+        await execFileAsync('git', ['-C', cloneDir, 'fetch', '--tags']).catch((err: unknown) => {
+          debug(`buildSingleTarget "${target.name}": git fetch --tags failed: ${errMessage(err)}`);
+        });
         if (gitConfig.branch) {
-          await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.branch]).catch(() => {});
-          await execFileAsync('git', ['-C', cloneDir, 'pull', 'origin', gitConfig.branch]).catch(() => {});
+          await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.branch]).catch((err: unknown) => {
+            debug(`buildSingleTarget "${target.name}": git checkout ${gitConfig.branch} failed: ${errMessage(err)}`);
+          });
+          await execFileAsync('git', ['-C', cloneDir, 'pull', 'origin', gitConfig.branch]).catch((err: unknown) => {
+            debug(`buildSingleTarget "${target.name}": git pull origin ${gitConfig.branch} failed: ${errMessage(err)}`);
+          });
         } else if (gitConfig.commit) {
-          await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.commit]).catch(() => {});
+          await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.commit]).catch((err: unknown) => {
+            debug(`buildSingleTarget "${target.name}": git checkout ${gitConfig.commit} failed: ${errMessage(err)}`);
+          });
         } else if (gitConfig.tag) {
           await execFileAsync('git', ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`]);
         }
@@ -241,8 +249,10 @@ export async function ensureLocalRegistry(registry: string, log: WaffleLogFn): P
   try {
     await execFileAsync('curl', ['-fsS', '-m', '3', `http://localhost:${port}/v2/`]);
     return;
-  } catch {
-    // not reachable yet; deploy it
+  } catch (err) {
+    // Not reachable yet; deploy it. The probe error itself goes nowhere
+    // else, so leave a debug trace (§5.7).
+    debug(`ensureLocalRegistry: probe of ${registry} failed: ${errMessage(err)}`);
   }
   log(`[BUILDS] No registry on ${registry}; deploying in-cluster registry (namespace "registry")...`);
   const manifest = `apiVersion: v1
@@ -377,8 +387,11 @@ export async function importImageToCluster(target: { name: string; image: string
       { env }
     );
     peers = stdout.split('\n').map((l) => l.trim()).filter((ip) => ip && !localIps.has(ip) && isIpAddressLiteral(ip));
-  } catch {
-    // cannot list nodes; single-node assumption
+  } catch (err) {
+    // Cannot list nodes; single-node assumption. A genuine peer-discovery
+    // failure is indistinguishable from a single-node cluster at this
+    // point, so leave a debug trace (§5.7).
+    debug(`importImageToCluster: listing cluster nodes failed: ${errMessage(err)}`);
   }
   for (const ip of peers) {
     try {

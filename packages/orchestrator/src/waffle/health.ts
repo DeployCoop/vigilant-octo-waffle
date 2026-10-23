@@ -4,7 +4,7 @@
  * delegates to this function with the per-step log.
  */
 import { execFileAsync } from '../exec-argv.js';
-import { getWaffleExecutionEnv, type WaffleLogFn } from './shared.js';
+import { getWaffleExecutionEnv, errMessage, debug, type WaffleLogFn } from './shared.js';
 import { type WaffleStep } from './schema.js';
 
 /**
@@ -21,8 +21,11 @@ export async function verifyStepHealth(step: WaffleStep, namespace: string, log:
         { env: getWaffleExecutionEnv() }
       );
       log('Deployment rollout status confirmed ready.');
-    } catch {
-      // Rollout status is optional if chart has no matching single deployment name
+    } catch (err) {
+      // Rollout status is optional if chart has no matching single deployment name.
+      // A genuinely unready deployment is indistinguishable from that case
+      // here, so leave a debug trace (§5.7).
+      debug(`verifyStepHealth: rollout status for deployment/${step.releaseName || step.id} in namespace "${namespace}" failed: ${errMessage(err)}`);
     }
     return;
   }
