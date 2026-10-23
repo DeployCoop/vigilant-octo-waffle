@@ -62,34 +62,26 @@ COPY src/ ./src/
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
 
-# Ship production-only node_modules in the runner stage (Plan III §8.4).
-# This is a production re-install, not `pnpm prune --prod`: prune left
-# the recorded modules state describing the full install, and pnpm's
-# deps-status check then "repaired" it by running a production install
-# at `pnpm start` — i.e. at every container boot, needing network and
-# write access to the store. A production install records production
-# state, so the check is satisfied and start is instant and offline.
-# CI=true: the Docker build has no TTY, and pnpm otherwise aborts the
-# modules-directory purge it cannot confirm interactively.
-# --ignore-scripts: the pass re-runs workspace lifecycle scripts, and
-# the orchestrator's `prepare` is `tsc` — but TypeScript is a
-# devDependency being removed by this very pass. The dist output is
-# already built above; nothing needs to re-run.
-RUN CI=true pnpm install --prod --frozen-lockfile --ignore-scripts
+# Ship production-only node_modules in the runner stage (Plan III §8.4):
+# a production re-install across every workspace importer, after the
+# build. Two traps, both hit in this PR's CI and fixed the way pnpm
+# itself prescribes:
+# - No CI=true here: under CI, pnpm records enableGlobalVirtualStore
+#   as false in the install state, while the runtime (no CI) computes
+#   the pnpm 11 default — so `pnpm start`'s deps-status check judged
+#   the tree out of sync and reinstalled at every boot. The purge
+#   confirmation the build cannot answer interactively is instead
+#   disabled by name (pnpm_config_confirm_modules_purge=false).
+# - --ignore-scripts: the pass re-runs workspace lifecycle scripts,
+#   and the orchestrator's `prepare` is `tsc` — but TypeScript is a
+#   devDependency being removed by this very pass. The dist output is
+#   already built above; nothing needs to re-run.
+RUN pnpm_config_confirm_modules_purge=false pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-# pnpm's deps-status check (verifyDepsBeforeRun, default "install")
-# judges the production tree recorded by the builder stage as out of
-# sync in this stage and would answer `pnpm start` by reinstalling —
-# network and store writes at every boot. The tree is built from the
-# frozen lockfile in this same Dockerfile and is immutable at runtime,
-# so demote the check to a boot-log warning. (The env name is pnpm's
-# own override, read verbatim by @pnpm/config; the npm_config_ form
-# and .npmrc key do not reach this setting in pnpm 11.)
-ENV pnpm_config_verify_deps_before_run=warn
 
 # Run as the image's non-root node user (uid 1000, Plan III §8.4). The
 # app writes runtime state (.vow/) under /app, so the copy is chowned.
