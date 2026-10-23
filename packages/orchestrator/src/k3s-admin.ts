@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import * as k8s from '@kubernetes/client-node';
 
 const execAsync = promisify(exec);
 import { execFileAsync } from './exec-argv.js';
@@ -91,13 +92,13 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
 
     // 3. Inspect Nodes
     const { stdout: nodesOut } = await execAsync('kubectl get nodes -o json', { cwd: projectRoot });
-    const nodesData = JSON.parse(nodesOut);
+    const nodesData = JSON.parse(nodesOut) as k8s.V1NodeList;
     report.nodes.total = (nodesData.items || []).length;
 
     for (const node of nodesData.items || []) {
       const nodeName = node.metadata?.name || 'unknown';
       const conds = node.status?.conditions || [];
-      const readyCond = conds.find((c: any) => c.type === 'Ready');
+      const readyCond = conds.find((c) => c.type === 'Ready');
 
       if (readyCond?.status === 'True') {
         report.nodes.ready++;
@@ -107,7 +108,7 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
       }
 
       for (const p of ['MemoryPressure', 'DiskPressure', 'PIDPressure']) {
-        const cond = conds.find((c: any) => c.type === p);
+        const cond = conds.find((c) => c.type === p);
         if (cond?.status === 'True') {
           report.nodes.pressureAlerts.push(`${nodeName} has ${p}`);
           report.recommendations.push(`Node '${nodeName}' has active condition '${p}'`);
@@ -117,13 +118,13 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
 
     // 4. Inspect Pods in all namespaces
     const { stdout: podsOut } = await execAsync('kubectl get pods -A -o json', { cwd: projectRoot });
-    const podsData = JSON.parse(podsOut);
+    const podsData = JSON.parse(podsOut) as k8s.V1PodList;
     report.pods.total = (podsData.items || []).length;
 
     for (const pod of podsData.items || []) {
       const phase = pod.status?.phase;
       const cStatuses = pod.status?.containerStatuses || [];
-      const restarts = cStatuses.reduce((acc: number, c: any) => acc + (c.restartCount || 0), 0);
+      const restarts = cStatuses.reduce((acc: number, c) => acc + (c.restartCount || 0), 0);
       report.pods.totalRestarts += restarts;
 
       if (phase === 'Running') {
@@ -140,7 +141,7 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
         report.recommendations.push(`Pod '${ns}/${podName}' is failing (${phase})`);
       }
 
-      const isCrashLoop = cStatuses.some((c: any) => c.state?.waiting?.reason === 'CrashLoopBackOff');
+      const isCrashLoop = cStatuses.some((c) => c.state?.waiting?.reason === 'CrashLoopBackOff');
       if (isCrashLoop) {
         report.pods.failing++;
         const podName = pod.metadata?.name;
@@ -180,8 +181,8 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
     else if (report.score >= 50) report.grade = 'DEGRADED';
     else report.grade = 'CRITICAL';
 
-  } catch (err: any) {
-    report.recommendations.push(`Cluster unreachable: ${err.message}`);
+  } catch (err) {
+    report.recommendations.push(`Cluster unreachable: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return report;
@@ -237,7 +238,7 @@ export async function runK3sCisAudit(projectRoot: string): Promise<K3sCisHardeni
   // Check 3: Pod Security Standards enforcement
   try {
     const { stdout } = await execAsync('kubectl get namespaces -o json', { cwd: projectRoot });
-    const nsData = JSON.parse(stdout);
+    const nsData = JSON.parse(stdout) as k8s.V1NamespaceList;
     const namespacesWithoutPss: string[] = [];
 
     for (const ns of nsData.items || []) {
@@ -266,7 +267,7 @@ export async function runK3sCisAudit(projectRoot: string): Promise<K3sCisHardeni
   // Check 4: Default ServiceAccount automount tokens
   try {
     const { stdout } = await execAsync('kubectl get sa default -n default -o json', { cwd: projectRoot });
-    const sa = JSON.parse(stdout);
+    const sa = JSON.parse(stdout) as k8s.V1ServiceAccount;
     if (sa.automountServiceAccountToken === false) {
       findings.push({ id: 'CIS-5.1.5', description: 'Default service account automount token disabled', status: 'PASS', details: 'automountServiceAccountToken: false' });
     } else {
@@ -304,29 +305,29 @@ export async function runK3sCisAudit(projectRoot: string): Promise<K3sCisHardeni
 export async function getK3sNodes(projectRoot: string): Promise<K3sNodeDetail[]> {
   try {
     const { stdout } = await execAsync('kubectl get nodes -o json', { cwd: projectRoot });
-    const data = JSON.parse(stdout);
+    const data = JSON.parse(stdout) as k8s.V1NodeList;
 
-    return (data.items || []).map((node: any) => {
+    return (data.items || []).map((node) => {
       const name = node.metadata?.name || '';
       const labels = node.metadata?.labels || {};
       const roles = Object.keys(labels)
         .filter((k) => k.startsWith('node-role.kubernetes.io/'))
         .map((k) => k.replace('node-role.kubernetes.io/', ''));
 
-      const conds = (node.status?.conditions || []).map((c: any) => ({
+      const conds = (node.status?.conditions || []).map((c) => ({
         type: c.type,
         status: c.status,
         message: c.message,
       }));
 
-      const readyCond = conds.find((c: any) => c.type === 'Ready');
+      const readyCond = conds.find((c) => c.type === 'Ready');
       let status: K3sNodeDetail['status'];
       if (node.spec?.unschedulable) status = 'SchedulingDisabled';
       else if (readyCond?.status === 'True') status = 'Ready';
       else status = 'NotReady';
 
       const addresses = node.status?.addresses || [];
-      const internalIp = addresses.find((a: any) => a.type === 'InternalIP')?.address || 'unknown';
+      const internalIp = addresses.find((a) => a.type === 'InternalIP')?.address || 'unknown';
 
       return {
         name,
@@ -369,10 +370,10 @@ export async function drainK3sNodeLive(
       success: true,
       output: (stdout + '\n' + stderr).trim(),
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       success: false,
-      output: err.message,
+      output: err instanceof Error ? err.message : String(err),
     };
   }
 }
@@ -392,10 +393,10 @@ export async function cordonK3sNodeLive(
       success: true,
       message: `Node '${nodeName}' ${verb}ed successfully`,
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       success: false,
-      message: `Failed to ${verb} node '${nodeName}': ${err.message}`,
+      message: `Failed to ${verb} node '${nodeName}': ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }

@@ -205,9 +205,19 @@ export interface K3sSecurityScanResult {
   }>;
 }
 
-export async function getK3sSecurityStatus(projectRoot: string): Promise<any> {
+// Shape emitted by `k3s_security_scan.sh status --json` (distinct from
+// K3sSecurityScanResult above, which is the `scan` action's output).
+export interface K3sSecurityStatus {
+  trivyInstalled: boolean;
+  trivyVersion?: string;
+  operatorInstalled: boolean;
+  defaultSeverity?: string;
+  clusterAuditingReady: boolean;
+}
+
+export async function getK3sSecurityStatus(projectRoot: string): Promise<K3sSecurityStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_security_scan.sh');
-  return runSilentJsonQuery<any>(
+  return runSilentJsonQuery<K3sSecurityStatus>(
     'bash',
     [scriptPath, 'status', '--json'],
     projectRoot,

@@ -6,6 +6,69 @@ import * as path from 'node:path';
 import { processManager, type TaskRun } from '../executor.js';
 import { runSilentJsonQuery } from './shared.js';
 
+// JSON payload shapes emitted by the src/k3s_*.sh scripts queried below.
+// Only the fields each consumer reads are declared.
+interface HealerPayload {
+  issues?: K3sHealerIssue[];
+  healerReady?: boolean;
+  conditions?: {
+    diskPressure?: boolean;
+    rootDiskUsagePct?: number;
+    certExpiringSoon?: boolean;
+    crashLoopPods?: number;
+    supabaseCompatOk?: boolean;
+  };
+}
+
+interface DrDrillPayload {
+  latestDrill?: K3sDrDrillCert;
+  lastDrillDate?: string;
+  rtoSeconds?: number;
+  slaGrade?: string;
+  certificates?: string[];
+}
+
+interface GatewayPayload {
+  gatewayApiInstalled?: boolean;
+  defaultGatewayActive?: boolean;
+  domain?: string;
+  totalHttpRoutes?: number;
+  routes?: K3sGatewayRoute[];
+}
+
+interface PoolPayload {
+  hypervisors?: Record<string, unknown>;
+  activeNodes?: number;
+  pendingPodsRequiringNodes?: number;
+  pooledNodes?: K3sPooledNode[];
+}
+
+interface RightSizeRecommendationPayload {
+  workload?: string;
+  namespace?: string;
+  currentCpu?: string;
+  p95Cpu?: string;
+  recommendedCpu?: string;
+  currentMem?: string;
+  p95Mem?: string;
+  recommendedMem?: string;
+  wastePct?: number;
+}
+
+interface GpuPayload {
+  gpuModel?: string;
+  telemetry?: {
+    powerDrawWatts?: number;
+    powerLimitWatts?: number;
+    gpuUtilizationPct?: number;
+    vramUsedMb?: number;
+    vramTotalMb?: number;
+  };
+  finops?: {
+    estimatedCostPer1MTokensUsd?: number;
+  };
+}
+
 // ==============================================================================
 // Phase 7: Autonomous Self-Healing Watchdog
 // ==============================================================================
@@ -29,7 +92,7 @@ export interface K3sHealerStatus {
 
 export async function getK3sHealerStatus(projectRoot: string): Promise<K3sHealerStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_healer.sh');
-  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'check', '--json'], projectRoot, null);
+  const p = await runSilentJsonQuery<HealerPayload | null>('bash', [scriptPath, 'check', '--json'], projectRoot, null);
   if (p) {
     const issues: K3sHealerIssue[] = p.issues || [];
     if (p.conditions?.diskPressure) {
@@ -106,7 +169,7 @@ export interface K3sDrDrillStatus {
 
 export async function getK3sDrDrillStatus(projectRoot: string): Promise<K3sDrDrillStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_dr_drill.sh');
-  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'status', '--json'], projectRoot, null);
+  const p = await runSilentJsonQuery<DrDrillPayload | null>('bash', [scriptPath, 'status', '--json'], projectRoot, null);
   if (p) {
     return {
       latestDrill: p.latestDrill || {
@@ -168,7 +231,7 @@ export interface K3sGatewayStatus {
 
 export async function getK3sGatewayStatus(projectRoot: string): Promise<K3sGatewayStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_gateway.sh');
-  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'status', '--json'], projectRoot, null);
+  const p = await runSilentJsonQuery<GatewayPayload | null>('bash', [scriptPath, 'status', '--json'], projectRoot, null);
   if (p) {
     return {
       crdsInstalled: p.gatewayApiInstalled ?? false,
@@ -263,7 +326,7 @@ export interface K3sPoolStatus {
 
 export async function getK3sPoolStatus(projectRoot: string): Promise<K3sPoolStatus> {
   const scriptPath = path.join(projectRoot, 'src', 'k3s_pool.sh');
-  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'list', '--json'], projectRoot, null);
+  const p = await runSilentJsonQuery<PoolPayload | null>('bash', [scriptPath, 'list', '--json'], projectRoot, null);
   if (p) {
     const hypervisors = Object.entries(p.hypervisors || {})
       .filter(([, v]) => Boolean(v))
@@ -352,9 +415,9 @@ export async function getK3sFinOpsStatus(projectRoot: string): Promise<K3sFinOps
   let gpuPower: K3sGpuPowerAnalytics | null = null;
   let wasteCost = 0;
 
-  const parsed = await runSilentJsonQuery<any>('bash', [scriptPath, 'right-size', '--json'], projectRoot, null);
+  const parsed = await runSilentJsonQuery<{ recommendations?: RightSizeRecommendationPayload[] } | null>('bash', [scriptPath, 'right-size', '--json'], projectRoot, null);
   if (parsed && Array.isArray(parsed.recommendations)) {
-    recommendations = parsed.recommendations.map((r: any) => ({
+    recommendations = parsed.recommendations.map((r) => ({
       workload: r.workload || 'workload',
       namespace: r.namespace || 'default',
       container: r.workload || 'main',
@@ -369,7 +432,7 @@ export async function getK3sFinOpsStatus(projectRoot: string): Promise<K3sFinOps
     wasteCost = recommendations.reduce((acc, r) => acc + (r.potentialMonthlySavingsUsd || 0), 0);
   }
 
-  const p = await runSilentJsonQuery<any>('bash', [scriptPath, 'gpu', '--json'], projectRoot, null);
+  const p = await runSilentJsonQuery<GpuPayload | null>('bash', [scriptPath, 'gpu', '--json'], projectRoot, null);
   if (p) {
     gpuPower = {
       gpuModel: p.gpuModel || 'NVIDIA GeForce RTX 3060',

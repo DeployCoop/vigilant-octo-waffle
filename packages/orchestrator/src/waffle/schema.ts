@@ -105,7 +105,7 @@ export interface WaffleStep {
   wait?: boolean;
   timeout?: string;
   domain?: string;
-  values?: Record<string, any>;
+  values?: Record<string, unknown>;
   set?: Record<string, string | number | boolean>;
   healthCheck?: WaffleHealthCheck;
   keys?: Record<string, string> | WaffleSecretKey;

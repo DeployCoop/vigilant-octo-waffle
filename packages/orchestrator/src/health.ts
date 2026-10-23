@@ -87,9 +87,9 @@ export async function probeEndpoint(
       latencyMs,
       message: `HTTP ${code} (Container starting up)`,
     };
-  } catch (err: any) {
+  } catch (err) {
     const latencyMs = Date.now() - start;
-    const isTimeout = err.name === 'AbortError';
+    const isTimeout = err instanceof Error && err.name === 'AbortError';
 
     return {
       appId,
@@ -97,7 +97,7 @@ export async function probeEndpoint(
       url,
       status: 'unreachable',
       latencyMs,
-      message: isTimeout ? 'Connection timed out' : (err.message || 'Connection refused'),
+      message: isTimeout ? 'Connection timed out' : ((err instanceof Error && err.message) || 'Connection refused'),
     };
   }
 }

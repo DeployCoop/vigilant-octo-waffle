@@ -143,7 +143,7 @@ export class ClusterBringUpEngine extends EventEmitter {
             try {
               await execAsync('kubectl get nodes', { cwd: root, env: { ...process.env, ...config.raw } });
               step.message = 'Kubernetes nodes active and reachable';
-            } catch (err: any) {
+            } catch (err) {
               // Attempt fallback to k3s_up if k3s is chosen
               if (config.cluster.k8sPlatform === 'k3s' && !options.skipEngineStart) {
                 const k3sUpScript = path.join(root, 'src', 'k3s_up.sh');
@@ -154,7 +154,7 @@ export class ClusterBringUpEngine extends EventEmitter {
                   throw new Error('Kubernetes cluster not reachable and src/k3s_up.sh not found', { cause: err });
                 }
               } else {
-                throw new Error(`Cluster unreachable: ${err.message}`, { cause: err });
+                throw new Error(`Cluster unreachable: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
               }
             }
             break;
@@ -288,12 +288,12 @@ export class ClusterBringUpEngine extends EventEmitter {
         step.status = 'completed';
         step.durationMs = Date.now() - startTime;
         emitProgress();
-      } catch (err: any) {
+      } catch (err) {
         step.status = 'failed';
-        step.message = err.message;
+        step.message = err instanceof Error ? err.message : String(err);
         step.durationMs = Date.now() - startTime;
         progress.status = 'failed';
-        progress.error = `Failed at step [${step.id}]: ${err.message}`;
+        progress.error = `Failed at step [${step.id}]: ${step.message}`;
         emitProgress();
         return progress;
       }

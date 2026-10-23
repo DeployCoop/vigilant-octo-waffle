@@ -186,8 +186,8 @@ async function cmdInit(root: string, args: string[], io: AuthzCliIo): Promise<nu
   try {
     await ensureDevCertificate(root);
     io.out(`Generated mkcert TLS development certificate in .vow/certs/`);
-  } catch (err: any) {
-    io.out(`Note: TLS dev certificate setup deferred: ${err?.message ?? err}`);
+  } catch (err) {
+    io.out(`Note: TLS dev certificate setup deferred: ${err instanceof Error ? err.message : err}`);
   }
   if (customPassword && customPassword.trim()) {
     io.out(`Principal: ${owner.id} (${owner.name}, role: ${owner.role})`);
@@ -372,8 +372,8 @@ async function cmdRevoke(root: string, args: string[], io: AuthzCliIo): Promise<
   if (!store) return 1;
   try {
     saveAuthzStore(root, removePrincipal(store, id));
-  } catch (err: any) {
-    io.err(err.message);
+  } catch (err) {
+    io.err(err instanceof Error ? err.message : String(err));
     return 1;
   }
   io.out(`Revoked principal ${id}.`);
@@ -488,8 +488,8 @@ export async function runAuthzCommand(
         io.err(USAGE);
         return 1;
     }
-  } catch (err: any) {
-    io.err(`authz: ${err?.message ?? String(err)}`);
+  } catch (err) {
+    io.err(`authz: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
 }

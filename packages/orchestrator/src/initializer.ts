@@ -137,13 +137,13 @@ export async function applyInitializerDirectory(
         hasOverride: item.hasOverride,
         applied: true,
       });
-    } catch (err: any) {
+    } catch (err) {
       result.success = false;
       result.appliedFiles.push({
         fileName: item.fileName,
         hasOverride: item.hasOverride,
         applied: false,
-        error: err.message,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }

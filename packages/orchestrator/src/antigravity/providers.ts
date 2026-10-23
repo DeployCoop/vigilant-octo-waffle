@@ -7,6 +7,15 @@ import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 import { type AIProvider, type AIProviderInfo, type AntigravityEngineStatus } from './types.js';
 
+// Wire shapes for the provider model-list endpoints probed below.
+interface OllamaTagsResponse {
+  models?: Array<{ name?: string; model?: string }>;
+}
+
+interface OpenAiModelsResponse {
+  data?: Array<{ id?: string }>;
+}
+
 /**
  * Strips trailing slashes without a regex: /\/+$/ backtracks quadratically
  * on slash-heavy input (CodeQL js/polynomial-redos).
@@ -158,8 +167,8 @@ export async function checkOllamaStatus(customUrl?: string): Promise<{
     clearTimeout(timeout);
 
     if (res.ok) {
-      const data: any = await res.json();
-      const tags = (data.models || []).map((m: any) => m.name || m.model).filter(Boolean);
+      const data: OllamaTagsResponse = await res.json();
+      const tags = (data.models || []).map((m) => m.name || m.model).filter((t): t is string => Boolean(t));
       return {
         available: true,
         models: tags.length > 0 ? tags : DEFAULT_OLLAMA_MODELS,
@@ -200,8 +209,8 @@ export async function checkVllmStatus(customUrl?: string): Promise<{
     clearTimeout(timeout);
 
     if (res.ok) {
-      const data: any = await res.json();
-      const models = (data.data || []).map((m: any) => m.id).filter(Boolean);
+      const data: OpenAiModelsResponse = await res.json();
+      const models = (data.data || []).map((m) => m.id).filter((t): t is string => Boolean(t));
       return {
         available: true,
         models: models.length > 0 ? models : DEFAULT_VLLM_MODELS,

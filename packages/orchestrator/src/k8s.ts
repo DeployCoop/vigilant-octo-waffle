@@ -69,6 +69,81 @@ export interface ArgoAppStatus {
   destinationNamespace?: string;
 }
 
+// Wire shapes for the CustomObjectsApi calls below. The client returns
+// untyped JSON for custom resources, so these interfaces describe the
+// fields this module actually reads, and status strings are narrowed
+// against the declared enums instead of being asserted.
+
+interface CustomObjectCondition {
+  type?: string;
+  status?: string;
+  message?: string;
+  reason?: string;
+}
+
+interface CertManagerCertificate {
+  metadata?: { name?: string; namespace?: string };
+  spec?: {
+    secretName?: string;
+    dnsNames?: string[];
+    issuerRef?: { name?: string };
+  };
+  status?: {
+    conditions?: CustomObjectCondition[];
+    renewalTime?: string;
+    notAfter?: string;
+  };
+}
+
+interface CertManagerClusterIssuer {
+  metadata?: { name?: string };
+  spec?: {
+    ca?: unknown;
+    acme?: unknown;
+  };
+  status?: {
+    conditions?: CustomObjectCondition[];
+  };
+}
+
+interface ArgoApplicationObject {
+  metadata?: { name?: string; namespace?: string };
+  spec?: {
+    source?: { repoURL?: string; path?: string };
+    destination?: { server?: string; namespace?: string };
+  };
+  status?: {
+    health?: { status?: string; message?: string };
+    sync?: { status?: string; revision?: string };
+  };
+}
+
+// Argo CD's health/sync status vocabularies match the unions declared on
+// ArgoAppStatus exactly; anything else on the wire narrows to 'Unknown'
+// rather than leaking an out-of-contract value to callers.
+function asArgoHealthStatus(value: string | undefined): ArgoAppStatus['healthStatus'] {
+  switch (value) {
+    case 'Healthy':
+    case 'Progressing':
+    case 'Degraded':
+    case 'Missing':
+    case 'Suspended':
+      return value;
+    default:
+      return 'Unknown';
+  }
+}
+
+function asArgoSyncStatus(value: string | undefined): ArgoAppStatus['syncStatus'] {
+  switch (value) {
+    case 'Synced':
+    case 'OutOfSync':
+      return value;
+    default:
+      return 'Unknown';
+  }
+}
+
 export class K8sClient {
   private kc: k8s.KubeConfig;
   private coreApi?: k8s.CoreV1Api;
@@ -127,8 +202,8 @@ export class K8sClient {
         detectedClusterName = currentContext.replace(/^kind-/, '');
       }
 
-      const nodes = (nodesRes.items || []).map((n: any) => {
-        const readyCond = n.status?.conditions?.find((c: any) => c.type === 'Ready');
+      const nodes = (nodesRes.items || []).map((n: k8s.V1Node) => {
+        const readyCond = n.status?.conditions?.find((c: k8s.V1NodeCondition) => c.type === 'Ready');
         const roles = Object.keys(n.metadata?.labels || {})
           .filter((k) => k.startsWith('node-role.kubernetes.io/'))
           .map((k) => k.replace('node-role.kubernetes.io/', ''));
@@ -155,16 +230,16 @@ export class K8sClient {
           name,
           status: readyCond?.status === 'True' ? 'Ready' : 'NotReady',
           roles: roles.length ? roles : ['worker'],
-          age: n.metadata?.creationTimestamp || '',
+          age: n.metadata?.creationTimestamp?.toISOString() ?? '',
           osImage,
         };
       });
 
-      const namespaces = (nsRes.items || []).map((ns: any) => ns.metadata?.name || '');
+      const namespaces = (nsRes.items || []).map((ns: k8s.V1Namespace) => ns.metadata?.name || '');
 
-      const ingresses = (ingRes.items || []).flatMap((ing: any) => {
+      const ingresses = (ingRes.items || []).flatMap((ing: k8s.V1Ingress) => {
         const rules = ing.spec?.rules || [];
-        return rules.map((r: any) => ({
+        return rules.map((r: k8s.V1IngressRule) => ({
           name: ing.metadata?.name || '',
           namespace: ing.metadata?.namespace || '',
           host: r.host || '*',
@@ -222,7 +297,7 @@ export class K8sClient {
   public async getCertificates(): Promise<CertificateInfo[]> {
     if (!this.customApi) return [];
     try {
-      const res: any = await this.customApi.listClusterCustomObject({
+      const res: { items?: CertManagerCertificate[] } | null = await this.customApi.listClusterCustomObject({
         group: 'cert-manager.io',
         version: 'v1',
         plural: 'certificates',
@@ -230,8 +305,8 @@ export class K8sClient {
 
       if (!res || !res.items) return [];
 
-      return res.items.map((item: any) => {
-        const readyCond = item.status?.conditions?.find((c: any) => c.type === 'Ready');
+      return res.items.map((item) => {
+        const readyCond = item.status?.conditions?.find((c) => c.type === 'Ready');
         return {
           name: item.metadata?.name || '',
           namespace: item.metadata?.namespace || '',
@@ -252,7 +327,7 @@ export class K8sClient {
   public async getClusterIssuers(): Promise<ClusterIssuerInfo[]> {
     if (!this.customApi) return [];
     try {
-      const res: any = await this.customApi.listClusterCustomObject({
+      const res: { items?: CertManagerClusterIssuer[] } | null = await this.customApi.listClusterCustomObject({
         group: 'cert-manager.io',
         version: 'v1',
         plural: 'clusterissuers',
@@ -260,8 +335,8 @@ export class K8sClient {
 
       if (!res || !res.items) return [];
 
-      return res.items.map((item: any) => {
-        const readyCond = item.status?.conditions?.find((c: any) => c.type === 'Ready');
+      return res.items.map((item) => {
+        const readyCond = item.status?.conditions?.find((c) => c.type === 'Ready');
         return {
           name: item.metadata?.name || '',
           ready: readyCond?.status === 'True',
@@ -278,7 +353,7 @@ export class K8sClient {
     if (!this.customApi) return { installed: false, applications: [] };
     try {
       // ArgoCD applications are namespaced, typically in 'argocd'
-      const res: any = await this.customApi.listNamespacedCustomObject({
+      const res: { items?: ArgoApplicationObject[] } | null = await this.customApi.listNamespacedCustomObject({
         group: 'argoproj.io',
         version: 'v1alpha1',
         namespace: 'argocd',
@@ -289,12 +364,12 @@ export class K8sClient {
         return { installed: false, applications: [] };
       }
 
-      const applications: ArgoAppStatus[] = res.items.map((app: any) => ({
+      const applications: ArgoAppStatus[] = res.items.map((app) => ({
         name: app.metadata?.name || '',
         namespace: app.metadata?.namespace || 'argocd',
-        healthStatus: (app.status?.health?.status as any) || 'Unknown',
+        healthStatus: asArgoHealthStatus(app.status?.health?.status),
         healthMessage: app.status?.health?.message,
-        syncStatus: (app.status?.sync?.status as any) || 'Unknown',
+        syncStatus: asArgoSyncStatus(app.status?.sync?.status),
         revision: app.status?.sync?.revision,
         repoURL: app.spec?.source?.repoURL,
         targetPath: app.spec?.source?.path,
@@ -318,11 +393,11 @@ export class K8sClient {
         ? await this.coreApi.listNamespacedPod({ namespace }).catch(() => ({ items: [] }))
         : await this.coreApi.listPodForAllNamespaces().catch(() => ({ items: [] }));
 
-      return (res.items || []).map((pod: any) => {
+      return (res.items || []).map((pod: k8s.V1Pod) => {
         const containerStatuses = pod.status?.containerStatuses || [];
-        const readyContainers = containerStatuses.filter((c: any) => c.ready).length;
+        const readyContainers = containerStatuses.filter((c) => c.ready).length;
         const totalContainers = pod.spec?.containers?.length || 1;
-        const restartCount = containerStatuses.reduce((acc: number, c: any) => acc + (c.restartCount || 0), 0);
+        const restartCount = containerStatuses.reduce((acc: number, c) => acc + (c.restartCount || 0), 0);
 
         let status = pod.status?.phase || 'Unknown';
         // Check for waiting reasons like CrashLoopBackOff or ImagePullBackOff
@@ -341,12 +416,12 @@ export class K8sClient {
           restarts: restartCount,
           node: pod.spec?.nodeName || 'unknown',
           ip: pod.status?.podIP || '',
-          age: pod.metadata?.creationTimestamp || '',
-          containers: (pod.spec?.containers || []).map((c: any) => {
-            const cs = containerStatuses.find((s: any) => s.name === c.name);
+          age: pod.metadata?.creationTimestamp?.toISOString() ?? '',
+          containers: (pod.spec?.containers || []).map((c) => {
+            const cs = containerStatuses.find((s) => s.name === c.name);
             return {
               name: c.name,
-              image: c.image,
+              image: c.image ?? '',
               ready: cs?.ready || false,
               restartCount: cs?.restartCount || 0,
             };
@@ -366,7 +441,9 @@ export class K8sClient {
   }): Promise<string> {
     if (!this.coreApi) return 'Kubernetes API not connected';
     try {
-      const res: any = await this.coreApi.readNamespacedPodLog({
+      // The v2 client resolves this call to the log text directly
+      // (Promise<string>); there is no response-object body to unwrap.
+      const res = await this.coreApi.readNamespacedPodLog({
         name: params.name,
         namespace: params.namespace,
         container: params.container,
@@ -375,10 +452,10 @@ export class K8sClient {
       });
 
       if (typeof res === 'string') return res;
-      if (typeof res?.body === 'string') return res.body;
       return String(res || '');
-    } catch (err: any) {
-      return `Failed to fetch logs: ${err.message || 'Unknown error'}`;
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : 'Unknown error';
+      return `Failed to fetch logs: ${message}`;
     }
   }
 
@@ -398,7 +475,7 @@ export class K8sClient {
         this.coreApi.listPersistentVolumeClaimForAllNamespaces().catch(() => ({ items: [] })),
       ]);
 
-      result.storageClasses = (scRes.items || []).map((sc: any) => ({
+      result.storageClasses = (scRes.items || []).map((sc: k8s.V1StorageClass) => ({
         name: sc.metadata?.name || '',
         provisioner: sc.provisioner || '',
         reclaimPolicy: sc.reclaimPolicy || 'Delete',
@@ -406,7 +483,7 @@ export class K8sClient {
         isDefault: sc.metadata?.annotations?.['storageclass.kubernetes.io/is-default-class'] === 'true',
       }));
 
-      result.persistentVolumes = (pvRes.items || []).map((pv: any) => ({
+      result.persistentVolumes = (pvRes.items || []).map((pv: k8s.V1PersistentVolume) => ({
         name: pv.metadata?.name || '',
         capacity: pv.spec?.capacity?.storage || '',
         accessModes: pv.spec?.accessModes || [],
@@ -416,7 +493,7 @@ export class K8sClient {
         storageClass: pv.spec?.storageClassName || '',
       }));
 
-      result.persistentVolumeClaims = (pvcRes.items || []).map((pvc: any) => ({
+      result.persistentVolumeClaims = (pvcRes.items || []).map((pvc: k8s.V1PersistentVolumeClaim) => ({
         name: pvc.metadata?.name || '',
         namespace: pvc.metadata?.namespace || '',
         status: pvc.status?.phase || 'Unknown',

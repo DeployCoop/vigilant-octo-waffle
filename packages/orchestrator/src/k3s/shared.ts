@@ -36,8 +36,10 @@ export async function runSilentJsonQuery<T>(cmd: string, args: string[], cwd: st
     const { stdout } = await execFileAsync(cmd, args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30000 });
     const parsed = extractJson<T>(stdout || '');
     if (parsed !== undefined) return parsed;
-  } catch (err: any) {
-    if (err && typeof err.stdout === 'string') {
+  } catch (err) {
+    // A failed command may still have printed the JSON payload to stdout
+    // before exiting non-zero; the rejection carries it as a property.
+    if (err && typeof err === 'object' && 'stdout' in err && typeof err.stdout === 'string') {
       const parsed = extractJson<T>(err.stdout);
       if (parsed !== undefined) return parsed;
     }

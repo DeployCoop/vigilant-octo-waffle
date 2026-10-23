@@ -110,7 +110,7 @@ export function discoverClusterNamespaces(workspaceRoot: string = process.cwd())
         if (fs.existsSync(appFile)) {
           try {
             const content = fs.readFileSync(appFile, 'utf8');
-            const parsed = YAML.parse(content) as Record<string, any>;
+            const parsed = YAML.parse(content) as { spec?: { destination?: { namespace?: unknown } } };
             const targetNs = parsed?.spec?.destination?.namespace;
             if (targetNs && typeof targetNs === 'string' && !targetNs.startsWith('$') && !targetNs.includes('{')) {
               if (!foundNamespaces.has(targetNs)) {
@@ -146,7 +146,10 @@ export function discoverClusterNamespaces(workspaceRoot: string = process.cwd())
         if (fs.existsSync(appFile)) {
           try {
             const content = fs.readFileSync(appFile, 'utf8');
-            const docs = YAML.parseAllDocuments(content).map((d) => d.toJSON()) as Array<Record<string, any>>;
+            const docs = YAML.parseAllDocuments(content).map((d) => d.toJSON()) as Array<{
+              spec?: { targetNamespace?: unknown };
+              metadata?: { namespace?: unknown };
+            }>;
             for (const doc of docs) {
               const targetNs = doc?.spec?.targetNamespace || doc?.metadata?.namespace;
               if (targetNs && typeof targetNs === 'string' && !targetNs.startsWith('$') && !targetNs.includes('{')) {
@@ -189,10 +192,20 @@ export function discoverClusterNamespaces(workspaceRoot: string = process.cwd())
   };
 }
 
+export interface NamespaceObject {
+  apiVersion: 'v1';
+  kind: 'Namespace';
+  metadata: {
+    name: string;
+    labels: Record<string, string>;
+    annotations: Record<string, string>;
+  };
+}
+
 /**
  * Generate a Kubernetes Namespace resource object with PSS annotations/labels.
  */
-export function buildNamespaceObject(def: NamespaceDefinition): Record<string, any> {
+export function buildNamespaceObject(def: NamespaceDefinition): NamespaceObject {
   const labels: Record<string, string> = {
     'kubernetes.io/metadata.name': def.name,
     'pod-security.kubernetes.io/enforce': def.pssEnforce,

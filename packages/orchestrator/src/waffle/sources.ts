@@ -159,9 +159,9 @@ export class WaffleSourceManager {
           status = 'error';
           errorMessage = validation.errors.join('; ');
         }
-      } catch (err: any) {
+      } catch (err) {
         status = 'error';
-        errorMessage = `Git clone/parse failed: ${err.message}`;
+        errorMessage = `Git clone/parse failed: ${err instanceof Error ? err.message : String(err)}`;
       }
     } else {
       // Local directory
@@ -186,9 +186,9 @@ export class WaffleSourceManager {
           status = 'error';
           errorMessage = validation.errors.join('; ');
         }
-      } catch (err: any) {
+      } catch (err) {
         status = 'error';
-        errorMessage = `Failed to load waffle.yaml: ${err.message}`;
+        errorMessage = `Failed to load waffle.yaml: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
 
@@ -261,9 +261,9 @@ export class WaffleSourceManager {
         }
       }).length;
       source.lastSynced = new Date().toISOString();
-    } catch (err: any) {
+    } catch (err) {
       source.status = 'error';
-      source.errorMessage = `Sync failed: ${err.message}`;
+      source.errorMessage = `Sync failed: ${err instanceof Error ? err.message : String(err)}`;
       source.lastSynced = new Date().toISOString();
     }
 

@@ -19,6 +19,47 @@ function stripTrailingSlashes(value: string): string {
   return value.slice(0, end);
 }
 
+type TokenUsage = NonNullable<AntigravityResponse['usage']>;
+
+// Wire shapes for the provider responses consumed below (REST + stream
+// chunks). Only the fields this module reads are declared.
+interface OllamaChatResponse {
+  message?: { content?: string };
+  response?: string;
+  done?: boolean;
+  prompt_eval_count?: number;
+  eval_count?: number;
+}
+
+interface VllmChatCompletionsResponse {
+  choices?: Array<{
+    message?: { content?: string };
+    delta?: { content?: string };
+  }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+}
+
+interface AgyResponseData {
+  response?: string;
+  conversation_id?: string;
+  duration_seconds?: number;
+  usage?: TokenUsage;
+}
+
+interface AgyJsonResponse extends AgyResponseData {
+  text?: string;
+}
+
+interface AgyStreamEvent {
+  event?: string;
+  step_update?: { text_delta?: string };
+  result?: AgyResponseData;
+}
+
 
 /**
  * Queries Ollama via REST API (`/api/chat`).
@@ -28,7 +69,7 @@ async function queryOllama(options: {
   systemInstructions: string;
   model: string;
   baseUrl?: string;
-}): Promise<{ response: string; usage?: any; durationSeconds: number }> {
+}): Promise<{ response: string; usage?: TokenUsage; durationSeconds: number }> {
   const baseUrl = stripTrailingSlashes(options.baseUrl || process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://localhost:11434');
   const startTime = Date.now();
 
@@ -61,7 +102,7 @@ async function queryOllama(options: {
       throw new Error(`Ollama returned status ${res.status}: ${errText}`);
     }
 
-    const data: any = await res.json();
+    const data: OllamaChatResponse = await res.json();
     const content = data.message?.content || data.response || '';
 
     return {
@@ -73,9 +114,9 @@ async function queryOllama(options: {
         total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
       },
     };
-  } catch (err: any) {
+  } catch (err) {
     clearTimeout(timeout);
-    throw new Error(`Ollama connection error (${baseUrl}): ${err.message}`, { cause: err });
+    throw new Error(`Ollama connection error (${baseUrl}): ${err instanceof Error ? err.message : String(err)}`, { cause: err });
   }
 }
 
@@ -87,7 +128,7 @@ async function queryVllm(options: {
   systemInstructions: string;
   model: string;
   baseUrl?: string;
-}): Promise<{ response: string; usage?: any; durationSeconds: number }> {
+}): Promise<{ response: string; usage?: TokenUsage; durationSeconds: number }> {
   const baseUrl = stripTrailingSlashes(options.baseUrl || process.env.VLLM_BASE_URL || 'http://localhost:8000');
   const startTime = Date.now();
 
@@ -117,7 +158,7 @@ async function queryVllm(options: {
       throw new Error(`vLLM returned status ${res.status}: ${errText}`);
     }
 
-    const data: any = await res.json();
+    const data: VllmChatCompletionsResponse = await res.json();
     const content = data.choices?.[0]?.message?.content || '';
 
     return {
@@ -129,9 +170,9 @@ async function queryVllm(options: {
         total_tokens: data.usage?.total_tokens,
       },
     };
-  } catch (err: any) {
+  } catch (err) {
     clearTimeout(timeout);
-    throw new Error(`vLLM connection error (${baseUrl}): ${err.message}`, { cause: err });
+    throw new Error(`vLLM connection error (${baseUrl}): ${err instanceof Error ? err.message : String(err)}`, { cause: err });
   }
 }
 
@@ -418,9 +459,9 @@ Instructions:
         engineUsed: 'ollama',
         clusterSnapshot: snapshot,
       };
-    } catch (err: any) {
+    } catch (err) {
       const endpoint = customEndpoint || 'http://localhost:11434';
-      const fallbackText = `> ⚠️ **Ollama Offline**: Could not connect to Ollama at \`${endpoint}\` (${err.message}).
+      const fallbackText = `> ⚠️ **Ollama Offline**: Could not connect to Ollama at \`${endpoint}\` (${err instanceof Error ? err.message : String(err)}).
 > Ensure Ollama is running (\`ollama serve\`) and that model \`${targetModel}\` is downloaded (\`ollama pull ${targetModel}\`).
 > Showing local cluster copilot analysis instead:
 
@@ -459,9 +500,9 @@ ${generateHeuristicResponse(prompt, snapshot, 'Ollama (Heuristic Fallback)')}`;
         engineUsed: 'vllm',
         clusterSnapshot: snapshot,
       };
-    } catch (err: any) {
+    } catch (err) {
       const endpoint = customEndpoint || 'http://localhost:8000';
-      const fallbackText = `> ⚠️ **vLLM Offline**: Could not connect to vLLM at \`${endpoint}\` (${err.message}).
+      const fallbackText = `> ⚠️ **vLLM Offline**: Could not connect to vLLM at \`${endpoint}\` (${err instanceof Error ? err.message : String(err)}).
 > Ensure your vLLM server is running (e.g. \`vllm serve ${targetModel} --port 8000\`).
 > Showing local cluster copilot analysis instead:
 
@@ -532,7 +573,7 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
         }
 
         try {
-          const parsed = JSON.parse(stdout.trim());
+          const parsed: AgyJsonResponse = JSON.parse(stdout.trim());
           const responseText = parsed.response || parsed.text || '';
 
           if (!responseText.trim()) {
@@ -645,7 +686,7 @@ Instructions:
       }
 
       let aggregatedText = '';
-      let usage: any = undefined;
+      let usage: TokenUsage | undefined;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -661,7 +702,7 @@ Instructions:
           const trimmed = line.trim();
           if (!trimmed) continue;
           try {
-            const data = JSON.parse(trimmed);
+            const data: OllamaChatResponse = JSON.parse(trimmed);
             const delta = data.message?.content || data.response || '';
             if (delta) {
               aggregatedText += delta;
@@ -697,8 +738,8 @@ Instructions:
 
       onEvent({ type: 'done', response: responseObj });
       return responseObj;
-    } catch (err: any) {
-      const fallback = `> ⚠️ **Ollama Offline**: Could not connect to Ollama at \`${baseUrl}\` (${err.message}).
+    } catch (err) {
+      const fallback = `> ⚠️ **Ollama Offline**: Could not connect to Ollama at \`${baseUrl}\` (${err instanceof Error ? err.message : String(err)}).
 > Ensure Ollama is running (\`ollama serve\`) and that model \`${targetModel}\` is downloaded.
 > Showing local cluster copilot analysis instead:
 
@@ -750,7 +791,7 @@ ${generateHeuristicResponse(prompt, snapshot, 'Ollama (Heuristic Fallback)')}`;
           if (!trimmed || trimmed === 'data: [DONE]') continue;
           if (trimmed.startsWith('data: ')) {
             try {
-              const data = JSON.parse(trimmed.slice(6));
+              const data: VllmChatCompletionsResponse = JSON.parse(trimmed.slice(6));
               const delta = data.choices?.[0]?.delta?.content || '';
               if (delta) {
                 aggregatedText += delta;
@@ -779,8 +820,8 @@ ${generateHeuristicResponse(prompt, snapshot, 'Ollama (Heuristic Fallback)')}`;
 
       onEvent({ type: 'done', response: responseObj });
       return responseObj;
-    } catch (err: any) {
-      const fallback = `> ⚠️ **vLLM Offline**: Could not connect to vLLM at \`${baseUrl}\` (${err.message}).
+    } catch (err) {
+      const fallback = `> ⚠️ **vLLM Offline**: Could not connect to vLLM at \`${baseUrl}\` (${err instanceof Error ? err.message : String(err)}).
 > Ensure your vLLM server is running (e.g. \`vllm serve ${targetModel} --port 8000\`).
 > Showing local cluster copilot analysis instead:
 
@@ -805,7 +846,7 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
   return new Promise<AntigravityResponse>((resolve) => {
     const startTime = Date.now();
     let aggregatedText = '';
-    let resultData: any = null;
+    let resultData: AgyResponseData | null = null;
     let buffer = '';
 
     const proc = spawn(agyBinary, args, {
@@ -829,7 +870,7 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
         const trimmed = line.trim();
         if (!trimmed) continue;
         try {
-          const parsed = JSON.parse(trimmed);
+          const parsed: AgyStreamEvent = JSON.parse(trimmed);
           if (parsed.event === 'step_update') {
             const delta = parsed.step_update?.text_delta;
             if (delta) {
@@ -837,7 +878,7 @@ ${generateHeuristicResponse(prompt, snapshot, 'vLLM (Heuristic Fallback)')}`;
               onEvent({ type: 'chunk', text: delta });
             }
           } else if (parsed.event === 'result') {
-            resultData = parsed.result;
+            resultData = parsed.result ?? null;
             if (resultData?.response && !aggregatedText) {
               aggregatedText = resultData.response;
               onEvent({ type: 'chunk', text: aggregatedText });

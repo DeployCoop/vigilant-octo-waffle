@@ -8,6 +8,7 @@ import { applyInitializerDirectory } from './initializer.js';
 import { ensureNamespaceWithSecurity } from './namespaces.js';
 
 const execAsync = promisify(exec);
+import * as k8s from '@kubernetes/client-node';
 import { execFileAsync, commandExists } from './exec-argv.js';
 
 export type StorageEngine = 'openebs' | 'longhorn' | 'nfs' | 'seaweedfs' | 'rook-ceph' | 'local-path';
@@ -368,8 +369,8 @@ export async function deployOpenEBS(
     const res = await execFileAsync('helm', cmdArgs, { cwd: projectRoot, env: executionEnv });
     stdout = res.stdout;
     stderr = res.stderr;
-  } catch (err: any) {
-    const errMsg = err?.message || String(err);
+  } catch (err) {
+    const errMsg = err instanceof Error && err.message ? err.message : String(err);
     if (
       errMsg.includes('field is immutable') ||
       errMsg.includes('cannot patch') ||
@@ -549,14 +550,14 @@ spec:
       success: true,
       rawLog: logs,
     };
-  } catch (err: any) {
+  } catch (err) {
     await cleanup();
     return {
       storageClass,
       writeSpeedMbSec: 0,
       durationSeconds: 0,
       success: false,
-      error: err.message,
+      error: err instanceof Error ? err.message : String(err),
     };
   }
 }
@@ -587,8 +588,8 @@ export async function getStorageFabricStatus(projectRoot: string): Promise<Stora
   try {
     // StorageClasses
     const { stdout: scOut } = await execAsync('kubectl get sc -o json', { cwd: projectRoot }).catch(() => ({ stdout: '{"items":[]}' }));
-    const scData = JSON.parse(scOut);
-    report.storageClasses = (scData.items || []).map((sc: any) => ({
+    const scData = JSON.parse(scOut) as k8s.V1StorageClassList;
+    report.storageClasses = (scData.items || []).map((sc) => ({
       name: sc.metadata?.name || '',
       provisioner: sc.provisioner || '',
       reclaimPolicy: sc.reclaimPolicy || 'Delete',
@@ -597,8 +598,8 @@ export async function getStorageFabricStatus(projectRoot: string): Promise<Stora
 
     // VolumeSnapshotClasses
     const { stdout: vscOut } = await execAsync('kubectl get volumesnapshotclass -o json', { cwd: projectRoot }).catch(() => ({ stdout: '{"items":[]}' }));
-    const vscData = JSON.parse(vscOut);
-    report.volumeSnapshotClasses = (vscData.items || []).map((v: any) => v.metadata?.name || '');
+    const vscData = JSON.parse(vscOut) as { items?: Array<{ metadata?: { name?: string } }> };
+    report.volumeSnapshotClasses = (vscData.items || []).map((v) => v.metadata?.name || '');
 
     // PVs
     const { stdout: pvOut } = await execAsync('kubectl get pv -o json', { cwd: projectRoot }).catch(() => ({ stdout: '{"items":[]}' }));

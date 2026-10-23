@@ -377,8 +377,8 @@ export function loadAuthzStore(
     try {
       const store = parseAuthzStore(fs.readFileSync(file, 'utf-8'));
       load = { status: 'ready', store };
-    } catch (err: any) {
-      load = { status: 'invalid', error: err?.message ?? String(err) };
+    } catch (err) {
+      load = { status: 'invalid', error: err instanceof Error ? err.message : String(err) };
     }
   }
 

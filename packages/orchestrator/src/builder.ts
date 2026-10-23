@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { execFileAsync, assertImageRef } from './exec-argv.js';
+import { execFileAsync, assertImageRef, ExecArgvError } from './exec-argv.js';
 
 export interface LocalImage {
   repository: string;
@@ -95,7 +95,13 @@ export async function buildLocalContainerImage(options: {
     // Attempt building with docker
     assertImageRef(fullTag);
     const buildRes = await execFileAsync('docker', ['build', '-t', fullTag, '-f', dockerfilePath, tmpDir]).catch(
-      (e: any) => ({ stdout: e?.stdout ?? '', stderr: e?.stderr ?? String(e?.message ?? e) })
+      (e: unknown) => {
+        const execErr = e instanceof ExecArgvError ? e : null;
+        return {
+          stdout: execErr?.stdout ?? '',
+          stderr: execErr?.stderr ?? String(e instanceof Error ? e.message : e),
+        };
+      }
     );
     logs += buildRes.stdout || buildRes.stderr || 'Image build finished successfully.\n';
 
@@ -112,11 +118,11 @@ export async function buildLocalContainerImage(options: {
       durationMs: Date.now() - start,
       pushedToRegistry: !!options.pushToLocalRegistry,
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       success: false,
       imageTag: fullTag,
-      logs: logs + `\n[error] Build encountered error: ${err.message}`,
+      logs: logs + `\n[error] Build encountered error: ${err instanceof Error ? err.message : String(err)}`,
       durationMs: Date.now() - start,
       pushedToRegistry: false,
     };

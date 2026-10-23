@@ -6,7 +6,12 @@ import { mergeYamlStrings } from './yaml.js';
 import { applyInitializerDirectory } from './initializer.js';
 import { ensureNamespaceWithSecurity } from './namespaces.js';
 
+import * as k8s from '@kubernetes/client-node';
 import { execFileAsync } from './exec-argv.js';
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export type DeployEngine = 'argocd' | 'helm' | 'flux';
 
@@ -242,14 +247,14 @@ export async function deployCatalogApp(
     } else {
       throw new Error(`Unsupported deployment engine: '${engine}'`);
     }
-  } catch (err: any) {
+  } catch (err) {
     return {
       appId,
       namespace: targetNs,
       engine,
       success: false,
       message: `Failed to deploy application '${appId}'`,
-      error: err.message,
+      error: errorMessage(err),
     };
   }
 }
@@ -273,10 +278,10 @@ export async function removeCatalogApp(
       success: true,
       message: `Application '${appId}' removed from cluster`,
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       success: false,
-      message: `Failed to remove application '${appId}': ${err.message}`,
+      message: `Failed to remove application '${appId}': ${errorMessage(err)}`,
     };
   }
 }
@@ -302,13 +307,13 @@ export async function getCatalogAppStatus(
   try {
     // 1. Check Pods in target namespace
     const { stdout: podsOut } = await execFileAsync('kubectl', ['get', 'pods', '-n', targetNs, '-o', 'json'], { cwd: projectRoot }).catch(() => ({ stdout: '{"items":[]}' }));
-    const podsData = JSON.parse(podsOut);
+    const podsData = JSON.parse(podsOut) as k8s.V1PodList;
 
     if (podsData.items && podsData.items.length > 0) {
       result.isDeployed = true;
-      result.pods = podsData.items.map((p: any) => {
-        const cond = p.status?.conditions?.find((c: any) => c.type === 'Ready');
-        const restarts = (p.status?.containerStatuses || []).reduce((acc: number, c: any) => acc + (c.restartCount || 0), 0);
+      result.pods = podsData.items.map((p) => {
+        const cond = p.status?.conditions?.find((c) => c.type === 'Ready');
+        const restarts = (p.status?.containerStatuses || []).reduce((acc: number, c) => acc + (c.restartCount || 0), 0);
         return {
           name: p.metadata?.name || '',
           ready: cond?.status === 'True',
