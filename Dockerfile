@@ -64,7 +64,9 @@ RUN pnpm build
 
 # Ship production-only node_modules in the runner stage (Plan III §8.4):
 # prune devDependencies from every workspace importer after the build.
-RUN pnpm prune --prod
+# CI=true: the Docker build has no TTY, and pnpm otherwise aborts the
+# modules-directory purge it cannot confirm interactively.
+RUN CI=true pnpm prune --prod
 
 FROM base AS runner
 WORKDIR /app
