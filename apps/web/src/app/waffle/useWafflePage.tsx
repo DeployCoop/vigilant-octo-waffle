@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiErrorMessage } from '@/lib/envelope';
 
 export interface WafflePipelineMetadata {
@@ -154,8 +154,20 @@ export function useWafflePage() {
   const [showCelebration, setShowCelebration] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Latest-value refs: fetchData reads the current selections only for
+  // its default-selection guard, so those reads must not become fetch
+  // triggers (see PR-13 notes).
+  const selectedSourceIdRef = useRef(selectedSourceId);
+  useEffect(() => {
+    selectedSourceIdRef.current = selectedSourceId;
+  });
+  const selectedBlueprintIdRef = useRef(selectedBlueprintId);
+  useEffect(() => {
+    selectedBlueprintIdRef.current = selectedBlueprintId;
+  });
+
   // Fetch initial studio data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch('/api/waffle');
@@ -170,7 +182,7 @@ export function useWafflePage() {
         }
 
         // Set default selection if none chosen
-        if (!selectedSourceId && !selectedBlueprintId) {
+        if (!selectedSourceIdRef.current && !selectedBlueprintIdRef.current) {
           if (data.sources && data.sources.length > 0) {
             setSelectedSourceId(data.sources[0].id);
             loadSourcePipeline(data.sources[0].id);
@@ -185,7 +197,7 @@ export function useWafflePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const loadSourcePipeline = async (id: string) => {
     try {
@@ -208,7 +220,7 @@ export function useWafflePage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   // SSE event streaming listener
   useEffect(() => {

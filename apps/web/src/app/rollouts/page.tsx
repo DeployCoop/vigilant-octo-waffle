@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   RotateCcw,
   Sliders,
@@ -80,13 +80,22 @@ export default function RolloutsStudioPage() {
     dryRun: false,
   });
 
-  const loadRollouts = async () => {
+  // Latest-value ref: loadRollouts reads the active rollout only to
+  // re-sync it against the fresh list, so the read must not become a
+  // fetch trigger (see PR-13 notes).
+  const activeRolloutRef = useRef(activeRollout);
+  useEffect(() => {
+    activeRolloutRef.current = activeRollout;
+  });
+
+  const loadRollouts = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/rollouts');
       const data = await res.json();
       const list: RolloutInfo[] = data.rollouts || [];
       setRollouts(list);
+      const activeRollout = activeRolloutRef.current;
       if (list.length > 0 && !activeRollout) {
         setActiveRollout(list[0]);
         setSliderWeight(list[0].canaryWeight);
@@ -102,7 +111,7 @@ export default function RolloutsStudioPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const loadGatewayStatus = async () => {
     setGatewayLoading(true);
@@ -122,7 +131,7 @@ export default function RolloutsStudioPage() {
   useEffect(() => {
     loadRollouts();
     loadGatewayStatus();
-  }, []);
+  }, [loadRollouts]);
 
   const handleSetWeight = async (weight: number) => {
     if (!activeRollout) return;

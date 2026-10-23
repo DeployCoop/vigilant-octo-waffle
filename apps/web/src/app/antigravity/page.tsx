@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiErrorMessage } from '@/lib/envelope';
 import Link from 'next/link';
 import {
@@ -221,8 +221,20 @@ export default function AntigravityPage() {
     }
   };
 
+  // Latest-value refs: fetchStatus reads the current provider/model only
+  // for its default-model sync, so those reads must not become fetch
+  // triggers (see PR-13 notes).
+  const selectedProviderRef = useRef(selectedProvider);
+  useEffect(() => {
+    selectedProviderRef.current = selectedProvider;
+  });
+  const customModelRef = useRef(customModel);
+  useEffect(() => {
+    customModelRef.current = customModel;
+  });
+
   // Fetch engine and cluster telemetry
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       const query = new URLSearchParams({
         ollamaEndpoint: ollamaUrl,
@@ -234,8 +246,9 @@ export default function AntigravityPage() {
 
       if (data.engine) {
         setEngine(data.engine);
-        if (data.engine.providers?.[selectedProvider]?.defaultModel && !customModel) {
-          setSelectedModel(data.engine.providers[selectedProvider].defaultModel);
+        const provider = selectedProviderRef.current;
+        if (data.engine.providers?.[provider]?.defaultModel && !customModelRef.current) {
+          setSelectedModel(data.engine.providers[provider].defaultModel);
         }
       }
       if (data.clusterSnapshot) {
@@ -244,12 +257,12 @@ export default function AntigravityPage() {
     } catch {
       // offline fallback
     }
-  };
+  }, [ollamaUrl, vllmUrl]);
 
   useEffect(() => {
     fetchStatus();
     loadCopilotTools();
-  }, [ollamaUrl, vllmUrl]);
+  }, [fetchStatus]);
 
   // Update selected model when provider changes
   const handleProviderChange = (newProvider: AIProvider) => {
