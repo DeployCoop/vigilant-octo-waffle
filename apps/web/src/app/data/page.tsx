@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCan } from '@/lib/ability';
 import { apiErrorMessage } from '@/lib/envelope';
 import {
@@ -82,7 +82,15 @@ export default function DataStudioPage() {
   };
 
   // Fetch S3 buckets
-  const loadS3Buckets = async () => {
+  // Latest-value ref: loadS3Buckets reads the current selection only for
+  // its don't-override-the-user guard, so the read must not become a
+  // fetch trigger (see PR-13 notes).
+  const selectedBucketRef = useRef(selectedBucket);
+  useEffect(() => {
+    selectedBucketRef.current = selectedBucket;
+  });
+
+  const loadS3Buckets = useCallback(async () => {
     setS3Loading(true);
     setS3Error(null);
     try {
@@ -90,7 +98,7 @@ export default function DataStudioPage() {
       const data = await res.json();
       if (data.error) throw new Error(apiErrorMessage(data));
       setBuckets(data.buckets || []);
-      if (data.buckets?.length > 0 && !selectedBucket) {
+      if (data.buckets?.length > 0 && !selectedBucketRef.current) {
         setSelectedBucket(data.buckets[0].name);
       }
     } catch (err: any) {
@@ -98,7 +106,7 @@ export default function DataStudioPage() {
     } finally {
       setS3Loading(false);
     }
-  };
+  }, []);
 
   // Fetch S3 objects for selected bucket
   const loadS3Objects = async (bucketName: string) => {
@@ -121,7 +129,7 @@ export default function DataStudioPage() {
     if (activeTab === 's3') {
       loadS3Buckets();
     }
-  }, [activeTab]);
+  }, [activeTab, loadS3Buckets]);
 
   useEffect(() => {
     if (selectedBucket) {

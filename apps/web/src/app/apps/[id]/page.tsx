@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -30,7 +30,7 @@ export default function AppDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const { openTerminal } = useTerminal();
 
-  const fetchAppDetail = async (selectedRunner = runner) => {
+  const fetchAppDetail = useCallback(async (selectedRunner = runner) => {
     try {
       const res = await fetch(`/api/apps/${id}?runner=${selectedRunner}`);
       const result = await res.json();
@@ -47,11 +47,11 @@ export default function AppDetailPage() {
     } catch {
       // offline
     }
-  };
+  }, [id, runner]);
 
   useEffect(() => {
     if (id) fetchAppDetail(runner);
-  }, [id, runner]);
+  }, [fetchAppDetail, id, runner]);
 
   const handleSaveOverride = async () => {
     setSaving(true);

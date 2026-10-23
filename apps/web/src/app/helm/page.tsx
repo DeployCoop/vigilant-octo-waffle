@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   Ship,
@@ -96,7 +96,15 @@ export default function HelmPage() {
   } | null>(null);
   const [loadingViewer, setLoadingViewer] = useState(false);
 
-  const fetchData = async () => {
+  // Latest-value ref: fetchData reads the current input only for its
+  // don't-override-the-user guard, so the read must not become a fetch
+  // trigger (see PR-13 notes).
+  const chartsDirInputRef = useRef(chartsDirInput);
+  useEffect(() => {
+    chartsDirInputRef.current = chartsDirInput;
+  });
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/helm');
@@ -105,7 +113,7 @@ export default function HelmPage() {
       setLocalCharts(data.localCharts || []);
       if (data.chartsDir) {
         setChartsDir(data.chartsDir);
-        if (!chartsDirInput) {
+        if (!chartsDirInputRef.current) {
           setChartsDirInput(data.chartsDir);
         }
       }
@@ -114,11 +122,11 @@ export default function HelmPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const handleUpdateChartsDir = async () => {
     if (!chartsDirInput.trim()) return;

@@ -58,9 +58,20 @@ export default function TerminalPage() {
     }
   };
 
+  // Latest-callback ref: the SSE listener below must call the current
+  // fetchTasks without making it an effect trigger. The mount effect
+  // deliberately captures the mount-render instance (for its immediate
+  // call and the interval), exactly as it did when it referenced the
+  // first-render fetchTasks directly — see PR-13 notes.
+  const fetchTasksRef = useRef(fetchTasks);
   useEffect(() => {
-    fetchTasks();
-    const interval = setInterval(fetchTasks, 5000);
+    fetchTasksRef.current = fetchTasks;
+  });
+
+  useEffect(() => {
+    const fetchTasksOnMount = fetchTasksRef.current;
+    fetchTasksOnMount();
+    const interval = setInterval(fetchTasksOnMount, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -101,7 +112,7 @@ export default function TerminalPage() {
         const parsed = JSON.parse(e.data);
         setTaskStatus(parsed.status);
       } catch {}
-      fetchTasks();
+      fetchTasksRef.current();
     });
 
     es.onerror = () => {

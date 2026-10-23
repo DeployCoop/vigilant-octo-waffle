@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -73,7 +73,7 @@ export default function DashboardPage() {
   const { openSignInPrompt } = useAbilityContext();
   const router = useRouter();
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const t0 = performance.now();
       const [clusterRes, appsRes, nodesRes, podsRes] = await Promise.all([
@@ -118,13 +118,13 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
 
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 8000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
 
   const handleRunUp = async () => {
     soundFx.playClick();

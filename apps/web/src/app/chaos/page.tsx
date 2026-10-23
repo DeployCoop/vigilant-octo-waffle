@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCan } from '@/lib/ability';
 import { apiErrorMessage } from '@/lib/envelope';
 import {
@@ -59,7 +59,15 @@ export default function ChaosPlaygroundPage() {
   const [injecting, setInjecting] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  const loadData = async () => {
+  // Latest-value ref: loadData reads the current selection only for its
+  // don't-override-the-user guard, so the read must not become a fetch
+  // trigger (see PR-13 notes).
+  const selectedPodRef = useRef(selectedPod);
+  useEffect(() => {
+    selectedPodRef.current = selectedPod;
+  });
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [resReport, resPods] = await Promise.all([
@@ -76,7 +84,7 @@ export default function ChaosPlaygroundPage() {
       }));
       setPods(availablePods);
 
-      if (availablePods.length > 0 && !selectedPod) {
+      if (availablePods.length > 0 && !selectedPodRef.current) {
         setSelectedPod(availablePods[0].name);
         setSelectedNamespace(availablePods[0].namespace);
       }
@@ -85,11 +93,11 @@ export default function ChaosPlaygroundPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const handleLaunchExperiment = async () => {
     if (!selectedPod || !selectedNamespace) return;
