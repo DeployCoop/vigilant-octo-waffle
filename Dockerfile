@@ -62,16 +62,20 @@ COPY src/ ./src/
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
 
-# Ship production-only node_modules in the runner stage (Plan III §8.4):
-# prune devDependencies from every workspace importer after the build.
+# Ship production-only node_modules in the runner stage (Plan III §8.4).
+# This is a production re-install, not `pnpm prune --prod`: prune left
+# the recorded modules state describing the full install, and pnpm's
+# deps-status check then "repaired" it by running a production install
+# at `pnpm start` — i.e. at every container boot, needing network and
+# write access to the store. A production install records production
+# state, so the check is satisfied and start is instant and offline.
 # CI=true: the Docker build has no TTY, and pnpm otherwise aborts the
 # modules-directory purge it cannot confirm interactively.
-# --ignore-scripts: prune re-runs workspace lifecycle scripts at the
-# end, and the orchestrator's `prepare` is `tsc` — but TypeScript is a
-# devDependency that has just been pruned. The dist output is already
-# built above, and surviving packages keep the artifacts their install
-# scripts produced during `pnpm install`; nothing needs to re-run.
-RUN CI=true pnpm prune --prod --ignore-scripts
+# --ignore-scripts: the pass re-runs workspace lifecycle scripts, and
+# the orchestrator's `prepare` is `tsc` — but TypeScript is a
+# devDependency being removed by this very pass. The dist output is
+# already built above; nothing needs to re-run.
+RUN CI=true pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS runner
 WORKDIR /app
@@ -81,6 +85,11 @@ ENV PORT=3000
 # Run as the image's non-root node user (uid 1000, Plan III §8.4). The
 # app writes runtime state (.vow/) under /app, so the copy is chowned.
 COPY --from=builder --chown=node:node /app ./
+# The /app directory itself predates the copy (the base stage's
+# WORKDIR created it as root); COPY --chown covers the copied files,
+# not that directory inode. The app creates state directories directly
+# under /app at runtime, so the directory must be node-owned too.
+RUN chown node:node /app
 USER node
 
 EXPOSE 3000
