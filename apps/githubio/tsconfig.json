@@ -1,4 +1,5 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "allowJs": true,
     "esModuleInterop": true,
@@ -23,10 +24,7 @@
         "name": "next"
       }
     ],
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "target": "ES2022"
+    "resolveJsonModule": true
   },
   "exclude": [
     "node_modules"
