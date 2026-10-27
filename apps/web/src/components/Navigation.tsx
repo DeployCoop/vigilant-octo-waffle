@@ -33,6 +33,16 @@ import {
   BookOpen,
   Search,
   X,
+  Radio,
+  GitPullRequest,
+  GitCompare,
+  Timer,
+  Zap,
+  Target,
+  TrendingUp,
+  Globe,
+  FileText,
+  History,
 } from 'lucide-react';
 import { useTerminal } from '@/context/TerminalContext';
 import { useAbilityContext } from '@/lib/ability';
@@ -68,6 +78,10 @@ export const navGroups: NavGroup[] = [
       { name: 'Helm Hub & Releases', href: '/helm', icon: Ship },
       { name: 'Argo Rollouts', href: '/rollouts', icon: Sliders },
       { name: 'OCI Image Builder', href: '/builder', icon: Boxes },
+      { name: 'PR Previews', href: '/previews', icon: GitPullRequest },
+      { name: 'OctoDrift Reconciler', href: '/drift', icon: GitCompare },
+      { name: 'GitOps Time Machine', href: '/rewind', icon: History },
+      { name: 'Wasm Workloads', href: '/wasm', icon: Zap },
     ],
   },
   {
@@ -80,6 +94,10 @@ export const navGroups: NavGroup[] = [
       { name: 'Architecture Graph', href: '/topology', icon: Network },
       { name: 'Storage & Volumes', href: '/storage', icon: HardDrive },
       { name: 'Backups & Snapshots', href: '/backups', icon: Archive },
+      { name: 'KEDA Autoscaler', href: '/keda', icon: TrendingUp },
+      { name: 'Multi-Cluster Fleet', href: '/fleet', icon: Globe },
+      { name: 'Disaster Recovery', href: '/dr', icon: Timer },
+      { name: 'DB Zero-Downtime', href: '/migrate', icon: Database },
     ],
   },
   {
@@ -92,6 +110,9 @@ export const navGroups: NavGroup[] = [
       { name: 'Credentials Vault', href: '/vault', icon: Key },
       { name: 'Security Audit', href: '/security', icon: ShieldCheck },
       { name: 'Access & Audit', href: '/settings/access', icon: Key },
+      { name: 'Admission Guard', href: '/guard', icon: ShieldCheck },
+      { name: 'SPIFFE & mTLS Mesh', href: '/mesh', icon: Lock },
+      { name: 'SecretOps & Leaks', href: '/secretops', icon: ShieldAlert },
     ],
   },
   {
@@ -104,6 +125,9 @@ export const navGroups: NavGroup[] = [
       { name: 'Chaos Playground', href: '/chaos', icon: Flame },
       { name: 'Live Terminal', href: '/terminal', icon: Terminal },
       { name: 'Data & DB Studio', href: '/data', icon: Database },
+      { name: 'eBPF & CoreDNS', href: '/ebpf', icon: Radio },
+      { name: 'SRE & Error Budgets', href: '/slo', icon: Target },
+      { name: 'AI Post-Mortems', href: '/postmortem', icon: FileText },
     ],
   },
   {
