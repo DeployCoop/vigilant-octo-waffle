@@ -3,16 +3,12 @@
 import { useState, useEffect } from 'react';
 import {
   FileText,
-  AlertTriangle,
   Clock,
   Sparkles,
   RefreshCw,
   Copy,
   Check,
   CheckCircle2,
-  Calendar,
-  Layers,
-  ArrowRight,
 } from 'lucide-react';
 
 interface IncidentEvent {
@@ -54,7 +50,7 @@ export default function PostmortemPage() {
   // New incident synthesis form
   const [incidentTitle, setIncidentTitle] = useState('Redis Cluster Network Partition & Session Drop');
   const [severity, setSeverity] = useState<'SEV-1' | 'SEV-2' | 'SEV-3'>('SEV-2');
-  const [targetWorkloads, setTargetWorkloads] = useState('redis-master-0, nextcloud-app');
+  const targetWorkloads = 'redis-master-0, nextcloud-app';
 
   const fetchReports = async () => {
     setLoading(true);

@@ -74,7 +74,7 @@ export async function lintDdlScript(sql: string): Promise<{ clean: boolean; find
     }
 
     // Check 2: DROP COLUMN
-    if (/ALTER\s+TABLE\s+.*\s+DROP\s+COLUMN/i.test(trimmed)) {
+    if (/\bALTER\s+TABLE\b/i.test(trimmed) && /\bDROP\s+COLUMN\b/i.test(trimmed)) {
       findings.push({
         rule: 'avoid-immediate-column-drop',
         severity: 'WARNING',
@@ -85,7 +85,12 @@ export async function lintDdlScript(sql: string): Promise<{ clean: boolean; find
     }
 
     // Check 3: ADD COLUMN with volatile default
-    if (/ALTER\s+TABLE\s+.*\s+ADD\s+COLUMN\s+.*\s+DEFAULT\s+/i.test(trimmed) && !/uuid_generate|now\(\)/i.test(trimmed)) {
+    if (
+      /\bALTER\s+TABLE\b/i.test(trimmed) &&
+      /\bADD\s+COLUMN\b/i.test(trimmed) &&
+      /\bDEFAULT\b/i.test(trimmed) &&
+      !/uuid_generate|now\(\)/i.test(trimmed)
+    ) {
       findings.push({
         rule: 'verify-non-volatile-default',
         severity: 'INFO',

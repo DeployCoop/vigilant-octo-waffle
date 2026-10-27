@@ -3,14 +3,8 @@
 import { useState, useEffect } from 'react';
 import {
   TrendingUp,
-  Zap,
-  Activity,
   Play,
   RefreshCw,
-  Server,
-  Layers,
-  CheckCircle2,
-  Sliders,
   Flame,
 } from 'lucide-react';
 
@@ -53,7 +47,7 @@ export default function KedaAutoscalerPage() {
   // Load test state
   const [targetWorkload, setTargetWorkload] = useState('nextcloud-worker');
   const [virtualUsers, setVirtualUsers] = useState(25);
-  const [durationSeconds, setDurationSeconds] = useState(15);
+  const durationSeconds = 15;
   const [targetRps, setTargetRps] = useState(300);
   const [pattern, setPattern] = useState<'SPIKE' | 'RAMP' | 'CONSTANT'>('SPIKE');
   const [testing, setTesting] = useState(false);

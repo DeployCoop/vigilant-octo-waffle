@@ -4,15 +4,9 @@ import { useState, useEffect } from 'react';
 import {
   Timer,
   Play,
-  RotateCcw,
   CheckCircle2,
-  AlertTriangle,
   FileText,
-  ShieldCheck,
   RefreshCw,
-  HardDrive,
-  Database,
-  Layers,
 } from 'lucide-react';
 
 interface DRDrillStep {

@@ -3,16 +3,9 @@
 import { useState, useEffect } from 'react';
 import {
   Zap,
-  Cpu,
-  Layers,
-  HardDrive,
   RefreshCw,
   Play,
-  CheckCircle2,
   FileCode,
-  Box,
-  Flame,
-  ArrowRight,
 } from 'lucide-react';
 
 interface WasmRuntimeInfo {

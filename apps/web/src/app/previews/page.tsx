@@ -10,10 +10,7 @@ import {
   RefreshCw,
   GitBranch,
   GitPullRequest,
-  CheckCircle2,
-  AlertCircle,
   Timer,
-  Shield,
 } from 'lucide-react';
 
 interface PreviewEnvironment {
@@ -161,6 +158,15 @@ export default function PreviewsStudioPage() {
         </div>
 
         <div className="flex items-center space-x-3">
+          <button
+            onClick={fetchPreviews}
+            disabled={loading}
+            className="flex items-center space-x-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium rounded-lg border border-slate-800 transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
           <button
             onClick={handleCleanupExpired}
             className="flex items-center space-x-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium rounded-lg border border-slate-800 transition"

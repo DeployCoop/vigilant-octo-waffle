@@ -3,15 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Globe,
-  Server,
-  Layers,
-  Cpu,
   RefreshCw,
-  CheckCircle2,
-  ExternalLink,
-  Radio,
-  ArrowRight,
-  Shield,
   Send,
 } from 'lucide-react';
 

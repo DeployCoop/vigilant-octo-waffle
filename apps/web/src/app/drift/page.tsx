@@ -5,13 +5,9 @@ import {
   GitCompare,
   RefreshCw,
   CheckCircle2,
-  AlertTriangle,
-  ArrowRight,
   GitCommit,
   RotateCcw,
   FileCode,
-  ShieldCheck,
-  Check,
 } from 'lucide-react';
 
 interface DriftItem {

@@ -6,12 +6,6 @@ import {
   Clock,
   RotateCcw,
   RefreshCw,
-  GitCommit,
-  CheckCircle2,
-  AlertTriangle,
-  ArrowRight,
-  Shield,
-  Layers,
 } from 'lucide-react';
 
 interface ClusterStateSnapshot {
@@ -38,13 +32,11 @@ export default function RewindStudioPage() {
   const [loading, setLoading] = useState(true);
   const [selectedSnapshot, setSelectedSnapshot] = useState<ClusterStateSnapshot | null>(null);
   const [deltas, setDeltas] = useState<SnapshotDelta[]>([]);
-  const [comparing, setComparing] = useState(false);
   const [rewinding, setRewinding] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const handleSelectSnapshot = async (snapshot: ClusterStateSnapshot) => {
     setSelectedSnapshot(snapshot);
-    setComparing(true);
     try {
       const res = await fetch('/api/rewind', {
         method: 'POST',
@@ -57,8 +49,6 @@ export default function RewindStudioPage() {
       }
     } catch (err) {
       console.error('Compare failed:', err);
-    } finally {
-      setComparing(false);
     }
   };
 

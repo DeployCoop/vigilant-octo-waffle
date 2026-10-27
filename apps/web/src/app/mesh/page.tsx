@@ -3,15 +3,9 @@
 import { useState, useEffect } from 'react';
 import {
   Lock,
-  ShieldCheck,
-  ShieldAlert,
   Key,
   RefreshCw,
-  Zap,
   ArrowRight,
-  CheckCircle2,
-  FileCode,
-  Check,
 } from 'lucide-react';
 
 interface WorkloadIdentity {

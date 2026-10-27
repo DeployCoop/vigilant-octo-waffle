@@ -3,15 +3,9 @@
 import { useState, useEffect } from 'react';
 import {
   Database,
-  CheckCircle2,
-  AlertTriangle,
-  Play,
   RefreshCw,
   FileCode,
   ShieldAlert,
-  ArrowRight,
-  ShieldCheck,
-  Check,
 } from 'lucide-react';
 
 interface MigrationRecord {

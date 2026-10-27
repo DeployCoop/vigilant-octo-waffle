@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import {
   ShieldCheck,
-  ShieldAlert,
   FileCode,
   CheckCircle2,
   AlertTriangle,

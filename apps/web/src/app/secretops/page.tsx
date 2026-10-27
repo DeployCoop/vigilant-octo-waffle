@@ -7,11 +7,8 @@ import {
   Lock,
   RefreshCw,
   AlertTriangle,
-  CheckCircle2,
-  FileCode,
   Copy,
   Check,
-  RotateCcw,
 } from 'lucide-react';
 
 interface SecretLeakFinding {

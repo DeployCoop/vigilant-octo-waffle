@@ -3,16 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
   Target,
-  Activity,
-  AlertTriangle,
-  ShieldAlert,
-  CheckCircle2,
   RefreshCw,
-  Zap,
-  Sliders,
-  Flame,
-  Check,
-  RotateCcw,
 } from 'lucide-react';
 
 interface ServiceSloRecord {
