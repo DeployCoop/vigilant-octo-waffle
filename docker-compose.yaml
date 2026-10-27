@@ -11,7 +11,7 @@ services:
       - "127.0.0.1:3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.kube:/root/.kube:ro
+      - ~/.kube:/home/node/.kube:ro
       - ./.env:/app/.env
       - ./.env.enabler:/app/.env.enabler
       - ./.secrets:/app/.secrets

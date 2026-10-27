@@ -54,16 +54,56 @@ FROM base AS builder
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/ ./packages/
 COPY apps/ ./apps/
+# The orchestrator shells out to the bash runners and templates under
+# src/ at runtime and locates the workspace root via src/default.env;
+# the tree must ship in the image (Plan III §8.4 runtime contents).
+COPY src/ ./src/
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
+
+# Ship production-only node_modules in the runner stage (Plan III §8.4):
+# a production re-install across every workspace importer, after the
+# build (a plain `pnpm prune --prod` hits the same two traps below).
+# CI=true: the Docker build has no TTY, and pnpm aborts the
+# modules-directory purge it cannot confirm interactively
+# (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY). pnpm's suggested
+# alternative, confirmModulesPurge=false, does not coerce from the
+# environment for that untyped setting — CI-verified — so CI=true it
+# is; its one side effect (a CI-flavored value recorded in the
+# install state) is handled in the runner stage, below.
+# --ignore-scripts: the pass re-runs workspace lifecycle scripts, and
+# the orchestrator's `prepare` is `tsc` — but TypeScript is a
+# devDependency being removed by this very pass. The dist output is
+# already built above; nothing needs to re-run.
+RUN CI=true pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+# The builder's production pass ran under CI=true, which records
+# enableGlobalVirtualStore=false in the install state; at runtime
+# (no CI) pnpm 11 computes its default for that setting, so
+# `pnpm start`'s deps-status check reports drift ("The value of the
+# enableGlobalVirtualStore setting has changed") — and its default
+# response is a production reinstall at every boot (network + store
+# writes). The tree is built from the frozen lockfile in this same
+# Dockerfile and is immutable at runtime, so demote the check to a
+# boot-log warning. The env name is pnpm's own override, read
+# verbatim by @pnpm/config in pnpm 11; the npm_config_ form does
+# not reach this setting.
+ENV pnpm_config_verify_deps_before_run=warn
 
-COPY --from=builder /app ./
+# Run as the image's non-root node user (uid 1000, Plan III §8.4). The
+# app writes runtime state (.vow/) under /app, so the copy is chowned.
+COPY --from=builder --chown=node:node /app ./
+# The /app directory itself predates the copy (the base stage's
+# WORKDIR created it as root); COPY --chown covers the copied files,
+# not that directory inode. The app creates state directories directly
+# under /app at runtime, so the directory must be node-owned too.
+RUN chown node:node /app
+USER node
 
 EXPOSE 3000
 CMD ["pnpm", "start"]

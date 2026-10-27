@@ -1,0 +1,30 @@
+# Docker build context exclusions (Plan III §8.4).
+# The builder stage COPYs only the workspace manifests, packages/, apps/,
+# and src/ — everything below is secret, generated, or local state that
+# must never enter the build context (and therefore never the image).
+
+# VCS metadata and local secrets / runtime state
+.git
+.secrets
+.vow
+.vow-cache
+.argo_overrides
+
+# Dependencies and build outputs (rebuilt inside the image)
+**/node_modules
+**/.next
+**/dist
+apps/githubio/out
+**/*.tsbuildinfo
+
+# Local env files. Runtime configuration is bind-mounted by
+# docker-compose at run time, never baked into the image. The tracked
+# templates under src/ (default.env, example.env, example.env.enabler)
+# do NOT match these patterns — their names do not start with ".env" —
+# and stay in the context on purpose: the orchestrator reads them at
+# runtime and locates the workspace root via src/default.env.
+**/.env
+**/.env.*
+
+# Coverage artifacts
+**/coverage
