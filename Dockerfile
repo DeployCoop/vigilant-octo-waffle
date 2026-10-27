@@ -51,7 +51,12 @@ RUN curl -fsSL -o helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-am
 WORKDIR /app
 
 FROM base AS builder
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# All four package tsconfigs extend the root tsconfig.base.json (strict,
+# skipLibCheck, casing flag, target); it must be in the build context or
+# every package's `tsc` fails with TS5083 (and, with skipLibCheck lost,
+# TS7016 from untyped transitive deps). Keep this COPY in sync with any
+# future root-level file a package config extends.
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY packages/ ./packages/
 COPY apps/ ./apps/
 # The orchestrator shells out to the bash runners and templates under
