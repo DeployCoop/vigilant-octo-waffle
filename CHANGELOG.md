@@ -17,6 +17,41 @@ Releases are marked with annotated git tags (`vX.Y.Z`).
   task records via `node:sqlite`, the first Ink CLI test suite, and
   decomposition of the four largest files behind barrels/composition —
   landing as PRs #32–#57.
+- Improvements Plan II (PR #86) and its WS1 least-privilege tightening
+  (PR #87): a 12-character password floor, the `flux:bootstrap`
+  permission split, query-token path restriction, and
+  `VOW_AGY_SKIP_PERMISSIONS` defaulting off.
+- Plan II WS5 (PR #97): hashed server-side sessions behind an httpOnly
+  SameSite=Strict cookie (12h absolute TTL, browser stores nothing),
+  `?token=` streams retired, `Grant.context` enforced server-side in
+  `decide()`, and principal edits/token rotation revoking sessions.
+- Plan II WS3+WS4 (PR #94): the shell test harness (`scripts/tests/run.sh`),
+  ShellCheck warning budget, lint budgets, and binary-skip test semantics.
+- CodeQL depth (PRs #84, #88): the analysis workflow, the
+  security-and-quality query suite, the actions analysis, and SHA-pinned
+  GitHub Actions.
+
+### Changed
+
+- Dependabot catch-all groups plus patch-only auto-merge (PR #89).
+- Routine grouped dependency maintenance (PRs #90–#92, #98–#100).
+
+### Fixed
+
+- Dependabot auto-merge approval flow (PRs #95, #96): first scoped to
+  the arm-only approval restriction, then restored to automated approval
+  once the organization toggle allowed Actions approvals.
+
+### Security
+
+- Bug-sweep remediation (PR #83): shell injection, authz holes,
+  executor lifecycle, and server_url parsing.
+- CodeQL triage remediation, round 1 (PR #85): storage-route shell
+  injection, .env escaping, scrypt passwords, SSRF confinement, and
+  ReDoS rewrites.
+- CodeQL triage remediation, round 2 (PR #93): enabler-name validation —
+  86 alerts triaged, 1 fixed in code, the other 85 dismissed with
+  documented reasons.
 
 ## [0.1.0] - 2026-10-04
 
