@@ -94,7 +94,10 @@ export async function listScaledObjects(): Promise<KedaScaledObject[]> {
 }
 
 export async function executeSyntheticLoad(config: SyntheticLoadConfig): Promise<LoadTestResult> {
-  const target = scaledObjectsStore.find((s) => s.targetWorkload === config.targetWorkload) || scaledObjectsStore[0];
+  const target = scaledObjectsStore.find((s) => s.targetWorkload === config.targetWorkload);
+  if (!target) {
+    throw new Error(`ScaledObject for workload '${config.targetWorkload}' not found.`);
+  }
 
   const duration = Math.min(60, Math.max(5, config.durationSeconds || 15));
   const peakRps = config.targetRps || 250;

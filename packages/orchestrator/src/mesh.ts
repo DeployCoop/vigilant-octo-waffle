@@ -1,3 +1,5 @@
+import { assertK8sLabel } from './exec-argv.js';
+
 export interface WorkloadIdentity {
   podName: string;
   namespace: string;
@@ -150,6 +152,7 @@ export async function getMtlsTopology(): Promise<TlsConnectionLink[]> {
 export async function enforceStrictMtls(
   namespace: string
 ): Promise<{ success: boolean; namespace: string; manifest: string; message: string }> {
+  assertK8sLabel(namespace, 'namespace');
   strictMtlsNamespaces.add(namespace);
 
   const manifest = `apiVersion: security.cilium.io/v1

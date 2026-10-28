@@ -1,3 +1,5 @@
+import { assertK8sLabel, assertK8sObjectName } from './exec-argv.js';
+
 export interface SecretLeakFinding {
   id: string;
   workloadName: string;
@@ -128,6 +130,8 @@ export async function rotateSecretCredential(
   secretName: string,
   namespace: string
 ): Promise<{ success: boolean; newVersion: string; message: string }> {
+  assertK8sObjectName(secretName, 'secret name');
+  assertK8sLabel(namespace, 'namespace');
   const newVer = `v${Math.floor(Date.now() / 1000)}`;
   return {
     success: true,
@@ -141,6 +145,15 @@ export function generateSealedSecretManifest(
   namespace: string,
   keyValues: Record<string, string>
 ): string {
+  assertK8sObjectName(secretName, 'secret name');
+  assertK8sLabel(namespace, 'namespace');
+
+  for (const k of Object.keys(keyValues)) {
+    if (!/^[-._a-zA-Z0-9]+$/.test(k)) {
+      throw new Error(`Invalid secret key ${JSON.stringify(k)}: must match [-._a-zA-Z0-9]+`);
+    }
+  }
+
   const encryptedFields = Object.entries(keyValues)
     .map(
       ([k, v]) =>

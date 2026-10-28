@@ -26,12 +26,12 @@ export async function GET(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  // Cancelling a running task is a task action, not a read.
+  const denied = await authorizeRequest(req, 'tasks:run');
+  if (denied) return denied;
+
   try {
     const { taskId } = await req.json();
-
-    // Cancelling a running task is a task action, not a read.
-    const denied = await authorizeRequest(req, 'tasks:run');
-    if (denied) return denied;
 
     if (!taskId) {
       return apiError(400, 'Missing taskId');

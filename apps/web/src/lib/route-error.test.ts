@@ -59,6 +59,15 @@ describe('routeError classification', () => {
     expect(body.error.message).toBe('name: Required');
   });
 
+  it('SyntaxError → 400 bad_request with malformed JSON message', async () => {
+    const syntaxErr = new SyntaxError('Unexpected token in JSON at position 0');
+    const res = routeError(syntaxErr, { route: 'POST /api/x' });
+    expect(res.status).toBe(400);
+    const body = await bodyOf(res);
+    expect(body.error.code).toBe('bad_request');
+    expect(body.error.message).toBe('Malformed JSON in request body');
+  });
+
   it('generic errors → 500 internal without leaking the raw message, honoring a status override', async () => {
     // 2026-10-14 bug sweep: raw err.message (command lines, paths,
     // cluster stderr) must not reach clients on server errors; it is

@@ -69,6 +69,10 @@ export function routeError(err: unknown, opts: RouteErrorOptions): NextResponse 
     message = first
       ? `${first.path.join('.') || 'body'}: ${first.message}`
       : 'Invalid request body';
+  } else if (err instanceof SyntaxError) {
+    status = 400;
+    code = opts.code ?? 'bad_request';
+    message = 'Malformed JSON in request body';
   } else {
     // BUG FIX (2026-10-14 sweep): the raw error message used to be
     // returned verbatim — orchestrator exec failures carry full command

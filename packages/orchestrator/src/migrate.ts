@@ -62,14 +62,14 @@ export async function lintDdlScript(sql: string): Promise<{ clean: boolean; find
     const trimmed = line.trim();
     const lineNum = idx + 1;
 
-    // Check 1: CREATE INDEX without CONCURRENTLY
-    if (/CREATE\s+INDEX\s+/i.test(trimmed) && !/CONCURRENTLY/i.test(trimmed)) {
+    // Check 1: CREATE [UNIQUE] INDEX without CONCURRENTLY
+    if (/CREATE\s+(?:UNIQUE\s+)?INDEX\s+/i.test(trimmed) && !/CONCURRENTLY/i.test(trimmed)) {
       findings.push({
         rule: 'require-concurrent-index-creation',
         severity: 'BLOCKER',
         message: 'CREATE INDEX takes an exclusive ACCESS EXCLUSIVE table lock on PostgreSQL.',
         line: lineNum,
-        suggestedFix: trimmed.replace(/CREATE\s+INDEX/i, 'CREATE INDEX CONCURRENTLY'),
+        suggestedFix: trimmed.replace(/CREATE\s+(UNIQUE\s+)?INDEX/i, (_, unique) => `CREATE ${unique || ''}INDEX CONCURRENTLY`),
       });
     }
 

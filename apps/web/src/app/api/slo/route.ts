@@ -19,6 +19,9 @@ export async function GET(req: Request) {
 
     if (serviceId) {
       const burnRate = await calculateBurnRates(serviceId);
+      if (!burnRate) {
+        return apiError(404, `SLO target ${serviceId} not found`);
+      }
       return NextResponse.json(burnRate);
     }
 
@@ -46,6 +49,9 @@ export async function POST(req: Request) {
 
     if (action === 'toggle_circuit_breaker') {
       const result = await toggleSloCircuitBreaker(serviceId, Boolean(tripped));
+      if (!result.success) {
+        return apiError(404, result.message);
+      }
       return NextResponse.json(result);
     }
 

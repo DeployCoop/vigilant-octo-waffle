@@ -1,3 +1,5 @@
+import { assertK8sLabel } from './exec-argv.js';
+
 export interface WasmRuntimeInfo {
   supported: boolean;
   activeRuntimeClasses: string[];
@@ -109,8 +111,16 @@ export async function deployWasmMicroservice(
   serviceId: string,
   namespace: string = 'default'
 ): Promise<{ success: boolean; manifest: string; message: string }> {
+  assertK8sLabel(namespace, 'namespace');
   const catalog = await getWasmCatalog();
-  const service = catalog.find((s) => s.id === serviceId) || catalog[0];
+  const service = catalog.find((s) => s.id === serviceId);
+  if (!service) {
+    return {
+      success: false,
+      manifest: '',
+      message: `WASM microservice [${serviceId}] not found in catalog.`,
+    };
+  }
 
   const manifest = `apiVersion: apps/v1
 kind: Deployment

@@ -105,33 +105,36 @@ export async function generatePostmortem(params: {
   const id = `pm-${Date.now().toString().slice(-6)}`;
   const now = new Date();
   const detected = new Date(now.getTime() - 25 * 60 * 1000);
+  const workloads = Array.isArray(params.affectedWorkloads) && params.affectedWorkloads.length > 0
+    ? params.affectedWorkloads
+    : ['ingress-gateway'];
 
   const timeline: IncidentEvent[] = [
     {
       timestamp: 'T-25m',
       eventType: 'TRACE_LATENCY_SPIKE',
-      workload: params.affectedWorkloads[0] || 'ingress-gateway',
+      workload: workloads[0] || 'ingress-gateway',
       namespace: 'default',
       description: 'Trace waterfall registered abnormal latency increase across dependent microservices.',
     },
     {
       timestamp: 'T-20m',
       eventType: 'CHAOS_FAULT',
-      workload: params.affectedWorkloads[0] || 'app-workload',
+      workload: workloads[0] || 'app-workload',
       namespace: 'default',
       description: 'Transient packet loss and socket resets observed on egress interface.',
     },
     {
       timestamp: 'T-12m',
       eventType: 'CRASH_LOOP',
-      workload: params.affectedWorkloads[1] || params.affectedWorkloads[0] || 'worker-pool',
+      workload: workloads[1] || workloads[0] || 'worker-pool',
       namespace: 'default',
       description: 'Liveness probes timed out resulting in automated pod restarts.',
     },
     {
       timestamp: 'T-0m',
       eventType: 'POD_EVICTION',
-      workload: params.affectedWorkloads[0] || 'app-workload',
+      workload: workloads[0] || 'app-workload',
       namespace: 'default',
       description: 'Self-healing GitOps reconciliation restored target replica count to 100% ready.',
     },
@@ -141,7 +144,7 @@ export async function generatePostmortem(params: {
 **ID:** ${id} | **Severity:** ${params.severity} | **Duration:** 25 Minutes
 
 ## 1. Executive Summary
-On ${now.toISOString().split('T')[0]}, cluster observability detected performance degradation in [${params.affectedWorkloads.join(', ')}]. Autonomous failover mechanisms and GitOps reconciliation restored full SLA availability within 25 minutes.
+On ${now.toISOString().split('T')[0]}, cluster observability detected performance degradation in [${workloads.join(', ')}]. Autonomous failover mechanisms and GitOps reconciliation restored full SLA availability within 25 minutes.
 
 ## 2. Root Cause Analysis
 - **Primary Trigger:** Unanticipated workload saturation leading to transient resource throttling.
@@ -161,8 +164,8 @@ On ${now.toISOString().split('T')[0]}, cluster observability detected performanc
     detectedAt: detected.toISOString(),
     resolvedAt: now.toISOString(),
     durationMinutes: 25,
-    affectedWorkloads: params.affectedWorkloads,
-    rootCause: `Workload saturation and latency degradation on ${params.affectedWorkloads.join(', ')}.`,
+    affectedWorkloads: workloads,
+    rootCause: `Workload saturation and latency degradation on ${workloads.join(', ')}.`,
     timeline,
     actionItems: [
       { id: `${id}-1`, title: 'Tune resource request headroom in GitOps manifests', owner: 'SRE', status: 'IN_PROGRESS' },

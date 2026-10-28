@@ -38,9 +38,15 @@ export async function POST(req: Request) {
 
     if (action === 'compare') {
       const result = await compareSnapshotWithLive(snapshotId);
+      if (!result) {
+        return apiError(404, `Snapshot ${snapshotId} not found`);
+      }
       return NextResponse.json({ success: true, comparison: result });
     } else if (action === 'rewind') {
       const result = await rewindToSnapshot(snapshotId);
+      if (!result.success) {
+        return apiError(404, result.message);
+      }
       return NextResponse.json(result);
     } else {
       return apiError(400, `Unknown action: ${action}`);

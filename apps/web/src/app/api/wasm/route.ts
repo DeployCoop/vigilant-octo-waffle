@@ -47,6 +47,9 @@ export async function POST(req: Request) {
     }
 
     const result = await deployWasmMicroservice(serviceId, namespace);
+    if (!result.success) {
+      return apiError(404, result.message);
+    }
     return NextResponse.json(result);
   } catch (err) {
     return routeError(err, {

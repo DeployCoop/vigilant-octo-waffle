@@ -101,8 +101,9 @@ export async function getServiceSlos(): Promise<ServiceSloRecord[]> {
   return [...sloStore];
 }
 
-export async function calculateBurnRates(serviceId: string): Promise<BurnRateTelemetry> {
-  const slo = sloStore.find((s) => s.id === serviceId) || sloStore[0];
+export async function calculateBurnRates(serviceId: string): Promise<BurnRateTelemetry | null> {
+  const slo = sloStore.find((s) => s.id === serviceId);
+  if (!slo) return null;
   const timeToExhaustion =
     slo.burnRate1h > 0
       ? Math.round(((slo.errorBudgetRemainingPct / 100) * 720) / slo.burnRate1h)

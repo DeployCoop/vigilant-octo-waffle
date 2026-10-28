@@ -37,6 +37,9 @@ export async function POST(req: Request) {
         return apiError(400, 'ruleId is required');
       }
       const updated = await togglePolicyRule(ruleId, Boolean(enabled));
+      if (!updated) {
+        return apiError(404, `Policy rule ${ruleId} not found`);
+      }
       return NextResponse.json({ success: true, rule: updated });
     }
 

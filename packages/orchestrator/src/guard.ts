@@ -135,8 +135,17 @@ export async function evaluateManifest(yamlContent: string): Promise<EvaluationR
     path: 'spec.template.spec.containers[*].securityContext.readOnlyRootFilesystem',
   });
 
-  // Rule 3: Disallow :latest image tag
-  const hasLatest = lowerYaml.includes(':latest') || (lowerYaml.includes('image:') && !lowerYaml.includes(':'));
+  // Rule 3: Disallow :latest image tag or untagged image
+  const imageMatches = [...lowerYaml.matchAll(/image:\s*["']?([^\s"']+)["']?/g)];
+  const hasLatest =
+    lowerYaml.includes(':latest') ||
+    (imageMatches.length > 0 &&
+      imageMatches.some((m) => {
+        const img = m[1];
+        const lastSlash = img.lastIndexOf('/');
+        const tagPart = lastSlash >= 0 ? img.slice(lastSlash + 1) : img;
+        return !tagPart.includes(':') || tagPart.endsWith(':latest');
+      }));
   findings.push({
     ruleId: 'disallow-latest-image-tag',
     ruleName: 'Disallow :latest Image Tags',

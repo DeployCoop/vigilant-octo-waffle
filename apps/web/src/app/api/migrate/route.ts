@@ -43,6 +43,9 @@ export async function POST(req: Request) {
         return apiError(400, 'version is required for migration');
       }
       const execResult = await executeZeroDowntimeMigration(version);
+      if (!execResult.success) {
+        return apiError(404, execResult.message);
+      }
       return NextResponse.json(execResult);
     } else {
       return apiError(400, `Unknown action: ${action}`);

@@ -37,6 +37,9 @@ export async function POST(req: Request) {
         return apiError(400, 'clusterId is required');
       }
       const result = await switchClusterContext(clusterId);
+      if (!result.success) {
+        return apiError(404, result.message);
+      }
       return NextResponse.json(result);
     } else if (action === 'broadcast') {
       if (!appId || !targetClusterIds || !Array.isArray(targetClusterIds)) {

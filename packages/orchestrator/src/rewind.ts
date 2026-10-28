@@ -54,8 +54,9 @@ export async function listHistoricalSnapshots(): Promise<ClusterStateSnapshot[]>
   return [...snapshotsStore];
 }
 
-export async function compareSnapshotWithLive(snapshotId: string): Promise<{ snapshotId: string; deltas: SnapshotDelta[] }> {
-  const target = snapshotsStore.find((s) => s.id === snapshotId) || snapshotsStore[0];
+export async function compareSnapshotWithLive(snapshotId: string): Promise<{ snapshotId: string; deltas: SnapshotDelta[] } | null> {
+  const target = snapshotsStore.find((s) => s.id === snapshotId);
+  if (!target) return null;
 
   const deltas: SnapshotDelta[] = [
     {
