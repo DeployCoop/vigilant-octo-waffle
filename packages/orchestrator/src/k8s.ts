@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as k8s from '@kubernetes/client-node';
 
 import { execFileAsync } from './exec-argv.js';
@@ -154,6 +155,9 @@ export class K8sClient {
   constructor() {
     this.kc = new k8s.KubeConfig();
     try {
+      if (!process.env.KUBECONFIG && fs.existsSync('/etc/rancher/k3s/k3s.yaml')) {
+        process.env.KUBECONFIG = '/etc/rancher/k3s/k3s.yaml';
+      }
       this.kc.loadFromDefault();
       this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
       this.netApi = this.kc.makeApiClient(k8s.NetworkingV1Api);
@@ -200,6 +204,13 @@ export class K8sClient {
       } else if (currentContext.startsWith('kind-')) {
         detectedPlatform = 'kind';
         detectedClusterName = currentContext.replace(/^kind-/, '');
+      } else if (
+        currentContext === 'default' ||
+        currentContext.includes('k3s') ||
+        fs.existsSync('/etc/rancher/k3s/k3s.yaml')
+      ) {
+        detectedPlatform = 'k3s';
+        detectedClusterName = currentContext === 'default' ? 'axonwall-k3s' : currentContext;
       }
 
       const nodes = (nodesRes.items || []).map((n: k8s.V1Node) => {
@@ -208,6 +219,7 @@ export class K8sClient {
           .filter((k) => k.startsWith('node-role.kubernetes.io/'))
           .map((k) => k.replace('node-role.kubernetes.io/', ''));
         const osImage = n.status?.nodeInfo?.osImage || '';
+        const kubeletVersion = n.status?.nodeInfo?.kubeletVersion || '';
         const name = n.metadata?.name || 'unknown';
 
         if (name.startsWith('k3d-')) {
@@ -222,8 +234,9 @@ export class K8sClient {
             const match = name.match(/^kind-(.*?)-(control-plane|worker)/);
             if (match) detectedClusterName = match[1];
           }
-        } else if (osImage.toLowerCase().includes('k3s')) {
+        } else if (osImage.toLowerCase().includes('k3s') || kubeletVersion.includes('+k3s')) {
           if (detectedPlatform === 'unknown') detectedPlatform = 'k3s';
+          if (!detectedClusterName) detectedClusterName = 'axonwall-k3s';
         }
 
         return {

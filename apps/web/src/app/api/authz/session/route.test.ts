@@ -4,6 +4,29 @@ const hoisted = vi.hoisted(() => ({
   load: { status: 'disabled' } as import('@vow/orchestrator').AuthzStoreLoad,
   saved: [] as import('@vow/orchestrator').AuthzStore[],
   events: [] as string[],
+  ldapCfg: {
+    enabled: false,
+    url: 'ldap://127.0.0.1:389',
+    baseDn: 'dc=axonwall,dc=local',
+    userSearchBase: 'ou=users,dc=axonwall,dc=local',
+    userSearchFilter: '(uid={username})',
+    groupSearchBase: 'ou=groups,dc=axonwall,dc=local',
+    groupSearchFilter: '(&(objectClass=posixGroup)(memberUid={username}))',
+    bindDn: 'cn=svc-vow,ou=services,dc=axonwall,dc=local',
+    bindPassword: 'secret',
+    ownerGroups: ['axonwall-admin'],
+    adminGroups: ['vow-admin'],
+    operatorGroups: ['vow-operator'],
+    viewerGroups: ['vow-readonly'],
+    defaultRole: 'viewer',
+    autoProvisionPrincipals: true,
+    allowLocalBreakGlass: true,
+    tlsRejectUnauthorized: false,
+    connectTimeoutMs: 4000,
+  } as import('@vow/orchestrator').VowLdapConfig,
+  ldapAuthResult: {
+    authenticated: false,
+  } as import('@vow/orchestrator').VowLdapAuthResult,
 }));
 
 vi.mock('@vow/orchestrator', async (importOriginal) => {
@@ -14,6 +37,8 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
     saveAuthzStore: (_root: string, store: import('@vow/orchestrator').AuthzStore) => {
       hoisted.saved.push(store);
     },
+    resolveVowLdapConfig: () => hoisted.ldapCfg,
+    authenticateVowLdapUser: async () => hoisted.ldapAuthResult,
   };
 });
 
@@ -81,6 +106,10 @@ beforeEach(() => {
   hoisted.load = { status: 'ready', store: { version: 1, principals: [alice, disabledDave] } };
   hoisted.saved = [];
   hoisted.events = [];
+  hoisted.ldapCfg.enabled = false;
+  hoisted.ldapAuthResult = {
+    authenticated: false,
+  };
 });
 
 describe('/api/authz/session', () => {
@@ -121,6 +150,52 @@ describe('/api/authz/session', () => {
     hoisted.load = { status: 'disabled' };
     const res = await POST(post(aliceToken));
     expect(res.status).toBe(409);
+  });
+
+  describe('OpenLDAP directory session exchange', () => {
+    function postLdap(username: string, password: string) {
+      return new Request('http://localhost:3000/api/authz/session', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+    }
+
+    it('authenticates an OpenLDAP user, JIT-provisions a principal, and issues a session cookie', async () => {
+      hoisted.ldapCfg.enabled = true;
+      hoisted.ldapAuthResult = {
+        authenticated: true,
+        username: 'grace',
+        dn: 'uid=grace,ou=users,dc=axonwall,dc=local',
+        displayName: 'Grace Hopper',
+        groups: ['vow-admin', 'vow-operator'],
+        role: 'owner',
+      };
+
+      const res = await POST(postLdap('grace', 'cobalt-pass'));
+      expect(res.status).toBe(200);
+      const setCookie = res.headers.get('set-cookie') ?? '';
+      expect(setCookie).toContain('vow_session=');
+      expect(hoisted.events).toContain('ldap_session_created');
+      const body = await res.json();
+      expect(body.authSource).toBe('ldap');
+      expect(body.principal.ldapUid).toBe('grace');
+      expect(body.principal.role).toBe('owner');
+      expect(body.groups).toEqual(['vow-admin', 'vow-operator']);
+    });
+
+    it('rejects invalid LDAP credentials with 401', async () => {
+      hoisted.ldapCfg.enabled = true;
+      hoisted.ldapAuthResult = {
+        authenticated: false,
+        username: 'grace',
+        error: 'Invalid LDAP credentials',
+      };
+
+      const res = await POST(postLdap('grace', 'wrong-password'));
+      expect(res.status).toBe(401);
+      expect(res.headers.get('set-cookie')).toBeNull();
+    });
   });
 
   describe('GET (Plan III §4.3)', () => {

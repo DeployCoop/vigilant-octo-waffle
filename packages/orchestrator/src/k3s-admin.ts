@@ -6,6 +6,15 @@ import * as k8s from '@kubernetes/client-node';
 const execAsync = promisify(exec);
 import { execFileAsync } from './exec-argv.js';
 
+function getK3sExecutionEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    KUBECONFIG:
+      process.env.KUBECONFIG ||
+      (fs.existsSync('/etc/rancher/k3s/k3s.yaml') ? '/etc/rancher/k3s/k3s.yaml' : undefined),
+  };
+}
+
 export type ClusterHealthGrade = 'OPTIMAL' | 'HEALTHY' | 'DEGRADED' | 'CRITICAL' | 'OFFLINE';
 
 export interface K3sLiveHealthReport {
@@ -76,22 +85,23 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
   };
 
   try {
+    const env = getK3sExecutionEnv();
     // 1. Measure API Server Latency
     const start = Date.now();
-    await execAsync('kubectl get --raw /livez', { cwd: projectRoot, timeout: 5000 });
+    await execAsync('kubectl get --raw /livez', { cwd: projectRoot, env, timeout: 5000 });
     report.apiLatencyMs = Date.now() - start;
     report.apiAlive = true;
 
     // 2. Control Plane / Readyz check
     try {
-      const { stdout: readyzOut } = await execAsync('kubectl get --raw /readyz?verbose', { cwd: projectRoot, timeout: 5000 });
+      const { stdout: readyzOut } = await execAsync('kubectl get --raw /readyz?verbose', { cwd: projectRoot, env, timeout: 5000 });
       report.etcdQuorum = readyzOut.includes('[+]etcd') || !readyzOut.includes('[-]etcd');
     } catch {
       report.etcdQuorum = true; // SQLite/Kine mode in single-node K3s
     }
 
     // 3. Inspect Nodes
-    const { stdout: nodesOut } = await execAsync('kubectl get nodes -o json', { cwd: projectRoot });
+    const { stdout: nodesOut } = await execAsync('kubectl get nodes -o json', { cwd: projectRoot, env });
     const nodesData = JSON.parse(nodesOut) as k8s.V1NodeList;
     report.nodes.total = (nodesData.items || []).length;
 
@@ -117,7 +127,7 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
     }
 
     // 4. Inspect Pods in all namespaces
-    const { stdout: podsOut } = await execAsync('kubectl get pods -A -o json', { cwd: projectRoot });
+    const { stdout: podsOut } = await execAsync('kubectl get pods -A -o json', { cwd: projectRoot, env });
     const podsData = JSON.parse(podsOut) as k8s.V1PodList;
     report.pods.total = (podsData.items || []).length;
 

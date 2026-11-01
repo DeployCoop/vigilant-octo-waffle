@@ -229,13 +229,25 @@ export function loadProjectConfig(projectRoot: string = findProjectRoot()): VowC
 
   // Load enablers
   let enablers: Record<string, boolean> = {};
+  const axonwallEnablerPath = '/etc/axonwall/vow/.env.enabler';
   if (fs.existsSync(enablerPath)) {
     enablers = parseEnablerFile(fs.readFileSync(enablerPath, 'utf-8'));
+  } else if (fs.existsSync(axonwallEnablerPath)) {
+    const rawAxonwallEnv = fs.readFileSync(axonwallEnablerPath, 'utf-8');
+    enablers = parseEnablerFile(rawAxonwallEnv);
+    const parsedEnv = parseEnvFile(rawAxonwallEnv);
+    configMap = { ...parsedEnv, ...configMap };
   } else if (fs.existsSync(exampleEnablerPath)) {
     enablers = parseEnablerFile(fs.readFileSync(exampleEnablerPath, 'utf-8'));
   }
 
-  const k8sType = (configMap['THIS_K8S_TYPE'] || 'kind').toLowerCase() as 'kind' | 'k3d' | 'k3s';
+  const k8sType = (
+    configMap['THIS_K8S_TYPE'] ||
+    configMap['K8S_DISTRO'] ||
+    process.env.THIS_K8S_TYPE ||
+    process.env.K8S_DISTRO ||
+    'k3s'
+  ).toLowerCase() as 'kind' | 'k3d' | 'k3s';
   const ingress = (configMap['THIS_CLUSTER_INGRESS'] || 'nginx').toLowerCase() as 'nginx' | 'traefik' | 'haproxy';
   const domain = configMap['THIS_DOMAIN'] || 'example.com';
   const namespace = configMap['THIS_NAMESPACE'] || 'default';
