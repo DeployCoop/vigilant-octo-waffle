@@ -823,12 +823,12 @@ export function syncLdapPrincipal(
     return { store, principal: null, reason: 'unprovisioned' };
   }
 
-  const slug =
-    auth.username
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+/, '')
-      .replace(/-+$/, '') || 'user';
+  let start = 0;
+  const rawSlug = auth.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  while (start < rawSlug.length && rawSlug.charCodeAt(start) === 45 /* '-' */) start++;
+  let end = rawSlug.length;
+  while (end > start && rawSlug.charCodeAt(end - 1) === 45 /* '-' */) end--;
+  const slug = rawSlug.slice(start, end) || 'user';
   let id = `p_ldap_${slug}`;
   if (store.principals.some((p) => p.id === id)) {
     id = `${id}_${randomBytes(2).toString('hex')}`;

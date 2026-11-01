@@ -112,8 +112,16 @@ function flag(flags: Map<string, string[]>, name: string): string | undefined {
   return flags.get(name)?.[0];
 }
 
+function trimDashes(str: string): string {
+  let start = 0;
+  while (start < str.length && str.charCodeAt(start) === 45 /* '-' */) start++;
+  let end = str.length;
+  while (end > start && str.charCodeAt(end - 1) === 45 /* '-' */) end--;
+  return str.slice(start, end);
+}
+
 function slugify(name: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').replace(/-+$/, '');
+  const slug = trimDashes(name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
   return slug || 'principal';
 }
 
