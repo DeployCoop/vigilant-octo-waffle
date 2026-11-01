@@ -827,7 +827,8 @@ export function syncLdapPrincipal(
     auth.username
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'user';
+      .replace(/^-+/, '')
+      .replace(/-+$/, '') || 'user';
   let id = `p_ldap_${slug}`;
   if (store.principals.some((p) => p.id === id)) {
     id = `${id}_${randomBytes(2).toString('hex')}`;

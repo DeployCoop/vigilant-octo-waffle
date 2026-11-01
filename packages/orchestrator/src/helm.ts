@@ -122,7 +122,8 @@ function parseChartDirectory(chartDir: string, projectRoot: string): LocalChartD
     const id = chartName
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-')
-      .replace(/^-+|-+$/g, '') || folderName;
+      .replace(/^-+/, '')
+      .replace(/-+$/, '') || folderName;
 
     const valuesPath = fs.existsSync(path.join(chartDir, 'values.yaml'))
       ? path.join(chartDir, 'values.yaml')
