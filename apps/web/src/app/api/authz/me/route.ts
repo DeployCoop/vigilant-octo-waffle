@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { buildAbility, SESSION_COOKIE_NAME } from '@vow/orchestrator';
+import { buildAbility, resolveVowLdapConfig, SESSION_COOKIE_NAME } from '@vow/orchestrator';
 import { recordAuthEvent, resolveAuthzContext } from '@/lib/authz';
+import { getProjectRoot } from '@/lib/project';
 import { apiError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,16 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: Request) {
   const ctx = await resolveAuthzContext(req);
+  const storeLdap = ctx.loaded.status === 'ready' ? ctx.loaded.store.ldap : undefined;
+  const ldapCfg = resolveVowLdapConfig({ projectRoot: getProjectRoot(), storeLdap });
+  const ldapSummary = ldapCfg.enabled
+    ? {
+        enabled: true,
+        url: ldapCfg.url,
+        baseDn: ldapCfg.baseDn,
+        allowLocalBreakGlass: ldapCfg.allowLocalBreakGlass,
+      }
+    : undefined;
 
   // Expired session (WS5): audit it here — the /me probe is the browser's
   // first call after expiry — and clear the dead cookie on the way out.
@@ -20,7 +31,12 @@ export async function GET(req: Request) {
   }
 
   if (ctx.loaded.status === 'disabled') {
-    return NextResponse.json({ authzEnabled: false, principal: null, rules: [] });
+    return NextResponse.json({
+      authzEnabled: false,
+      principal: null,
+      rules: [],
+      ...(ldapSummary ? { ldap: ldapSummary } : {}),
+    });
   }
 
   if (ctx.loaded.status === 'invalid') {
@@ -38,6 +54,7 @@ export async function GET(req: Request) {
         principal: null,
         localBoard: true,
         rules: [],
+        ...(ldapSummary ? { ldap: ldapSummary } : {}),
       });
     }
     const reason = ctx.unknownPrincipal ? 'deny_unknown_principal' : 'deny_unauthenticated';
@@ -46,7 +63,7 @@ export async function GET(req: Request) {
       reason === 'deny_unknown_principal'
         ? 'Identity is not provisioned as a principal'
         : 'Authentication required',
-      { reason }
+      { reason, ...(ldapSummary ? { ldap: ldapSummary } : {}) }
     );
     if (ctx.expiredSession) {
       res.cookies.set(SESSION_COOKIE_NAME, '', {
@@ -59,10 +76,18 @@ export async function GET(req: Request) {
     return res;
   }
 
-  const { id, name, kind, role } = ctx.principal;
+  const { id, name, kind, role, ldapUid, ldapGroups } = ctx.principal;
   return NextResponse.json({
     authzEnabled: true,
-    principal: { id, name, kind, role },
+    principal: {
+      id,
+      name,
+      kind,
+      role,
+      ...(ldapUid ? { ldapUid } : {}),
+      ...(ldapGroups && ldapGroups.length > 0 ? { ldapGroups } : {}),
+    },
     rules: buildAbility(ctx.principal).rules,
+    ...(ldapSummary ? { ldap: ldapSummary } : {}),
   });
 }

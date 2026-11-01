@@ -5,6 +5,7 @@ import {
   upsertPrincipal,
   generatePrincipalToken,
   hashToken,
+  resolveVowLdapConfig,
   PERMISSIONS,
   ROLES,
   type AuthzStore,
@@ -30,14 +31,40 @@ function loadReadyStore(): AuthzStore | null {
   return loaded.status === 'ready' ? loaded.store : null;
 }
 
+function buildGroupRoleMapping(ldapCfg: ReturnType<typeof resolveVowLdapConfig>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const g of ldapCfg.viewerGroups) out[g] = 'viewer';
+  for (const g of ldapCfg.operatorGroups) out[g] = 'operator';
+  for (const g of ldapCfg.adminGroups) out[g] = 'admin';
+  for (const g of ldapCfg.ownerGroups) out[g] = 'owner';
+  return out;
+}
+
 /** Lists principals. Token hashes are never returned. */
 export async function GET(req: Request) {
   const denied = await authorizeRequest(req, 'users:manage_permissions');
   if (denied) return denied;
 
-  const loaded = loadAuthzStore(getProjectRoot());
+  const projectRoot = getProjectRoot();
+  const loaded = loadAuthzStore(projectRoot);
   if (loaded.status === 'disabled') {
-    return NextResponse.json({ authzEnabled: false, principals: [] });
+    const ldapCfg = resolveVowLdapConfig({ projectRoot });
+    return NextResponse.json({
+      authzEnabled: false,
+      principals: [],
+      ...(ldapCfg.enabled
+        ? {
+            ldap: {
+              enabled: true,
+              url: ldapCfg.url,
+              baseDn: ldapCfg.baseDn,
+              groupRoleMapping: buildGroupRoleMapping(ldapCfg),
+              autoProvisionPrincipals: ldapCfg.autoProvisionPrincipals,
+              allowLocalBreakGlass: ldapCfg.allowLocalBreakGlass,
+            },
+          }
+        : {}),
+    });
   }
   if (loaded.status === 'invalid') {
     return apiError(500, 'Authorization store is invalid', {
@@ -45,6 +72,7 @@ export async function GET(req: Request) {
       route: 'GET /api/authz/principals',
     });
   }
+  const ldapCfg = resolveVowLdapConfig({ projectRoot, storeLdap: loaded.store.ldap });
   return NextResponse.json({
     authzEnabled: true,
     principals: loaded.store.principals.map(toPublicPrincipal),
@@ -52,11 +80,23 @@ export async function GET(req: Request) {
     // not need a second source of truth.
     permissions: [...PERMISSIONS],
     roles: [...ROLES],
+    ...(ldapCfg.enabled
+      ? {
+          ldap: {
+            enabled: true,
+            url: ldapCfg.url,
+            baseDn: ldapCfg.baseDn,
+            groupRoleMapping: buildGroupRoleMapping(ldapCfg),
+            autoProvisionPrincipals: ldapCfg.autoProvisionPrincipals,
+            allowLocalBreakGlass: ldapCfg.allowLocalBreakGlass,
+          },
+        }
+      : {}),
   });
 }
 
 /**
- * Creates a principal. Unless an `oidcSubject` is given, a token is
+ * Creates a principal. Unless an `oidcSubject` or `ldapUid` is given, a token is
  * generated and returned in the response body **once** — only its hash
  * is stored.
  */
@@ -75,6 +115,10 @@ export async function POST(req: Request) {
     typeof body.oidcSubject === 'string' && body.oidcSubject.trim()
       ? body.oidcSubject.trim()
       : undefined;
+  const ldapUid =
+    typeof body.ldapUid === 'string' && body.ldapUid.trim()
+      ? body.ldapUid.trim()
+      : undefined;
 
   if (!name) {
     return apiError(400, 'A non-empty name is required');
@@ -83,13 +127,14 @@ export async function POST(req: Request) {
     return apiError(400, `role must be one of: ${ROLES.join(', ')}`);
   }
 
-  const token = oidcSubject ? null : generatePrincipalToken();
+  const token = oidcSubject || ldapUid ? null : generatePrincipalToken();
   const principal: Principal = {
     id: uniquePrincipalId(store, name),
     name,
     kind,
     role,
     ...(oidcSubject ? { oidcSubject } : {}),
+    ...(ldapUid ? { ldapUid } : {}),
     ...(token ? { tokenHash: hashToken(token) } : {}),
     ...(Array.isArray(body.grants) ? { grants: body.grants } : {}),
     ...(Array.isArray(body.revocations) ? { revocations: body.revocations } : {}),

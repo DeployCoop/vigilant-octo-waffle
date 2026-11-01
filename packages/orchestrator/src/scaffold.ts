@@ -46,7 +46,12 @@ export function scaffoldCustomApp(
   options: CustomAppOptions,
   projectRoot: string
 ): { success: boolean; manifestPath: string; app: CustomAppDefinition } {
-  const id = options.id.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  const rawId = options.id.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  let start = 0;
+  while (start < rawId.length && rawId.charCodeAt(start) === 45 /* '-' */) start++;
+  let end = rawId.length;
+  while (end > start && rawId.charCodeAt(end - 1) === 45 /* '-' */) end--;
+  const id = rawId.slice(start, end);
   if (!id) {
     throw new Error('Invalid application identifier');
   }

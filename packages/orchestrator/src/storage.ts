@@ -172,14 +172,19 @@ export async function checkOpenEbsStatus(projectRoot?: string): Promise<OpenEbsS
   let runningPods = 0;
   const env = getStorageExecutionEnv();
 
-  // 1. Detect StorageClasses provisioned by OpenEBS (e.g., openebs-hostpath, openebs.io/local)
+  // 1. Detect StorageClasses provisioned by OpenEBS (including Axonwall's in-house axonwall-zfs-local & axonwall-replicated-ha)
   try {
     const { stdout } = await execAsync('kubectl get sc -o json', { cwd, env });
     const parsed = JSON.parse(stdout);
     for (const item of parsed.items || []) {
       const name: string = item.metadata?.name || '';
       const provisioner: string = item.provisioner || '';
-      if (name.includes('openebs') || provisioner.includes('openebs') || provisioner.includes('mayastor')) {
+      if (
+        name.includes('openebs') ||
+        name.startsWith('axonwall-') ||
+        provisioner.includes('openebs') ||
+        provisioner.includes('mayastor')
+      ) {
         storageClasses.push(name);
       }
     }

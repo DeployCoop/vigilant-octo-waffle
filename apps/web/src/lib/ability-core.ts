@@ -15,6 +15,15 @@ export interface MePrincipal {
   name: string;
   kind: string;
   role: string;
+  ldapUid?: string;
+  ldapGroups?: string[];
+}
+
+export interface MeLdapSummary {
+  enabled: boolean;
+  url: string;
+  baseDn: string;
+  allowLocalBreakGlass: boolean;
 }
 
 export interface MeResponse {
@@ -23,6 +32,7 @@ export interface MeResponse {
   localBoard?: boolean;
   rules: Array<Record<string, unknown>>;
   reason?: string;
+  ldap?: MeLdapSummary;
 }
 
 export type AbilityStatus =
@@ -97,6 +107,23 @@ export async function exchangeTokenForSession(token: string): Promise<boolean> {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Exchanges OpenLDAP (or break-glass local) username + password for a session cookie. True on success. */
+export async function exchangeLdapCredentialsForSession(
+  username: string,
+  password: string
+): Promise<boolean> {
+  try {
+    const res = await fetch('/api/authz/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username, password }),
     });
     return res.ok;
   } catch {

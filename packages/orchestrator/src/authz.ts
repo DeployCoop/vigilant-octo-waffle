@@ -172,15 +172,40 @@ export interface Principal {
   tokenHash?: string;
   /** OIDC `sub` (or verified email) this principal maps from (plan §6.4). */
   oidcSubject?: string;
+  /** OpenLDAP `uid` this principal maps from. */
+  ldapUid?: string;
+  /** Last synchronized POSIX / groupOfNames memberships from OpenLDAP. */
+  ldapGroups?: string[];
   disabled?: boolean;
   grants?: Grant[];
   revocations?: Permission[];
+}
+
+export interface AuthzLdapStoreConfig {
+  enabled?: boolean;
+  autoBindLocalLdap?: boolean;
+  allowLocalBreakGlass?: boolean;
+  autoProvisionPrincipals?: boolean;
+  bindingFile?: string;
+  url?: string;
+  baseDn?: string;
+  bindDn?: string;
+  userSearchBase?: string;
+  userSearchFilter?: string;
+  groupSearchBase?: string;
+  groupSearchFilter?: string;
+  ownerGroups?: string[];
+  adminGroups?: string[];
+  operatorGroups?: string[];
+  viewerGroups?: string[];
+  defaultRole?: 'owner' | 'admin' | 'operator' | 'viewer' | 'none';
 }
 
 export interface AuthzStore {
   version: 1;
   principals: Principal[];
   sessions?: AuthzSession[];
+  ldap?: AuthzLdapStoreConfig;
 }
 
 /**
@@ -283,16 +308,41 @@ const principalSchema = z.object({
   role: roleSchema,
   tokenHash: z.string().min(1).optional(),
   oidcSubject: z.string().min(1).optional(),
+  ldapUid: z.string().min(1).optional(),
+  ldapGroups: z.array(z.string().min(1)).optional(),
   disabled: z.boolean().optional(),
   grants: z.array(grantSchema).optional(),
   revocations: z.array(permissionSchema).optional(),
 });
+
+const ldapStoreConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    autoBindLocalLdap: z.boolean().optional(),
+    allowLocalBreakGlass: z.boolean().optional(),
+    autoProvisionPrincipals: z.boolean().optional(),
+    bindingFile: z.string().min(1).optional(),
+    url: z.string().min(1).optional(),
+    baseDn: z.string().min(1).optional(),
+    bindDn: z.string().min(1).optional(),
+    userSearchBase: z.string().min(1).optional(),
+    userSearchFilter: z.string().min(1).optional(),
+    groupSearchBase: z.string().min(1).optional(),
+    groupSearchFilter: z.string().min(1).optional(),
+    ownerGroups: z.array(z.string()).optional(),
+    adminGroups: z.array(z.string()).optional(),
+    operatorGroups: z.array(z.string()).optional(),
+    viewerGroups: z.array(z.string()).optional(),
+    defaultRole: z.enum(['owner', 'admin', 'operator', 'viewer', 'none']).optional(),
+  })
+  .optional();
 
 const authzStoreSchema = z
   .object({
     version: z.literal(1),
     principals: z.array(principalSchema),
     sessions: z.array(sessionSchema).optional(),
+    ldap: ldapStoreConfigSchema,
   })
   .superRefine((store, ctx) => {
     const seen = new Set<string>();
@@ -660,7 +710,12 @@ export function hashPassword(password: string): string {
   return PASSWORD_HASH_PREFIX + salt.toString('hex') + ':' + derived.toString('hex');
 }
 
-function verifyPasswordHash(password: string, stored: string): boolean {
+/**
+ * Verifies a human-chosen password against an scrypt-stored hash (`scrypt:<salt>:<hash>`).
+ * Memory-hard (scrypt) constant-time comparison.
+ */
+export function verifyPasswordHash(password: string, stored: string): boolean {
+  if (!stored.startsWith(PASSWORD_HASH_PREFIX)) return false;
   const parts = stored.slice(PASSWORD_HASH_PREFIX.length).split(':');
   if (parts.length !== 2) return false;
   const salt = Buffer.from(parts[0], 'hex');
@@ -703,6 +758,105 @@ export function findPrincipalByOidcSubject(
   return store.principals.find((p) => p.oidcSubject === oidcSubject) ?? null;
 }
 
+/** Resolves an OpenLDAP `uid` (case-insensitive) to its principal. */
+export function findPrincipalByLdapUid(
+  store: AuthzStore,
+  ldapUid: string
+): Principal | null {
+  const target = ldapUid.trim().toLowerCase();
+  if (!target) return null;
+  return (
+    store.principals.find((p) => p.ldapUid?.toLowerCase() === target) ??
+    store.principals.find((p) => p.id.toLowerCase() === `p_ldap_${target}`) ??
+    null
+  );
+}
+
+/**
+ * Synchronizes an authenticated OpenLDAP user into the CASL `AuthzStore`.
+ * - Preserves existing per-principal `grants`, `revocations`, and `tokenHash`.
+ * - Rejects disabled principals (`reason: 'disabled'`).
+ * - Honors `autoProvision` (`reason: 'unprovisioned'` when false and no matching principal exists).
+ */
+export function syncLdapPrincipal(
+  store: AuthzStore,
+  auth: {
+    username: string;
+    displayName?: string;
+    groups?: string[];
+    role: Role;
+  },
+  opts: { autoProvision?: boolean } = {}
+): {
+  store: AuthzStore;
+  principal: Principal | null;
+  reason?: 'disabled' | 'unprovisioned';
+} {
+  const existing = findPrincipalByLdapUid(store, auth.username);
+  if (existing) {
+    if (existing.disabled) {
+      return { store, principal: null, reason: 'disabled' };
+    }
+    // Preserve owner role if demoting this principal would violate the last-owner invariant.
+    let nextRole: Role = auth.role;
+    if (existing.role === 'owner' && nextRole !== 'owner') {
+      const otherOwners = store.principals.filter(
+        (p) => p.id !== existing.id && p.role === 'owner' && !p.disabled
+      );
+      if (otherOwners.length === 0) {
+        nextRole = 'owner';
+      }
+    }
+    const updated: Principal = {
+      ...existing,
+      name: auth.displayName || existing.name,
+      role: nextRole,
+      ldapUid: auth.username,
+      ...(auth.groups && auth.groups.length > 0 ? { ldapGroups: auth.groups } : {}),
+    };
+    const principals = store.principals.map((p) => (p.id === existing.id ? updated : p));
+    const nextStore: AuthzStore = {
+      version: store.version,
+      principals,
+      ...(store.sessions && store.sessions.length > 0 ? { sessions: store.sessions } : {}),
+      ...(store.ldap ? { ldap: store.ldap } : {}),
+    };
+    return { store: nextStore, principal: updated };
+  }
+
+  if (opts.autoProvision === false) {
+    return { store, principal: null, reason: 'unprovisioned' };
+  }
+
+  let start = 0;
+  const rawSlug = auth.username.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  while (start < rawSlug.length && rawSlug.charCodeAt(start) === 45 /* '-' */) start++;
+  let end = rawSlug.length;
+  while (end > start && rawSlug.charCodeAt(end - 1) === 45 /* '-' */) end--;
+  const slug = rawSlug.slice(start, end) || 'user';
+  let id = `p_ldap_${slug}`;
+  if (store.principals.some((p) => p.id === id)) {
+    id = `${id}_${randomBytes(2).toString('hex')}`;
+  }
+
+  const created: Principal = {
+    id,
+    name: auth.displayName || auth.username,
+    kind: 'human',
+    role: auth.role,
+    ldapUid: auth.username,
+    ...(auth.groups && auth.groups.length > 0 ? { ldapGroups: auth.groups } : {}),
+  };
+
+  const nextStore: AuthzStore = {
+    version: store.version,
+    principals: [...store.principals, created],
+    ...(store.sessions && store.sessions.length > 0 ? { sessions: store.sessions } : {}),
+    ...(store.ldap ? { ldap: store.ldap } : {}),
+  };
+  return { store: nextStore, principal: created };
+}
+
 // ---------------------------------------------------------------------------
 // Browser sessions (Plan II WS5 §8.2)
 // ---------------------------------------------------------------------------
@@ -723,7 +877,11 @@ export function generateSessionId(): string {
 
 /** Returns the store with its session list replaced (field omitted when empty). */
 function withSessions(store: AuthzStore, sessions: AuthzSession[]): AuthzStore {
-  const next: AuthzStore = { version: store.version, principals: store.principals };
+  const next: AuthzStore = {
+    version: store.version,
+    principals: store.principals,
+    ...(store.ldap ? { ldap: store.ldap } : {}),
+  };
   if (sessions.length > 0) next.sessions = sessions;
   return next;
 }
@@ -854,7 +1012,12 @@ export function upsertPrincipal(store: AuthzStore, principal: Principal): AuthzS
   // sessions are revoked: role/grant/token changes must not leave stale
   // sessions exercising yesterday's privileges (WS5 §8.2).
   const sessions = (store.sessions ?? []).filter((sess) => sess.principalId !== valid.id);
-  return { version: 1, principals, ...(sessions.length > 0 ? { sessions } : {}) };
+  return {
+    version: 1,
+    principals,
+    ...(sessions.length > 0 ? { sessions } : {}),
+    ...(store.ldap ? { ldap: store.ldap } : {}),
+  };
 }
 
 /** Removes a principal by id and returns the new store. */
@@ -865,5 +1028,10 @@ export function removePrincipal(store: AuthzStore, principalId: string): AuthzSt
   const principals = store.principals.filter((p) => p.id !== principalId);
   assertNotLastOwner(store, principals, `remove principal ${principalId}`);
   const sessions = (store.sessions ?? []).filter((sess) => sess.principalId !== principalId);
-  return { version: 1, principals, ...(sessions.length > 0 ? { sessions } : {}) };
+  return {
+    version: 1,
+    principals,
+    ...(sessions.length > 0 ? { sessions } : {}),
+    ...(store.ldap ? { ldap: store.ldap } : {}),
+  };
 }

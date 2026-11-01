@@ -525,6 +525,8 @@ export interface PublicPrincipal {
   kind: Principal['kind'];
   role: Principal['role'];
   oidcSubject?: string;
+  ldapUid?: string;
+  ldapGroups?: string[];
   disabled: boolean;
   grants: NonNullable<Principal['grants']>;
   revocations: NonNullable<Principal['revocations']>;
@@ -538,6 +540,8 @@ export function toPublicPrincipal(principal: Principal): PublicPrincipal {
     kind: principal.kind,
     role: principal.role,
     ...(principal.oidcSubject ? { oidcSubject: principal.oidcSubject } : {}),
+    ...(principal.ldapUid ? { ldapUid: principal.ldapUid } : {}),
+    ...(principal.ldapGroups && principal.ldapGroups.length > 0 ? { ldapGroups: principal.ldapGroups } : {}),
     disabled: principal.disabled ?? false,
     grants: principal.grants ?? [],
     revocations: principal.revocations ?? [],

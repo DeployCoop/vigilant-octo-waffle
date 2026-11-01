@@ -119,10 +119,12 @@ function parseChartDirectory(chartDir: string, projectRoot: string): LocalChartD
 
     const folderName = path.basename(chartDir);
     const chartName = String(parsed.name || folderName);
-    const id = chartName
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/^-+|-+$/g, '') || folderName;
+    const rawId = chartName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    let start = 0;
+    while (start < rawId.length && rawId.charCodeAt(start) === 45 /* '-' */) start++;
+    let end = rawId.length;
+    while (end > start && rawId.charCodeAt(end - 1) === 45 /* '-' */) end--;
+    const id = rawId.slice(start, end) || folderName;
 
     const valuesPath = fs.existsSync(path.join(chartDir, 'values.yaml'))
       ? path.join(chartDir, 'values.yaml')

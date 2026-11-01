@@ -31,6 +31,7 @@ import {
 } from './authz.js';
 import { findProjectRoot } from './config.js';
 import { ensureDevCertificate } from './tls.js';
+import { authenticateVowLdapUser, resolveVowLdapConfig } from './authz-ldap.js';
 
 /**
  * `vow authz` — management CLI for the authorization store (plan §8).
@@ -70,6 +71,7 @@ Commands:
     --role <role>                 ${ROLES.join(' | ')} (default: operator)
     --kind <kind>                 human | service (default: human)
     --oidc-subject <sub>          Map an OIDC identity instead of issuing a token
+    --ldap-uid <uid>              Map an OpenLDAP uid instead of issuing a token
     --grant <permission>          Extra permission grant (repeatable)
     --scope-app <appId>           Scope all --grant entries to an app
     --scope-namespace <ns>        Scope all --grant entries to a namespace
@@ -86,7 +88,9 @@ Commands:
                                   Dry-run a permission check, prints the decision reason
     --at <iso>                    Evaluate context grants at this instant (default: now)
     --loopback                    Evaluate as a loopback (local board) request
-    --auth-method <m>             session | token | oidc (default: token)`;
+    --auth-method <m>             session | token | oidc (default: token)
+  ldap-status                     Print resolved OpenLDAP binding & role group mapping
+  ldap-test <user> <password>     Test an OpenLDAP bind and print resolved POSIX groups & CASL role`;
 
 function parseFlags(args: string[]): { positional: string[]; flags: Map<string, string[]> } {
   const positional: string[] = [];
@@ -108,8 +112,16 @@ function flag(flags: Map<string, string[]>, name: string): string | undefined {
   return flags.get(name)?.[0];
 }
 
+function trimDashes(str: string): string {
+  let start = 0;
+  while (start < str.length && str.charCodeAt(start) === 45 /* '-' */) start++;
+  let end = str.length;
+  while (end > start && str.charCodeAt(end - 1) === 45 /* '-' */) end--;
+  return str.slice(start, end);
+}
+
 function slugify(name: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const slug = trimDashes(name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
   return slug || 'principal';
 }
 
@@ -257,7 +269,8 @@ async function cmdAdd(root: string, args: string[], io: AuthzCliIo): Promise<num
   }
 
   const oidcSubject = flag(flags, 'oidc-subject');
-  const token = oidcSubject ? null : generatePrincipalToken();
+  const ldapUid = flag(flags, 'ldap-uid');
+  const token = oidcSubject || ldapUid ? null : generatePrincipalToken();
   const principal: Principal = {
     id: newPrincipalId(store, name),
     name,
@@ -265,12 +278,15 @@ async function cmdAdd(root: string, args: string[], io: AuthzCliIo): Promise<num
     role,
     ...(token ? { tokenHash: hashToken(token) } : {}),
     ...(oidcSubject ? { oidcSubject } : {}),
+    ...(ldapUid ? { ldapUid } : {}),
     ...(grants.length > 0 ? { grants } : {}),
   };
 
   saveAuthzStore(root, upsertPrincipal(store, principal));
   if (token) {
     printTokenOnce(io, principal, token);
+  } else if (ldapUid) {
+    io.out(`Principal: ${principal.id} (${principal.name}, role: ${principal.role}, LDAP uid: ${ldapUid})`);
   } else {
     io.out(`Principal: ${principal.id} (${principal.name}, role: ${principal.role}, OIDC subject: ${oidcSubject})`);
   }
@@ -306,7 +322,7 @@ async function cmdList(root: string, io: AuthzCliIo): Promise<number> {
       .join(' ');
     io.out(
       `${p.id.padEnd(24)} ${p.role.padEnd(9)} ${p.kind.padEnd(8)} ${p.name}` +
-        `${p.disabled ? ' (disabled)' : ''}${p.oidcSubject ? ` oidc:${p.oidcSubject}` : ''}${grants ? ` grants: ${grants}` : ''}`
+        `${p.disabled ? ' (disabled)' : ''}${p.oidcSubject ? ` oidc:${p.oidcSubject}` : ''}${p.ldapUid ? ` ldap:${p.ldapUid}` : ''}${grants ? ` grants: ${grants}` : ''}`
     );
   }
   return 0;
@@ -446,6 +462,49 @@ async function cmdCheck(root: string, args: string[], io: AuthzCliIo): Promise<n
   return decision.allowed ? 0 : 1;
 }
 
+async function cmdLdapStatus(root: string, io: AuthzCliIo): Promise<number> {
+  const loaded = loadAuthzStore(root);
+  const storeLdap = loaded.status === 'ready' ? loaded.store.ldap : undefined;
+  const cfg = resolveVowLdapConfig({ projectRoot: root, storeLdap });
+  io.out(`OpenLDAP Integration: ${cfg.enabled ? 'ENABLED' : 'DISABLED'}`);
+  if (cfg.bindingFile) io.out(`Binding Contract:     ${cfg.bindingFile}`);
+  io.out(`Directory URL:        ${cfg.url}`);
+  io.out(`Base DN:              ${cfg.baseDn}`);
+  io.out(`Service Bind DN:      ${cfg.bindDn ?? '(direct user bind)'}`);
+  io.out(`User Search Base:     ${cfg.userSearchBase} ${cfg.userSearchFilter}`);
+  io.out(`Group Search Base:    ${cfg.groupSearchBase}`);
+  io.out(`Owner Groups:         ${cfg.ownerGroups.join(', ')}`);
+  io.out(`Admin Groups:         ${cfg.adminGroups.join(', ')}`);
+  io.out(`Operator Groups:      ${cfg.operatorGroups.join(', ')}`);
+  io.out(`Viewer Groups:        ${cfg.viewerGroups.join(', ')}`);
+  io.out(`Default Role:         ${cfg.defaultRole}`);
+  io.out(`Auto-Provision:       ${cfg.autoProvisionPrincipals ? 'yes' : 'no'}`);
+  io.out(`Break-Glass Token:    ${cfg.allowLocalBreakGlass ? 'allowed' : 'disabled'}`);
+  return 0;
+}
+
+async function cmdLdapTest(root: string, args: string[], io: AuthzCliIo): Promise<number> {
+  const { positional } = parseFlags(args);
+  const [username, password] = positional;
+  if (!username || !password) {
+    io.err('Usage: vow authz ldap-test <username> <password>');
+    return 1;
+  }
+  const loaded = loadAuthzStore(root);
+  const storeLdap = loaded.status === 'ready' ? loaded.store.ldap : undefined;
+  const cfg = resolveVowLdapConfig({ projectRoot: root, storeLdap });
+  const res = await authenticateVowLdapUser(username, password, cfg);
+  if (!res.authenticated) {
+    io.err(`LDAP authentication failed for ${username}: ${res.error}`);
+    return 1;
+  }
+  io.out(`✔ Authenticated ${res.username} (${res.displayName})`);
+  io.out(`  DN:           ${res.dn}`);
+  io.out(`  POSIX Groups: ${(res.groups ?? []).join(', ') || '(none)'}`);
+  io.out(`  CASL Role:    ${res.role}`);
+  return 0;
+}
+
 export interface RunAuthzCommandOptions {
   root?: string;
   io?: AuthzCliIo;
@@ -478,6 +537,10 @@ export async function runAuthzCommand(
         return await cmdRotate(root, rest, io);
       case 'check':
         return await cmdCheck(root, rest, io);
+      case 'ldap-status':
+        return await cmdLdapStatus(root, io);
+      case 'ldap-test':
+        return await cmdLdapTest(root, rest, io);
       case 'help':
       case '--help':
       case '-h':
