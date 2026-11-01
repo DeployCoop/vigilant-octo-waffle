@@ -710,7 +710,12 @@ export function hashPassword(password: string): string {
   return PASSWORD_HASH_PREFIX + salt.toString('hex') + ':' + derived.toString('hex');
 }
 
-function verifyPasswordHash(password: string, stored: string): boolean {
+/**
+ * Verifies a human-chosen password against an scrypt-stored hash (`scrypt:<salt>:<hash>`).
+ * Memory-hard (scrypt) constant-time comparison.
+ */
+export function verifyPasswordHash(password: string, stored: string): boolean {
+  if (!stored.startsWith(PASSWORD_HASH_PREFIX)) return false;
   const parts = stored.slice(PASSWORD_HASH_PREFIX.length).split(':');
   if (parts.length !== 2) return false;
   const salt = Buffer.from(parts[0], 'hex');

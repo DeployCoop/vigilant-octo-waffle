@@ -4,12 +4,11 @@ import {
   saveAuthzStore,
   createEmptyStore,
   findPrincipalByToken,
-  verifyTokenHash,
+  verifyPasswordHash,
   createSession,
   findSession,
   revokeSession,
   revokePrincipalSessions,
-  webhookTokensEqual,
   resolveVowLdapConfig,
   authenticateVowLdapUser,
   syncLdapPrincipal,
@@ -148,23 +147,10 @@ export async function POST(req: Request) {
           (p.ldapUid && p.ldapUid.toLowerCase() === lower) ||
           ((lower === 'admin' || lower === 'owner') && p.role === 'owner')
       );
-      if (candidate && candidate.tokenHash && verifyTokenHash(password, candidate.tokenHash)) {
+      if (candidate && candidate.tokenHash && verifyPasswordHash(password, candidate.tokenHash)) {
         if (candidate.disabled) return apiError(403, 'Principal is disabled');
         who = candidate;
         authSource = 'local';
-      } else {
-        const byToken = findPrincipalByToken(store, password);
-        if (byToken && (byToken.name.toLowerCase() === lower || byToken.id.toLowerCase() === lower)) {
-          if (byToken.disabled) return apiError(403, 'Principal is disabled');
-          who = byToken;
-          authSource = 'local';
-        } else if (
-          process.env.VOW_API_TOKEN &&
-          webhookTokensEqual(password, process.env.VOW_API_TOKEN)
-        ) {
-          who = BOOTSTRAP_OWNER_PRINCIPAL;
-          authSource = 'local';
-        }
       }
     }
 
