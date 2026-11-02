@@ -23,9 +23,9 @@
     "test:parity:update": "tsc -p tsconfig.json && VOW_PARITY_UPDATE=1 node --test dist/__tests__/parity.test.js"
   },
   "dependencies": {
-    "@casl/ability": "^7.0.2",
+    "@casl/ability": "^7.1.0",
     "@kubernetes/client-node": "^2.0.1",
-    "jose": "^6.2.13",
+    "jose": "^6.2.14",
     "yaml": "^2.7.0",
     "zod": "^4.6.7"
   },
