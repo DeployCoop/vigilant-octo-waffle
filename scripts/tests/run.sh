@@ -194,6 +194,7 @@ reset_logs() {
 P2="${WORK}/proj2"
 mkdir -p "${P2}/src" "${P2}/argo/demo" "${P2}/argo/templated" "${P2}/flux/web" "${WORK}/emptycwd"
 for s in k3s_ping.sh k3s_kill.sh k3s_kmod.sh k3s_tune.sh k3s_registries.sh \
+         k3s_add_node.sh k3s_upgrade.sh \
          cluster_namespaces.sh cd_status.sh getRandomNS.sh util.bash; do
   cp "${REPO_ROOT}/src/${s}" "${P2}/src/${s}"
 done
@@ -241,6 +242,29 @@ p2cwd() {
   local cwd="$1" script="$2"; shift 2
   (cd "${cwd}" && /usr/bin/env -i PATH="${WORK}/stubs:/usr/bin:/bin" \
     bash "${P2}/src/${script}" "$@")
+}
+
+# p2ssh <script> [args...] — like p2, but with ssh as an exported function
+# that logs invocations instead of the real binary. Needed because
+# k3s_upgrade.sh prepends /usr/bin to PATH, so a stub ssh on PATH would
+# lose to the real /usr/bin/ssh; a bash function takes precedence over
+# PATH lookup regardless of ordering. The log path is exported alongside
+# the function: a child bash re-creates exported functions from the
+# environment, where an unexported ${WORK} would be unset. The dead proxy
+# makes the script's Phase-2 real curl (same PATH-prepend reason: the curl
+# stub also loses) fail fast instead of running the real k3s installer;
+# the test asserts Phase-3 ssh composition only.
+p2ssh() {
+  local script="$1"; shift
+  SSH_LOG="${WORK}/ssh.log"
+  ssh() { echo "ssh $*" >> "${SSH_LOG}"; }
+  export -f ssh
+  export SSH_LOG
+  (cd "${P2}" && https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 \
+    PATH="${WORK}/stubs:/usr/bin:/bin" \
+    bash "src/${script}" "$@")
+  unset -f ssh
+  unset SSH_LOG
 }
 
 # 1. server_url file: bare IP gets scheme + default port
@@ -389,6 +413,60 @@ out=$(p2 k3s_tune.sh --targets "${WORK}/ping-targets.txt" 2>&1)
 check "tune: targets file drives one ssh per host" "2" "$(grep -c '^ssh ' "${WORK}/ssh.log")"
 p2 k3s_tune.sh --targets "${WORK}/no-such-file.txt" >/dev/null 2>&1; rc=$?
 check_rc "tune: missing targets file exits 1" 1 "${rc}"
+
+echo
+echo "== A3: kmod/add-node/upgrade injection guards =="
+reset_logs
+p2 k3s_kmod.sh 'bad;rm' --remote root@10.0.0.5 >/dev/null 2>&1; rc=$?
+check_rc "kmod: semicolon module name rejected" 1 "${rc}"
+check "kmod: rejected module dispatches nothing" "" "$(cat "${WORK}/ssh.log")"
+p2 k3s_kmod.sh 'mod$(x)' --remote root@10.0.0.5 >/dev/null 2>&1; rc=$?
+check_rc "kmod: substitution module name rejected" 1 "${rc}"
+p2 k3s_add_node.sh --role agent --server https://10.0.0.1:6443 --token tok123 \
+  --node-name 'bad$(name)' --print-command >/dev/null 2>&1; rc=$?
+check_rc "add-node: substitution node name rejected" 1 "${rc}"
+p2 k3s_add_node.sh --role agent --server https://10.0.0.1:6443 --token tok123 \
+  --labels 'bad key=v' --print-command >/dev/null 2>&1; rc=$?
+check_rc "add-node: malformed label rejected" 1 "${rc}"
+p2 k3s_add_node.sh --role agent --server https://10.0.0.1:6443 --token tok123 \
+  --taints 'x=y:BadEffect' --print-command >/dev/null 2>&1; rc=$?
+check_rc "add-node: malformed taint rejected" 1 "${rc}"
+out=$(p2 k3s_add_node.sh --role agent --server https://10.0.0.1:6443 --token tok123 \
+  --node-name worker-1 --print-command 2>/dev/null)
+check_contains "add-node: benign one-liner keeps flag form" \
+  "sh -s - agent --node-name worker-1" "${out}"
+check_contains "add-node: benign one-liner quotes URL/token" \
+  "K3S_URL=https://10.0.0.1:6443 K3S_TOKEN=tok123" "${out}"
+rm -f /tmp/addnode-pwn
+p2 k3s_add_node.sh --role agent --server https://10.0.0.1:6443 \
+  --token 'tok$(touch /tmp/addnode-pwn)' -o "${WORK}/join-evil.sh" >/dev/null 2>&1
+qtoken=$(printf '%q' 'tok$(touch /tmp/addnode-pwn)')
+check_contains "add-node: hostile token is %q-escaped in the script" \
+  "export K3S_TOKEN=${qtoken}" "$(cat "${WORK}/join-evil.sh")"
+grep '^export K3S_TOKEN=' "${WORK}/join-evil.sh" > "${WORK}/eval-token.sh"
+printf 'printf %%s "$K3S_TOKEN"' >> "${WORK}/eval-token.sh"
+check "add-node: hostile token evaluates literally" \
+  'tok$(touch /tmp/addnode-pwn)' "$(bash "${WORK}/eval-token.sh")"
+check "add-node: hostile token never executed" "" "$(ls /tmp/addnode-pwn 2>/dev/null || true)"
+bash -n "${WORK}/join-evil.sh"; rc=$?
+check_rc "add-node: generated hostile-token script is syntactically valid" 0 "${rc}"
+# TEST-NET address: unroutable by design, so even if the ssh stub were
+# bypassed no real host would ever be contacted.
+printf 'root@192.0.2.5\n' > "${WORK}/upgrade-targets.txt"
+reset_logs
+rm -f /tmp/upgrade-pwn
+evil_ver="v1.31.1';touch /tmp/upgrade-pwn;echo '"
+p2ssh k3s_upgrade.sh "${evil_ver}" --targets "${WORK}/upgrade-targets.txt" \
+  --skip-snapshot < /dev/null >/dev/null 2>&1
+qver=$(printf '%q' "${evil_ver}")
+check_contains "upgrade: hostile version arrives %q-escaped in the ssh env" \
+  "INSTALL_K3S_VERSION=${qver}" "$(cat "${WORK}/ssh.log")"
+check "upgrade: hostile version never executed" "" "$(ls /tmp/upgrade-pwn 2>/dev/null || true)"
+reset_logs
+p2ssh k3s_upgrade.sh v1.31.1+k3s1 --targets "${WORK}/upgrade-targets.txt" \
+  --skip-snapshot < /dev/null >/dev/null 2>&1
+check_contains "upgrade: benign version passes through the ssh env" \
+  "INSTALL_K3S_VERSION=v1.31.1+k3s1" "$(cat "${WORK}/ssh.log")"
 
 echo
 echo "== k3s_registries.sh: registries.yaml resolution/generation =="

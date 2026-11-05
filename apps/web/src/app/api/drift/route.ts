@@ -26,18 +26,28 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const denied = await authorizeRequest(req, 'argo:sync');
-  if (denied) return denied;
-
   try {
     const body = await req.json();
     const { action, driftId } = body;
 
+    // BUG FIX (bug hunt B6): resetting wipes the remediation record
+    // (resolvedDriftIds.clear()), resurrecting every drift item and
+    // erasing which drifts were reconciled — audit-state destruction,
+    // not a sync. It is gated on cluster:manage and, unlike before,
+    // the gate runs even though reset needs no driftId (the old code
+    // ran the reset branch before the driftId check, under argo:sync).
+    // Reconcile/reverse_commit stay on argo:sync; unknown actions keep
+    // the previous gate, then 400.
     if (action === 'reset') {
+      const denied = await authorizeRequest(req, 'cluster:manage');
+      if (denied) return denied;
       resetDriftStore();
       const fresh = await scanClusterDrift();
       return NextResponse.json({ success: true, message: 'Reset drift store', report: fresh });
     }
+
+    const denied = await authorizeRequest(req, 'argo:sync');
+    if (denied) return denied;
 
     if (!driftId) {
       return apiError(400, 'driftId is required');

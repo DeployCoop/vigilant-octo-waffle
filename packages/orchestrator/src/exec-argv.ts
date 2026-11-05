@@ -14,6 +14,20 @@
  * compile-time constants.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { redactSensitiveArgs } from './taskStore.js';
+
+/**
+ * Redact credential-bearing values from an argv list for display in error
+ * labels (bug-hunt Batch A5 follow-up): --token forms via the shared helper,
+ * plus credentials embedded in URLs (e.g. git clone URLs with a token, which
+ * otherwise surface verbatim in spawn-failure error messages). The spawn
+ * itself always uses the real args; only the label is scrubbed.
+ */
+function redactLabelArgs(args: string[]): string[] {
+  return redactSensitiveArgs(args).map((a) =>
+    a.replace(/:\/\/([^:/\s]+):([^@\s]+)@/g, '://$1:[redacted]@')
+  );
+}
 
 export interface ExecArgvOptions {
   cwd?: string;
@@ -186,7 +200,7 @@ export function execFileAsync(
     shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
-  return collect(child, `${file} ${args.join(' ')}`, opts);
+  return collect(child, `${file} ${redactLabelArgs(args).join(' ')}`, opts);
 }
 
 /**
@@ -199,7 +213,7 @@ export function pipeExecs(
   consumer: { file: string; args: string[] },
   opts: ExecArgvOptions = {}
 ): Promise<ExecArgvResult> {
-  const label = `${producer.file} ${producer.args.join(' ')} | ${consumer.file} ${consumer.args.join(' ')}`;
+  const label = `${producer.file} ${redactLabelArgs(producer.args).join(' ')} | ${consumer.file} ${redactLabelArgs(consumer.args).join(' ')}`;
   const a = spawn(producer.file, producer.args, {
     cwd: opts.cwd,
     env: opts.env,

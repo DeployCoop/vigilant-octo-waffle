@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import {
   validateCommand,
   ALLOWED_EXECUTABLES,
@@ -238,6 +239,102 @@ spec:
       assert.ok(info.serverOneLiner.includes('server'));
       assert.ok(info.agentScript.includes('#!/usr/bin/env bash'));
       assert.ok(info.serverScript.includes('#!/usr/bin/env bash'));
+    });
+
+    it('quotes hostile tokens and URLs in join artifacts, never raw (A4)', () => {
+      const evilToken = 'tok$(touch /tmp/k3s-join-pwn)';
+      const evilUrl = 'https://10.0.0.1:6443"; evil; echo "';
+      const oneLiner = generateK3sOneLiner({
+        role: 'agent',
+        serverUrl: 'https://192.168.1.10:6443',
+        token: evilToken,
+        nodeName: 'worker-1',
+      });
+      assert.ok(oneLiner.includes(`K3S_TOKEN='${evilToken}'`));
+      assert.ok(!oneLiner.includes(`K3S_TOKEN="${evilToken}"`));
+
+      const script = generateK3sJoinScript({
+        role: 'agent',
+        serverUrl: evilUrl,
+        token: evilToken,
+        nodeName: 'worker-1',
+      });
+      assert.ok(script.includes(`export K3S_TOKEN='${evilToken}'`));
+      assert.ok(!script.includes(`export K3S_TOKEN="${evilToken}"`));
+      // A double quote in the URL breaks out of double quotes, so it must
+      // be single-quoted too.
+      assert.ok(script.includes(`export K3S_URL='${evilUrl}'`));
+      assert.ok(!script.includes(`export K3S_URL="${evilUrl}"`));
+    });
+
+    it('generated script exports evaluate to the literal hostile token (A4)', () => {
+      const evilToken = "tok'; rm -rf /tmp/nope; echo 'x$(id)";
+      const script = generateK3sJoinScript({
+        role: 'agent',
+        serverUrl: 'https://192.168.1.10:6443',
+        token: evilToken,
+        nodeName: 'worker-1',
+      });
+      const exportLines = script
+        .split('\n')
+        .filter((l) => l.startsWith('export K3S_'))
+        .join('\n');
+      const out = execFileSync(
+        'bash',
+        ['-c', `${exportLines}\nprintf '%s' "$K3S_TOKEN"`],
+        { encoding: 'utf8' }
+      );
+      assert.equal(out, evilToken);
+    });
+
+    it('rejects node names, labels, and taints that are not valid Kubernetes syntax (A4)', () => {
+      const base = {
+        role: 'agent' as const,
+        serverUrl: 'https://192.168.1.10:6443',
+        token: 't',
+      };
+      assert.throws(
+        () => generateK3sJoinScript({ ...base, nodeName: 'bad$(name)' }),
+        /Invalid node name/
+      );
+      assert.throws(
+        () => generateK3sOneLiner({ ...base, labels: { 'bad key': 'v' } }),
+        /Invalid node label/
+      );
+      assert.throws(
+        () => generateK3sJoinScript({ ...base, taints: ['x=y:BadEffect'] }),
+        /Invalid node taint effect/
+      );
+      assert.throws(
+        () => generateK3sJoinScript({ ...base, taints: ['not-a-taint'] }),
+        /Invalid node taint/
+      );
+    });
+
+    it('leaves benign join output byte-identical to the pre-fix form (A4)', () => {
+      const cmd = generateK3sOneLiner({
+        role: 'agent',
+        serverUrl: 'https://192.168.1.10:6443',
+        token: 'secret-token-123',
+        nodeName: 'worker-edge-1',
+        labels: { tier: 'backend' },
+      });
+      assert.equal(
+        cmd,
+        'curl -sfL https://get.k3s.io | K3S_URL="https://192.168.1.10:6443" K3S_TOKEN="secret-token-123" sh -s - agent --node-name worker-edge-1 --node-label tier=backend'
+      );
+    });
+
+    it('quotes extra args as single words (A4)', () => {
+      const cmd = generateK3sOneLiner({
+        role: 'agent',
+        serverUrl: 'https://192.168.1.10:6443',
+        token: 't',
+        extraArgs: ['--flannel-backend', 'a b$(x)'],
+      });
+      // Flag tokens are quoted too (semantically identical after shell
+      // parsing); the multi-word value must stay one argument.
+      assert.ok(cmd.includes("'--flannel-backend' 'a b$(x)'"));
     });
 
     it('dispatches batch join, tuning, ping, registries, and lifecycle commands correctly', () => {

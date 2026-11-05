@@ -55,6 +55,25 @@ const REASON_MESSAGES: Record<DecisionReason, string> = {
   deny_store_invalid: 'Authorization store is invalid',
 };
 
+/**
+ * Task visibility (bug-hunt Batch A5 task scoping): a task is visible to
+ * its launching principal, to owner/admin principals (exempt), and to
+ * everyone when it is a system task (principalId null — watcher/runner/
+ * orchestrator-initiated, or launched while authz is disabled). A null
+ * caller principal (authz disabled, or the pre-principal local-board
+ * bootstrap) likewise sees everything, since there is no identity to
+ * scope against. Used by GET /api/tasks and /api/tasks/stream.
+ */
+export function canViewTask(
+  taskPrincipalId: string | null | undefined,
+  principal: Principal | null
+): boolean {
+  if (taskPrincipalId == null) return true;
+  if (principal == null) return true;
+  if (principal.role === 'owner' || principal.role === 'admin') return true;
+  return principal.id === taskPrincipalId;
+}
+
 export class AuthzError extends Error {
   status: number;
   reason: DecisionReason;

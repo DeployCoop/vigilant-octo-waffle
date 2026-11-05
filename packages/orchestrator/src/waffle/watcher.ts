@@ -7,6 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { execAsync, getWaffleExecutionEnv } from './shared.js';
+import { execFileAsync, assertK8sLabel } from '../exec-argv.js';
 import {
   loadWafflePipeline,
   type WafflePipeline,
@@ -553,16 +554,23 @@ export class WaffleWatcher extends EventEmitter {
    */
   private async rolloutTarget(target: WaffleWatchTarget): Promise<boolean> {
     const env = getWaffleExecutionEnv();
-    const ns = target.namespace || 'default';
+    // Fail closed before any subprocess runs: a namespace that is not a
+    // valid RFC 1123 label (e.g. pipeline-supplied `$(...)`) must never
+    // reach a shell. Previously these commands were built as /bin/sh
+    // strings with JSON.stringify(ns), which only double-quotes — command
+    // substitution, backticks, and $VAR expansion still ran inside them.
+    const ns = assertK8sLabel(target.namespace || 'default', 'namespace');
     const release = target.releaseName || target.name;
 
     this.log(`[WATCHER] [${target.name}] Triggering cluster rollout for release "${release}" in namespace "${ns}"...`);
     this.emit('deploy_start', { target: target.name, release, namespace: ns });
 
     try {
-      // Find candidate deployment name
-      const { stdout } = await execAsync(
-        `kubectl get deployments -n ${JSON.stringify(ns)} -o jsonpath='{.items[*].metadata.name}'`,
+      // Find candidate deployment name (argv form: no shell, no parsing
+      // of ns/matched by any shell).
+      const { stdout } = await execFileAsync(
+        'kubectl',
+        ['get', 'deployments', '-n', ns, '-o', 'jsonpath={.items[*].metadata.name}'],
         { env }
       ).catch(() => ({ stdout: '' }));
 
@@ -572,9 +580,9 @@ export class WaffleWatcher extends EventEmitter {
       );
 
       if (matched) {
-        await execAsync(`kubectl rollout restart deployment/${matched} -n ${JSON.stringify(ns)}`, { env });
+        await execFileAsync('kubectl', ['rollout', 'restart', `deployment/${matched}`, '-n', ns], { env });
         this.log(`[WATCHER] [${target.name}] Dispatched rollout restart for deployment "${matched}". Waiting for status...`);
-        await execAsync(`kubectl rollout status deployment/${matched} -n ${JSON.stringify(ns)} --timeout=90s`, { env });
+        await execFileAsync('kubectl', ['rollout', 'status', `deployment/${matched}`, '-n', ns, '--timeout=90s'], { env });
         this.log(`[WATCHER] [${target.name}] Deployment "${matched}" successfully rolled out.`);
         this.emit('deploy_complete', { target: target.name, release: matched, namespace: ns, status: 'rolled_out' });
         return true;
