@@ -3,7 +3,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-const hoisted = vi.hoisted(() => ({ root: '' }));
+const hoisted = vi.hoisted(() => ({
+  root: '',
+  load: { status: 'disabled' } as import('@vow/orchestrator').AuthzStoreLoad,
+}));
 
 vi.mock('@/lib/project', () => ({ getProjectRoot: () => hoisted.root }));
 
@@ -14,6 +17,7 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@vow/orchestrator')>();
   return {
     ...actual,
+    loadAuthzStore: () => hoisted.load,
     accelerateArgoSync: vi.fn(async () => ({
       success: true,
       message: 'sync dispatched',
@@ -23,7 +27,12 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
 });
 
 import { POST } from './route';
-import { accelerateArgoSync } from '@vow/orchestrator';
+import {
+  accelerateArgoSync,
+  generatePrincipalToken,
+  hashToken,
+  type Principal,
+} from '@vow/orchestrator';
 
 const TOKEN = 'route-test-webhook-token';
 const mockedSync = vi.mocked(accelerateArgoSync);
@@ -42,6 +51,7 @@ describe('POST /api/argo/webhook service token', () => {
   beforeEach(() => {
     mockedSync.mockClear();
     delete process.env.VOW_WEBHOOK_TOKEN;
+    hoisted.load = { status: 'disabled' };
     // Audit entries from webhook auth decisions land in a throwaway root.
     hoisted.root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-webhook-route-'));
   });
@@ -91,6 +101,41 @@ describe('POST /api/argo/webhook service token', () => {
   it('accepts the token via the x-vow-webhook-token header', async () => {
     process.env.VOW_WEBHOOK_TOKEN = TOKEN;
     const res = await POST(webhookRequest({ 'x-vow-webhook-token': TOKEN }));
+    expect(res.status).toBe(200);
+    expect(mockedSync).toHaveBeenCalledTimes(1);
+  });
+});
+
+// BUG FIX (bug hunt B7): when an authz store is active and no webhook
+// token is configured, unauthenticated calls must be denied — the
+// legacy open path only applies while no store is active.
+describe('POST /api/argo/webhook with an active authz store', () => {
+  const argoToken = generatePrincipalToken();
+  const argo: Principal = {
+    id: 'p_argo', name: 'Argo Automation', kind: 'service', role: 'viewer',
+    tokenHash: hashToken(argoToken),
+    grants: [{ permission: 'webhook:argo' }],
+  };
+
+  beforeEach(() => {
+    mockedSync.mockClear();
+    delete process.env.VOW_WEBHOOK_TOKEN;
+    hoisted.load = { status: 'ready', store: { version: 1, principals: [argo] } };
+    hoisted.root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-webhook-route-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(hoisted.root, { recursive: true, force: true });
+  });
+
+  it('denies an unauthenticated call when no token is configured', async () => {
+    const res = await POST(webhookRequest());
+    expect(res.status).toBe(401);
+    expect(mockedSync).not.toHaveBeenCalled();
+  });
+
+  it('allows a principal holding webhook:argo', async () => {
+    const res = await POST(webhookRequest({ authorization: `Bearer ${argoToken}` }));
     expect(res.status).toBe(200);
     expect(mockedSync).toHaveBeenCalledTimes(1);
   });

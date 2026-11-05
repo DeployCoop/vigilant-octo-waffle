@@ -6,6 +6,7 @@ import {
   TaskStore,
   taskStorePath,
   taskToRecord,
+  redactSensitiveArgs,
   type TaskRecord,
 } from './taskStore.js';
 import { findProjectRoot } from './config.js';
@@ -36,6 +37,55 @@ export const ALLOWED_EXECUTABLES = new Set([
  * `docker run --privileged`, `helm --post-renderer`, GNU parallel).
  * Returns a rejection reason, or null when the arguments are acceptable.
  */
+/**
+ * Flag-aware subcommand extraction (bug-hunt Batch A2 fix).
+ *
+ * The old code took the first non-dash token as the subcommand, but a
+ * value-taking flag's separate value is also a non-dash token — so
+ * `kubectl -n foo exec …` read `foo` as the subcommand and missed the
+ * `exec` ban, and `docker --tlskey images run …` read `images` (itself
+ * allowed) and missed `run`. Walk the args, skipping the values of
+ * known value-taking flags in both `--flag value` and `--flag=value`
+ * forms (`--flag=value` tokens start with '-' and are skipped as flags),
+ * and honor `--` as the flag terminator: the token after it is the
+ * subcommand even if it starts with '-'. Returns the first remaining
+ * non-flag token, or undefined when there is none.
+ */
+function firstSubcommand(args: string[], valueFlags: ReadonlySet<string>): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--') {
+      return args[i + 1];
+    }
+    if (valueFlags.has(arg)) {
+      i++; // skip the flag's separate value
+      continue;
+    }
+    if (arg.startsWith('-')) continue;
+    return arg;
+  }
+  return undefined;
+}
+
+/** kubectl global flags that take a separate value (see `kubectl options`). */
+const KUBECTL_VALUE_FLAGS: ReadonlySet<string> = new Set([
+  '-n', '--namespace',
+  '--kubeconfig',
+  '--context', '--cluster', '--user', '--username', '--password',
+  '--client-certificate', '--client-key', '--certificate-authority',
+  '--tls-server-name', '--token',
+  '--as', '--as-group', '--as-uid',
+  '-o', '--output',
+  '--selector', '-l', '--field-selector', '--sort-by',
+  '--cache-dir', '--request-timeout',
+]);
+
+/** Docker global flags that take a separate value (see `docker --help`). */
+const DOCKER_GLOBAL_VALUE_FLAGS: ReadonlySet<string> = new Set([
+  '--config', '--host', '-H', '--context', '-c', '--log-level', '-l',
+  '--tlskey', '--tlscert', '--tlscacert',
+]);
+
 export function validateBinaryArgs(binary: string, args: string[]): string | null {
   for (const arg of args) {
     if (arg.includes('\0') || arg.includes('\n')) {
@@ -48,6 +98,12 @@ export function validateBinaryArgs(binary: string, args: string[]): string | nul
       for (const arg of args) {
         if (
           arg === '-c' ||
+          // Attached form (Batch A6): git parses `-cuser.name=X` exactly
+          // like `-c user.name=X`. (Only `-c` takes an attached value
+          // among the blocked git flags; `-C` is the unrelated --git-dir
+          // flag and is deliberately not matched — the check is
+          // case-sensitive.)
+          (arg.startsWith('-c') && arg.length > 2) ||
           arg.startsWith('--config') ||
           arg.startsWith('--exec-path') ||
           arg === '-u' ||
@@ -65,11 +121,20 @@ export function validateBinaryArgs(binary: string, args: string[]): string | nul
       const localExecKeys = ['proxycommand', 'localcommand', 'permitlocalcommand', 'pkcs11provider', 'securitykeyprovider'];
       for (let i = 0; i < args.length; i++) {
         const arg = args[i];
-        if (arg === '-F') return `${binary} -F (custom config file) is forbidden: the config can contain ProxyCommand`;
-        if (binary === 'scp' && arg === '-S') return 'scp -S (custom connection program) is forbidden';
+        // Attached forms (Batch A6): ssh/scp parse `-F<file>` and
+        // `scp -S<program>` exactly like their space-separated forms.
+        if (arg === '-F' || (arg.startsWith('-F') && arg.length > 2)) {
+          return `${binary} -F (custom config file) is forbidden: the config can contain ProxyCommand`;
+        }
+        if (binary === 'scp' && (arg === '-S' || (arg.startsWith('-S') && arg.length > 2))) {
+          return 'scp -S (custom connection program) is forbidden';
+        }
         const optValue = arg === '-o' ? args[i + 1] : arg.startsWith('-o') ? arg.slice(2) : undefined;
         if (optValue) {
-          const key = optValue.split('=')[0]?.trim().toLowerCase();
+          // Space form (Batch A6): `-o 'ProxyCommand id'` carries no '=',
+          // so split the key on '=' AND whitespace — the old split on
+          // '=' alone read 'proxycommand id' and missed the blocklist.
+          const key = optValue.split(/[=\s]+/)[0]?.trim().toLowerCase();
           if (key && localExecKeys.includes(key)) {
             return `${binary} option "${key}" executes a local command/library and is forbidden`;
           }
@@ -88,18 +153,7 @@ export function validateBinaryArgs(binary: string, args: string[]): string | nul
         'build', 'push', 'pull', 'tag', 'save', 'load', 'images', 'image',
         'ps', 'inspect', 'version', 'info', 'login', 'logout', 'rmi', 'history',
       ]);
-      const globalValueFlags = new Set(['--config', '--host', '-H', '--context', '--log-level', '-l']);
-      let subcommand: string | undefined;
-      for (let i = 0; i < args.length; i++) {
-        const arg = args[i];
-        if (globalValueFlags.has(arg)) {
-          i++;
-          continue;
-        }
-        if (arg.startsWith('-')) continue;
-        subcommand = arg;
-        break;
-      }
+      const subcommand = firstSubcommand(args, DOCKER_GLOBAL_VALUE_FLAGS);
       if (subcommand && !allowedSubcommands.has(subcommand)) {
         return `docker subcommand "${subcommand}" is forbidden through the task executor (container execution/management is out of scope; allowed: ${[...allowedSubcommands].join(', ')})`;
       }
@@ -119,7 +173,7 @@ export function validateBinaryArgs(binary: string, args: string[]): string | nul
           return 'kubectl --server is forbidden: it would send cluster credentials to an arbitrary endpoint';
         }
       }
-      const subcommand = args.find((a) => !a.startsWith('-'));
+      const subcommand = firstSubcommand(args, KUBECTL_VALUE_FLAGS);
       if (subcommand && ['exec', 'cp', 'port-forward'].includes(subcommand)) {
         return `kubectl ${subcommand} is forbidden through the generic task executor (use the dedicated exec route, which is permission-gated separately)`;
       }
@@ -199,6 +253,29 @@ export function validateCommand(
       };
     }
 
+    // Symlink confinement (bug-hunt Batch A7): the lexical checks above
+    // only see the spelling of the path. A src/*.sh symlink pointing
+    // outside the project would pass them and be executed by bash.
+    // Resolve both sides and require the real path to stay under the
+    // real project root (and under real src/ for src scripts). A
+    // realpath failure (e.g. ENOENT) falls back to the lexical check,
+    // since a nonexistent file fails closed at the existsSync gate
+    // below and at spawn anyway.
+    try {
+      const realCwd = fs.realpathSync(resolvedCwd);
+      const realTarget = fs.realpathSync(resolvedTarget);
+      const underRoot = realTarget === realCwd || realTarget.startsWith(realCwd + path.sep);
+      const underSrc = realTarget.startsWith(path.join(realCwd, 'src') + path.sep);
+      if (!underRoot || (isSrcScript && !underSrc)) {
+        return {
+          allowed: false,
+          reason: `Target script "${rel}" resolves outside the repository root (symlink escape)`,
+        };
+      }
+    } catch {
+      // Fall through to the lexical verdict + existsSync gate below.
+    }
+
     if (!fs.existsSync(resolvedTarget)) {
       return { allowed: false, reason: `Target script "${rel}" does not exist on disk` };
     }
@@ -256,6 +333,13 @@ export interface TaskRun {
   logs: TaskLogEntry[];
   emitter: EventEmitter;
   childProcess?: ChildProcess;
+  /**
+   * Principal that launched the task (bug-hunt Batch A5 task scoping).
+   * Null means a system task — watcher/runner/orchestrator-initiated, or
+   * launched while authz is disabled — which stays visible to every
+   * tasks:read holder. Persisted via TaskRecord.meta (no schema change).
+   */
+  principalId?: string | null;
 }
 
 /**
@@ -333,7 +417,12 @@ export class ProcessManager {
   }
   private maxLogsPerTask = 2000;
 
-  public createTask(command: string, args: string[], cwd: string): TaskRun {
+  public createTask(
+    command: string,
+    args: string[],
+    cwd: string,
+    options: { principalId?: string | null } = {}
+  ): TaskRun {
     this.maybeAutoAttach(cwd);
     const id = `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const emitter = new EventEmitter();
@@ -347,6 +436,7 @@ export class ProcessManager {
       startedAt: new Date().toISOString(),
       logs: [],
       emitter,
+      principalId: options.principalId ?? null,
     };
 
     this.tasks.set(id, task);
@@ -411,6 +501,14 @@ export class ProcessManager {
       env?: Record<string, string>;
       /** Kill the task (SIGTERM, then SIGKILL after a grace period) after this many ms. */
       timeoutMs?: number;
+      /**
+       * Principal launching the task (bug-hunt Batch A5 task scoping).
+       * Omitted/null means a system task, visible to every tasks:read
+       * holder. The web tasks/run route passes the caller; internal
+       * orchestrator callers (k3s, copilot, cluster, …) do not yet
+       * thread a principal, so their tasks stay system-visible.
+       */
+      principalId?: string | null;
     }
   ): TaskRun {
     const validation = validateCommand(command, args, options.cwd);
@@ -421,9 +519,18 @@ export class ProcessManager {
     const effectiveCmd = validation.normalizedCommand || command;
     const effectiveArgs = validation.normalizedArgs || args;
 
-    const task = this.createTask(effectiveCmd, effectiveArgs, options.cwd);
+    const task = this.createTask(effectiveCmd, effectiveArgs, options.cwd, {
+      principalId: options.principalId ?? null,
+    });
 
-    this.appendLog(task, 'system', `Executing: ${effectiveCmd} ${effectiveArgs.join(' ')}`);
+    // The spawn uses the real args; the log line (which persists to
+    // SQLite and is served via the tasks API) uses redacted ones, so a
+    // join token or similar credential never lands in task logs.
+    this.appendLog(
+      task,
+      'system',
+      `Executing: ${effectiveCmd} ${redactSensitiveArgs(effectiveArgs).join(' ')}`
+    );
 
     try {
       const child = spawn(effectiveCmd, effectiveArgs, {
@@ -598,6 +705,7 @@ function hydrateRecord(record: TaskRecord): TaskRun {
     command?: string;
     args?: string[];
     cwd?: string;
+    principalId?: string | null;
   };
   return {
     id: record.id,
@@ -610,6 +718,7 @@ function hydrateRecord(record: TaskRecord): TaskRun {
     finishedAt: record.endedAt ?? undefined,
     logs: record.logTail,
     emitter: new EventEmitter(),
+    principalId: meta.principalId ?? null,
   };
 }
 

@@ -19,6 +19,30 @@ import { type WaffleGitSource, type WafflePipeline, type WaffleBuildTarget } fro
  * check in executor.ts (validateCommand): resolve, then require the result
  * to be the base itself or strictly beneath it.
  */
+/**
+ * realpath of a path that may not exist yet: resolve the nearest
+ * existing ancestor, then re-append the remaining segments. A symlink
+ * component anywhere in the existing prefix is resolved through, so
+ * the result reflects where the filesystem would actually land.
+ * Non-ENOENT failures (ELOOP, EACCES, …) fail closed by throwing.
+ */
+function realpathWithAncestor(p: string): string {
+  const suffix: string[] = [];
+  let cur = p;
+  for (;;) {
+    try {
+      const real = fs.realpathSync(cur);
+      return suffix.length > 0 ? path.join(real, ...suffix) : real;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      const parent = path.dirname(cur);
+      if (parent === cur) throw err;
+      suffix.unshift(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
 export function resolvePathWithinBase(
   baseDir: string,
   relPath: string,
@@ -28,6 +52,20 @@ export function resolvePathWithinBase(
   const resolvedBase = path.resolve(baseDir);
   const resolved = path.resolve(resolvedBase, relPath);
   if (resolved !== resolvedBase && !resolved.startsWith(resolvedBase + path.sep)) {
+    throw new Error(
+      `Build target "${targetName}": ${field} path "${relPath}" resolves outside its base directory (${resolvedBase})`
+    );
+  }
+  // Symlink confinement (bug-hunt Batch A7): the lexical check above
+  // only sees the spelling of the path. A symlink inside the base
+  // pointing outside (git preserves symlinks, so a cloned blueprint can
+  // carry one) would pass it while docker/git/bash follow it outside.
+  // Resolve both sides through the filesystem and re-check containment.
+  // The lexical path is still what is returned, preserving caller
+  // behavior for the in-bounds case.
+  const realBase = realpathWithAncestor(resolvedBase);
+  const realResolved = realpathWithAncestor(resolved);
+  if (realResolved !== realBase && !realResolved.startsWith(realBase + path.sep)) {
     throw new Error(
       `Build target "${targetName}": ${field} path "${relPath}" resolves outside its base directory (${resolvedBase})`
     );

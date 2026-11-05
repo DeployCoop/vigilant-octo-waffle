@@ -89,6 +89,45 @@ export interface WaffleRunProgress {
   dryRun?: boolean;
 }
 
+const SENSITIVE_HELM_KEY =
+  /(password|passwd|secret|token|api[-_]?key|private[-_]?key|access[-_]?key|client[-_]?secret)/i;
+
+function scrubHelmSetValue(entry: string): string {
+  const eq = entry.indexOf('=');
+  if (eq <= 0) return entry;
+  return SENSITIVE_HELM_KEY.test(entry.slice(0, eq))
+    ? `${entry.slice(0, eq + 1)}[redacted]`
+    : entry;
+}
+
+/**
+ * Redact sensitive --set values from a helm argv list for display in run
+ * logs (bug-hunt Batch A5 follow-up): pipeline --set entries can carry
+ * credentials, and the run log prints the full helm command. Execution
+ * args are untouched; only the logged copy is scrubbed.
+ */
+export function redactHelmDisplayArgs(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--set' || arg === '--set-string' || arg === '--set-file') {
+      out.push(arg);
+      if (i + 1 < args.length) {
+        out.push(scrubHelmSetValue(args[i + 1]));
+        i++;
+      }
+      continue;
+    }
+    const m = /^(--set(?:-string|-file)?)=(.*)$/.exec(arg);
+    if (m) {
+      out.push(`${m[1]}=${scrubHelmSetValue(m[2])}`);
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
 export class WaffleRunner extends EventEmitter {
   private projectRoot: string;
   private activeRun: WaffleRunProgress | null = null;
@@ -570,14 +609,14 @@ export class WaffleRunner extends EventEmitter {
       // Dry-run mode
       if (dryRun) {
         helmArgs.push('--dry-run');
-        log(`Running in DRY-RUN mode: helm ${helmArgs.join(' ')}`);
+        log(`Running in DRY-RUN mode: helm ${redactHelmDisplayArgs(helmArgs).join(' ')}`);
       }
 
       // Execute Helm command. The display string is for the log only;
       // execution is argv-based (no shell), so step values such as the
       // namespace, release name, chart and --set entries can never be
       // reinterpreted as shell syntax.
-      log(`Executing: helm ${helmArgs.map((a) => (a.includes(' ') || a.includes('=') ? JSON.stringify(a) : a)).join(' ')}`);
+      log(`Executing: helm ${redactHelmDisplayArgs(helmArgs).map((a) => (a.includes(' ') || a.includes('=') ? JSON.stringify(a) : a)).join(' ')}`);
 
       if (!dryRun) {
         const { stdout, stderr } = await execFileAsync('helm', helmArgs, { cwd: baseDir, env: getWaffleExecutionEnv() });

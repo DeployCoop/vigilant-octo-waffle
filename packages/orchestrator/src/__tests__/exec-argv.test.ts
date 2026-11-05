@@ -63,6 +63,33 @@ describe('pipeExecs', () => {
   });
 });
 
+describe('error labels redact credentials (bug-hunt Batch A5 follow-up)', () => {
+  it('redacts --token values from spawn-failure messages', async () => {
+    await assert.rejects(
+      execFileAsync('definitely-not-a-real-binary-xyz', ['--token', 's3cret-value', 'other']),
+      (err: ExecArgvError) => {
+        assert.match(err.message, /\[redacted\]/);
+        assert.doesNotMatch(err.message, /s3cret-value/);
+        return true;
+      }
+    );
+  });
+
+  it('redacts URL-embedded credentials from spawn-failure messages', async () => {
+    await assert.rejects(
+      execFileAsync('definitely-not-a-real-binary-xyz', [
+        'clone',
+        'https://user:s3cret@host.example/repo.git',
+      ]),
+      (err: ExecArgvError) => {
+        assert.doesNotMatch(err.message, /s3cret/);
+        assert.match(err.message, /user:\[redacted\]@host\.example/);
+        return true;
+      }
+    );
+  });
+});
+
 describe('input validators', () => {
   it('accepts legal names and rejects flag-shaped / illegal values', () => {
     assert.equal(assertK8sLabel('my-pod-1', 'pod name'), 'my-pod-1');

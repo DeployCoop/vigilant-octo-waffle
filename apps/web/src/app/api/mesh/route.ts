@@ -32,7 +32,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const denied = await authorizeRequest(req, 'security:read');
+  // BUG FIX (bug hunt B3): enforcing mTLS changes cluster security
+  // posture, so it requires the manage permission, not the read one
+  // that every viewer holds. GET stays security:read.
+  const denied = await authorizeRequest(req, 'security:manage');
   if (denied) return denied;
 
   try {

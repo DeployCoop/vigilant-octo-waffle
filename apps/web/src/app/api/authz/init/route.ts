@@ -11,7 +11,8 @@ import {
   ensureDevCertificate,
   type Principal,
 } from '@vow/orchestrator';
-import { authorizeRequest, isLocalBoardRequest, toPublicPrincipal, uniquePrincipalId } from '@/lib/authz';
+import { authorizeRequest, extractRequestToken, isLocalBoardRequest, toPublicPrincipal, uniquePrincipalId } from '@/lib/authz';
+import { webhookTokensEqual } from '@vow/orchestrator';
 import { getProjectRoot } from '@/lib/project';
 import { apiError } from '@/lib/route-error';
 
@@ -43,7 +44,27 @@ export async function POST(req: Request) {
   // local board, matching the empty-store path in decide(). Operators
   // who need remote bootstrap can use the authz CLI on the host.
   const needsBootstrap = loaded.status !== 'ready' || loaded.store.principals.length === 0;
-  if (needsBootstrap && !isLocalBoardRequest(req)) {
+  // BUG FIX (bug hunt B9, part 1): loopback is derived from the
+  // client-controlled Host header, so loopback alone must not suffice
+  // when a bootstrap token is configured. A caller presenting a fake
+  // `vow_…` bearer token passes the middleware (which defers
+  // vow_-prefixed tokens to route guards) and, with authz disabled,
+  // the route guard — so without this check a remote caller with a
+  // spoofed Host header could mint the first owner. When VOW_API_TOKEN
+  // is set, bootstrap requires that exact token; the loopback check
+  // below still applies when no token is configured. (Socket-level
+  // peer detection is not available in the App Router, so this is
+  // defense in depth, not a replacement for the loopback-only bind.)
+  if (needsBootstrap && process.env.VOW_API_TOKEN) {
+    const presented = extractRequestToken(req);
+    if (!presented || !webhookTokensEqual(presented, process.env.VOW_API_TOKEN)) {
+      return apiError(
+        403,
+        'Authorization bootstrap requires the configured VOW_API_TOKEN when one is set.',
+        { reason: 'bootstrap_requires_token' }
+      );
+    }
+  } else if (needsBootstrap && !isLocalBoardRequest(req)) {
     return apiError(
       403,
       'Authorization bootstrap is only available from the local board (loopback). Enable authz locally first, or use the authz CLI on the host.',

@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
+import { resolveWafflePathInRoot } from '@/lib/waffle-path';
 import {
   getWaffleSourceManager,
   getWaffleRunner,
   getBlueprintById,
   loadWafflePipeline,
+  validateWafflePipeline,
   type WafflePipeline,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
@@ -42,7 +44,18 @@ export async function POST(req: Request) {
       targetBaseDir = root;
       effectiveSourceId = blueprintId;
     } else if (customPath) {
-      const { pipeline, baseDir } = await loadWafflePipeline(customPath);
+      // BUG FIX (bug hunt B11): confine ad-hoc pipelines to the
+      // project root — an unconfined customPath let a tasks:run holder
+      // execute a pipeline file anywhere on disk, bypassing source
+      // registration (which requires config:update). A path escaping
+      // the root is a client error (400), not a server error.
+      let confinedPath: string;
+      try {
+        confinedPath = resolveWafflePathInRoot(root, customPath);
+      } catch {
+        return apiError(400, 'customPath must resolve inside the project root');
+      }
+      const { pipeline, baseDir } = await loadWafflePipeline(confinedPath);
       targetPipeline = pipeline;
       targetBaseDir = baseDir;
       effectiveSourceId = 'custom';
@@ -57,6 +70,18 @@ export async function POST(req: Request) {
       return apiError(
         409,
         'Another pipeline run is currently in progress. Wait for it to finish or abort it first.'
+      );
+    }
+
+    // BUG FIX (bug hunt B11): validate before executing. The old code
+    // launched whatever loadWafflePipeline parsed (which only enforces
+    // the YAML schema) without the structural checks — duplicate stage
+    // IDs, dangling dependencies, missing local charts.
+    const validation = validateWafflePipeline(targetPipeline, targetBaseDir);
+    if (!validation.valid) {
+      return apiError(
+        400,
+        `Pipeline validation failed: ${validation.errors.join('; ')}`
       );
     }
 

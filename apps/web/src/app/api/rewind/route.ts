@@ -25,12 +25,19 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const denied = await authorizeRequest(req, 'argo:sync');
-  if (denied) return denied;
-
   try {
     const body = await req.json();
     const { action, snapshotId } = body;
+
+    // BUG FIX (bug hunt B6): comparing a snapshot is a read, but
+    // rewinding the cluster to one is a cluster-wide rollback, not a
+    // sync — the old single argo:sync gate let any operator roll the
+    // cluster back. Unknown actions keep the previous gate, then 400.
+    const denied = await authorizeRequest(
+      req,
+      action === 'compare' ? 'cluster:read' : action === 'rewind' ? 'cluster:manage' : 'argo:sync'
+    );
+    if (denied) return denied;
 
     if (!snapshotId) {
       return apiError(400, 'snapshotId is required');
