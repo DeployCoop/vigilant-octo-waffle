@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import * as k8s from '@kubernetes/client-node';
 
 const execAsync = promisify(exec);
-import { execFileAsync } from './exec-argv.js';
+import { execFileAsync, assertK8sObjectName } from './exec-argv.js';
 
 export type ClusterHealthGrade = 'OPTIMAL' | 'HEALTHY' | 'DEGRADED' | 'CRITICAL' | 'OFFLINE';
 
@@ -127,7 +127,13 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
       const restarts = cStatuses.reduce((acc: number, c) => acc + (c.restartCount || 0), 0);
       report.pods.totalRestarts += restarts;
 
-      if (phase === 'Running') {
+      const isCrashLoop = cStatuses.some((c) => c.state?.waiting?.reason === 'CrashLoopBackOff');
+      if (isCrashLoop) {
+        report.pods.failing++;
+        const podName = pod.metadata?.name;
+        const ns = pod.metadata?.namespace;
+        report.recommendations.push(`Pod '${ns}/${podName}' is in CrashLoopBackOff`);
+      } else if (phase === 'Running') {
         report.pods.running++;
       } else if (phase === 'Pending') {
         report.pods.pending++;
@@ -139,14 +145,6 @@ export async function getK3sHealthScore(projectRoot: string): Promise<K3sLiveHea
         const podName = pod.metadata?.name;
         const ns = pod.metadata?.namespace;
         report.recommendations.push(`Pod '${ns}/${podName}' is failing (${phase})`);
-      }
-
-      const isCrashLoop = cStatuses.some((c) => c.state?.waiting?.reason === 'CrashLoopBackOff');
-      if (isCrashLoop) {
-        report.pods.failing++;
-        const podName = pod.metadata?.name;
-        const ns = pod.metadata?.namespace;
-        report.recommendations.push(`Pod '${ns}/${podName}' is in CrashLoopBackOff`);
       }
     }
 
@@ -359,6 +357,7 @@ export async function drainK3sNodeLive(
     deleteEmptyDir?: boolean;
   } = {}
 ): Promise<{ success: boolean; output: string }> {
+  assertK8sObjectName(nodeName, 'node name');
   const flags: string[] = [];
   if (options.ignoreDaemonsets ?? true) flags.push('--ignore-daemonsets');
   if (options.deleteEmptyDir ?? true) flags.push('--delete-emptydir-data');
@@ -386,6 +385,7 @@ export async function cordonK3sNodeLive(
   nodeName: string,
   uncordon = false
 ): Promise<{ success: boolean; message: string }> {
+  assertK8sObjectName(nodeName, 'node name');
   const verb = uncordon ? 'uncordon' : 'cordon';
   try {
     await execFileAsync('kubectl', [verb, nodeName], { cwd: projectRoot });

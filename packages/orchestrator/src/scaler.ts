@@ -54,6 +54,9 @@ export async function listClusterNodeDetails(): Promise<NodeDetail[]> {
 export async function scaleK3dNodes(clusterName: string, targetAgentCount: number): Promise<{ success: boolean; message: string }> {
   try {
     assertK8sObjectName(clusterName, 'cluster name');
+    if (!Number.isInteger(targetAgentCount) || targetAgentCount < 0 || targetAgentCount > 50) {
+      return { success: false, message: `Invalid targetAgentCount: must be an integer between 0 and 50.` };
+    }
     // 1. Get current nodes
     const { stdout } = await execFileAsync('k3d', ['node', 'list', '--output', 'json']).catch(() => ({ stdout: '' }));
     const parsed: K3dNodeListEntry[] = stdout ? JSON.parse(stdout) : [];

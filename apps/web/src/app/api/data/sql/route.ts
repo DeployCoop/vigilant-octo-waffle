@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json().catch(() => null)) ?? {};
     const { query, database, namespace } = body;
 
     // Critical permission: arbitrary SQL against cluster databases.

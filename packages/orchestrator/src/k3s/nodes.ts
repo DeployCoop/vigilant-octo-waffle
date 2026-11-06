@@ -4,6 +4,7 @@
  */
 import * as path from 'node:path';
 import { processManager, type TaskRun } from '../executor.js';
+import { assertK8sObjectName } from '../exec-argv.js';
 import { runSilentJsonQuery } from './shared.js';
 
 export interface K3sHealthReport {
@@ -97,6 +98,7 @@ export interface K3sDrainOptions {
  * Safely drains a node for maintenance
  */
 export function drainK3sNode(projectRoot: string, nodeName: string, options?: K3sDrainOptions): TaskRun {
+  assertK8sObjectName(nodeName.trim(), 'node name');
   const scriptPath = path.join(projectRoot, 'src', 'k3s_drain.sh');
   const args: string[] = [scriptPath, 'drain', nodeName.trim()];
 
@@ -123,6 +125,7 @@ export function drainK3sNode(projectRoot: string, nodeName: string, options?: K3
  * Uncordons a node to restore workload scheduling
  */
 export function uncordonK3sNode(projectRoot: string, nodeName: string): TaskRun {
+  assertK8sObjectName(nodeName.trim(), 'node name');
   const scriptPath = path.join(projectRoot, 'src', 'k3s_drain.sh');
   return processManager.runCommand('bash', [scriptPath, 'uncordon', nodeName.trim()], { cwd: projectRoot });
 }
@@ -131,6 +134,7 @@ export function uncordonK3sNode(projectRoot: string, nodeName: string): TaskRun 
  * Cordons a node to stop new pods from being scheduled
  */
 export function cordonK3sNode(projectRoot: string, nodeName: string): TaskRun {
+  assertK8sObjectName(nodeName.trim(), 'node name');
   const scriptPath = path.join(projectRoot, 'src', 'k3s_drain.sh');
   return processManager.runCommand('bash', [scriptPath, 'cordon', nodeName.trim()], { cwd: projectRoot });
 }

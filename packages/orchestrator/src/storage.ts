@@ -9,7 +9,7 @@ import { ensureNamespaceWithSecurity } from './namespaces.js';
 
 const execAsync = promisify(exec);
 import * as k8s from '@kubernetes/client-node';
-import { execFileAsync, commandExists } from './exec-argv.js';
+import { execFileAsync, commandExists, assertK8sObjectName } from './exec-argv.js';
 
 export type StorageEngine = 'openebs' | 'longhorn' | 'nfs' | 'seaweedfs' | 'rook-ceph' | 'local-path';
 
@@ -448,6 +448,11 @@ export async function runStorageBenchmark(
   storageClass: string = 'local-path',
   sizeGi: number = 1
 ): Promise<StorageBenchmarkResult> {
+  assertK8sObjectName(storageClass, 'storageClass');
+  if (!Number.isFinite(sizeGi) || sizeGi <= 0 || sizeGi > 100) {
+    throw new Error('Invalid benchmark volume sizeGi: must be between 1 and 100');
+  }
+  const safeSizeGi = Math.ceil(sizeGi);
   const id = `bench-${Date.now().toString(36)}`;
   const pvcName = `pvc-${id}`;
   const podName = `pod-${id}`;
@@ -465,7 +470,7 @@ spec:
   storageClassName: ${storageClass}
   resources:
     requests:
-      storage: ${sizeGi}Gi
+      storage: ${safeSizeGi}Gi
 `;
 
   const podYaml = `
@@ -505,18 +510,10 @@ spec:
 
   try {
     // 1. Create PVC
-    await new Promise<void>((resolve, reject) => {
-      const proc = exec('kubectl apply -f -', { cwd: projectRoot }, (err) => (err ? reject(err) : resolve()));
-      proc.stdin?.write(pvcYaml);
-      proc.stdin?.end();
-    });
+    await execFileAsync('kubectl', ['apply', '-f', '-'], { cwd: projectRoot, input: pvcYaml });
 
     // 2. Create Pod
-    await new Promise<void>((resolve, reject) => {
-      const proc = exec('kubectl apply -f -', { cwd: projectRoot }, (err) => (err ? reject(err) : resolve()));
-      proc.stdin?.write(podYaml);
-      proc.stdin?.end();
-    });
+    await execFileAsync('kubectl', ['apply', '-f', '-'], { cwd: projectRoot, input: podYaml });
 
     // 3. Wait for pod completion (up to 90s)
     await execFileAsync('kubectl', ['wait', '--for=condition=Ready=false', `pod/${podName}`, '-n', namespace, '--timeout=90s'], { cwd: projectRoot });

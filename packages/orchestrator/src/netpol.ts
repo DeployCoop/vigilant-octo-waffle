@@ -1,5 +1,6 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { assertK8sLabel } from './exec-argv.js';
 
 const execAsync = promisify(exec);
 
@@ -118,9 +119,14 @@ export async function scanNetworkPolicies(): Promise<NetworkPolicyReport> {
 }
 
 export function scaffoldZeroTrustPolicy(appId: string, namespace: string, allowedCallers: string[]): string {
+  assertK8sLabel(appId, 'appId');
+  assertK8sLabel(namespace, 'namespace');
+  for (const caller of allowedCallers) {
+    assertK8sLabel(caller, 'allowedCaller');
+  }
   const callerRules = allowedCallers
     .map(
-      (c) => `    - namespaceSelector:\n        matchLabels:\n          kubernetes.io/metadata.name: ${c}`
+      (c) => `    - from:\n        - namespaceSelector:\n            matchLabels:\n              kubernetes.io/metadata.name: ${c}`
     )
     .join('\n');
 

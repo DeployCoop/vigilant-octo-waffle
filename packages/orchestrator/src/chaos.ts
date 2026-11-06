@@ -131,6 +131,8 @@ export async function injectNetworkLatency(namespace: string, podName: string, l
   if (isNamespaceProtected(namespace)) {
     throw new Error(`Namespace '${namespace}' is protected by the Chaos Safety Guard.`);
   }
+  assertK8sLabel(podName, 'pod name');
+  assertK8sLabel(namespace, 'namespace');
 
   const id = `exp-lat-${Date.now()}`;
   const exp: ChaosExperiment = {

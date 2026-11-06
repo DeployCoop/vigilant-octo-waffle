@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { randomBytes } from 'node:crypto';
+import { assertK8sLabel } from './exec-argv.js';
 
 /** Sessions are killed after this long without input or output. */
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -42,11 +43,14 @@ export class ContainerExecSession extends EventEmitter {
   }
 
   public start(): void {
+    assertK8sLabel(this.options.podName, 'pod name');
     const args: string[] = ['exec', '-i'];
     if (this.options.namespace) {
+      assertK8sLabel(this.options.namespace, 'namespace');
       args.push('-n', this.options.namespace);
     }
     if (this.options.containerName) {
+      assertK8sLabel(this.options.containerName, 'container name');
       args.push('-c', this.options.containerName);
     }
     args.push(this.options.podName);

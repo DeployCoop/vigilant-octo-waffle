@@ -167,7 +167,7 @@ export function generateCoreDnsConfig(domain = 'example.com', ip = '127.0.0.1'):
   return `.:53 {
     forward . 8.8.8.8 1.1.1.1
     template IN A ${domain} {
-        match .*\\.${domain.replace('.', '\\.')}
+        match .*\\.${domain.replace(/\./g, '\\.')}
         answer "{{ .Name }} 60 IN A ${ip}"
         fallthrough
     }

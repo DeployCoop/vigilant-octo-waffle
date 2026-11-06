@@ -6,6 +6,49 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadProjectConfig } from '../config.js';
 import { processManager, type TaskRun } from '../executor.js';
+import { assertK8sObjectName, isIpAddressLiteral } from '../exec-argv.js';
+
+function validateK3sJoinOptions(options: K3sJoinOptions): void {
+  const role = options.role || 'agent';
+  if (role !== 'agent' && role !== 'server') {
+    throw new Error(`Invalid K3s node role: ${String(role)}`);
+  }
+  if (options.serverUrl && /[;"'`$|&<>\\\s\0]/.test(options.serverUrl)) {
+    throw new Error('Invalid serverUrl: must not contain whitespace or shell metacharacters');
+  }
+  if (options.token && /[;"'`$|&<>\\\s\0]/.test(options.token)) {
+    throw new Error('Invalid token: must not contain whitespace or shell metacharacters');
+  }
+  if (options.nodeName) {
+    assertK8sObjectName(options.nodeName, 'nodeName');
+  }
+  if (options.nodeIp && !isIpAddressLiteral(options.nodeIp)) {
+    throw new Error(`Invalid nodeIp: ${options.nodeIp}`);
+  }
+  if (options.labels) {
+    for (const [k, v] of Object.entries(options.labels)) {
+      if (k && v) {
+        if (k.startsWith('-') || !/^[a-zA-Z0-9._/-]+$/.test(k) || !/^[a-zA-Z0-9._/-]+$/.test(v)) {
+          throw new Error(`Invalid node label: ${k}=${v}`);
+        }
+      }
+    }
+  }
+  if (options.taints) {
+    for (const t of options.taints) {
+      if (t && (t.startsWith('-') || !/^[a-zA-Z0-9._/=:-]+$/.test(t))) {
+        throw new Error(`Invalid node taint: ${t}`);
+      }
+    }
+  }
+  if (options.extraArgs) {
+    for (const arg of options.extraArgs) {
+      if (/[;"'`$|&<>\\\r\n\0]/.test(arg)) {
+        throw new Error(`Invalid extraArg: ${arg}`);
+      }
+    }
+  }
+}
 
 export type K3sNodeRole = 'agent' | 'server';
 
@@ -140,6 +183,7 @@ export function resolveK3sToken(projectRoot: string, overrideToken?: string): st
  * Generates single-line curl join command for copy-pasting onto a node
  */
 export function generateK3sOneLiner(options: K3sJoinOptions): string {
+  validateK3sJoinOptions(options);
   const role = options.role || 'agent';
   const serverUrl = options.serverUrl || 'https://127.0.0.1:6443';
   const token = options.token || '';
@@ -174,6 +218,7 @@ export function generateK3sOneLiner(options: K3sJoinOptions): string {
  * Generates complete bash join script for a worker or server node
  */
 export function generateK3sJoinScript(options: K3sJoinOptions): string {
+  validateK3sJoinOptions(options);
   const role = options.role || 'agent';
   const serverUrl = options.serverUrl || 'https://127.0.0.1:6443';
   const token = options.token || '';

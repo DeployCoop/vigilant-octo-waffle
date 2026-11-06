@@ -74,10 +74,23 @@ export async function executePostgresQuery(
   const start = Date.now();
   const trimmed = sqlQuery.trim();
 
-  // Safety check: block destructive commands if not explicitly permitted
+  // Safety check: strip SQL comments and block destructive DDL/DML anywhere in the query
+  // (including multi-statement batches, CTEs, or comment-prefixed queries).
+  const strippedSql = trimmed
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/--[^\r\n]*/g, ' ');
   const upper = trimmed.toUpperCase();
-  if (upper.startsWith('DROP ') || upper.startsWith('TRUNCATE ') || upper.startsWith('DELETE FROM ')) {
-    throw new Error('Destructive operations (DROP, TRUNCATE, DELETE) are restricted in this studio.');
+  if (/\b(DROP|TRUNCATE|DELETE|ALTER)\b/i.test(strippedSql)) {
+    throw new Error('Destructive operations (DROP, TRUNCATE, DELETE, ALTER) are restricted in this studio.');
+  }
+
+  const db = options?.database || 'postgres';
+  const user = options?.user || 'postgres';
+  if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,62}$/.test(db)) {
+    throw new Error(`Invalid database name: ${db}`);
+  }
+  if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,62}$/.test(user)) {
+    throw new Error(`Invalid database user: ${user}`);
   }
 
   // Find a postgres pod
@@ -142,9 +155,6 @@ export async function executePostgresQuery(
       executionTimeMs: latency,
     };
   }
-
-  const db = options?.database || 'postgres';
-  const user = options?.user || 'postgres';
 
   // Run psql inside pod. argv execution: the caller's SQL is meant to run
   // as SQL (the data:query permission), but it must never be re-parsed by

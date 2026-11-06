@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const root = getProjectRoot();
-    const options: CustomAppOptions = await req.json();
+    const options = ((await req.json().catch(() => null)) ?? {}) as CustomAppOptions;
 
     const denied = await authorizeRequest(req, 'apps:deploy', { appId: options.id });
     if (denied) return denied;

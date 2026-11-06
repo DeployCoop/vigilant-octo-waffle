@@ -120,6 +120,17 @@ export class WaffleSourceManager {
     const sources = await this.getSources();
 
     const normalizedPath = input.pathOrUrl.trim();
+    if (!normalizedPath) {
+      throw new Error('Waffle source pathOrUrl must not be empty');
+    }
+    if (input.type === 'git') {
+      if (normalizedPath.startsWith('-') || /^ext::/i.test(normalizedPath)) {
+        throw new Error(`Invalid git repository URL "${normalizedPath}"`);
+      }
+      if (input.branch && input.branch.trim().startsWith('-')) {
+        throw new Error(`Invalid git branch "${input.branch}"`);
+      }
+    }
     const existing = sources.find((s) => s.pathOrUrl === normalizedPath);
     if (existing) {
       throw new Error(`Waffle source with path/URL "${normalizedPath}" is already registered (id: ${existing.id})`);
@@ -140,8 +151,8 @@ export class WaffleSourceManager {
       localPath = targetDir;
       try {
         const cloneArgs = ['clone', '--depth', '1'];
-        if (input.branch) cloneArgs.push('-b', input.branch);
-        cloneArgs.push(normalizedPath, targetDir);
+        if (input.branch) cloneArgs.push('-b', input.branch.trim());
+        cloneArgs.push('--', normalizedPath, targetDir);
         await execFileAsync('git', cloneArgs);
         const { stdout: shaOut } = await execAsync('git rev-parse HEAD', { cwd: targetDir });
         currentSha = shaOut.trim();
@@ -233,9 +244,15 @@ export class WaffleSourceManager {
       if (source.type === 'git') {
         const targetDir = source.localPath;
         if (!fs.existsSync(targetDir)) {
+          if (source.pathOrUrl.startsWith('-') || /^ext::/i.test(source.pathOrUrl)) {
+            throw new Error(`Invalid git repository URL "${source.pathOrUrl}"`);
+          }
+          if (source.branch && source.branch.trim().startsWith('-')) {
+            throw new Error(`Invalid git branch "${source.branch}"`);
+          }
           const cloneArgs = ['clone', '--depth', '1'];
-          if (source.branch) cloneArgs.push('-b', source.branch);
-          cloneArgs.push(source.pathOrUrl, targetDir);
+          if (source.branch) cloneArgs.push('-b', source.branch.trim());
+          cloneArgs.push('--', source.pathOrUrl, targetDir);
           await execFileAsync('git', cloneArgs);
         } else {
           await execAsync('git fetch --depth 1', { cwd: targetDir });

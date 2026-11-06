@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json().catch(() => null)) ?? {};
     const { action, sessionId, namespace, podName, containerName, command, data } = body;
 
     // Critical permission: pod exec. Authorized before any session is
@@ -84,16 +84,27 @@ export async function GET(req: Request) {
       // Send initial connect notification
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'connected' })}\n\n`));
 
+      const cleanup = () => {
+        session.off('data', onData);
+        session.off('close', onClose);
+      };
+
       const onData = (data: string) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'output', data })}\n\n`));
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'output', data })}\n\n`));
+        } catch {
+          cleanup();
+        }
       };
 
       const onClose = (code: number) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'close', code })}\n\n`));
         try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'close', code })}\n\n`));
           controller.close();
         } catch {
           // ignore
+        } finally {
+          cleanup();
         }
       };
 
@@ -101,8 +112,7 @@ export async function GET(req: Request) {
       session.on('close', onClose);
 
       req.signal.addEventListener('abort', () => {
-        session.off('data', onData);
-        session.off('close', onClose);
+        cleanup();
         execSessionManager.closeSession(sessionId);
       });
     },

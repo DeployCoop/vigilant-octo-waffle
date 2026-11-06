@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
-import { loadProjectConfig, saveEnvFile, K8sClient, FluxManager, processManager } from '@vow/orchestrator';
+import { loadProjectConfig, saveEnvFile, K8sClient, FluxManager, processManager, isK8sLabel, isK8sObjectName } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
 
@@ -90,7 +90,10 @@ export async function POST(req: Request) {
       });
     }
 
-    const targetNs = namespace || config.cluster.namespace || 'default';
+    const targetNs = String(namespace || config.cluster.namespace || 'default');
+    if (!isK8sLabel(targetNs)) {
+      return apiError(400, 'Invalid namespace');
+    }
     const now = String(Date.now());
 
     if (action === 'reconcile-all') {
@@ -108,9 +111,12 @@ export async function POST(req: Request) {
     }
 
     if (action === 'reconcile' && name) {
+      if (!isK8sObjectName(String(name))) {
+        return apiError(400, 'Invalid HelmRelease name');
+      }
       const task = processManager.runCommand(
         'kubectl',
-        ['annotate', '--overwrite', 'helmrelease', name, '-n', targetNs, `reconcile.fluxcd.io/requestedAt=${now}`],
+        ['annotate', '--overwrite', 'helmrelease', String(name), '-n', targetNs, `reconcile.fluxcd.io/requestedAt=${now}`],
         { cwd: root, env: config.raw }
       );
       return NextResponse.json({ success: true, taskId: task.id, app: name });

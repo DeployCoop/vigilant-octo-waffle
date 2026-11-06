@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { processManager, type TaskRun } from './executor.js';
 
 const execAsync = promisify(exec);
-import { execFileAsync } from './exec-argv.js';
+import { execFileAsync, assertK8sLabel, assertK8sObjectName } from './exec-argv.js';
 
 export interface BackupItem {
   id: string;
@@ -62,9 +62,13 @@ export async function listBackups(): Promise<BackupItem[]> {
 }
 
 export function createVeleroBackup(name: string, namespaces?: string[], cwd?: string): TaskRun {
-  const safeName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const safeName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  assertK8sObjectName(safeName, 'backup name');
   const args = ['backup', 'create', safeName];
   if (namespaces && namespaces.length > 0) {
+    for (const ns of namespaces) {
+      assertK8sLabel(ns, 'namespace');
+    }
     args.push('--include-namespaces', namespaces.join(','));
   }
 
@@ -72,6 +76,7 @@ export function createVeleroBackup(name: string, namespaces?: string[], cwd?: st
 }
 
 export function restoreVeleroBackup(backupName: string, cwd?: string): TaskRun {
+  assertK8sObjectName(backupName, 'backup name');
   const restoreName = `restore-${backupName}-${Date.now()}`;
   return processManager.runCommand('velero', ['restore', 'create', restoreName, '--from-backup', backupName], {
     cwd: cwd || process.cwd(),
@@ -79,7 +84,14 @@ export function restoreVeleroBackup(backupName: string, cwd?: string): TaskRun {
 }
 
 export async function createDockerNodeSnapshot(containerName: string, snapshotName: string): Promise<string> {
-  const tag = `vow-snapshot-${snapshotName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}:${Date.now()}`;
+  if (!containerName || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(containerName)) {
+    throw new Error(`Invalid container name: ${containerName}`);
+  }
+  const safeSnapshot = snapshotName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  if (!safeSnapshot) {
+    throw new Error(`Invalid snapshot name: ${snapshotName}`);
+  }
+  const tag = `vow-snapshot-${safeSnapshot}:${Date.now()}`;
   await execFileAsync('docker', ['commit', containerName, tag]);
   return tag;
 }

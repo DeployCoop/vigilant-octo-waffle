@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json().catch(() => null)) ?? {};
     const { type, namespace, podName, durationSec = 10, latencyMs = 200 } = body;
 
     // Critical permission: chaos injection, scoped to the target namespace.

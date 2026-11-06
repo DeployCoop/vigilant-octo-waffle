@@ -7,6 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { execAsync, getWaffleExecutionEnv } from './shared.js';
+import { execFileAsync, assertK8sLabel, assertK8sObjectName } from '../exec-argv.js';
 import {
   loadWafflePipeline,
   type WafflePipeline,
@@ -560,9 +561,11 @@ export class WaffleWatcher extends EventEmitter {
     this.emit('deploy_start', { target: target.name, release, namespace: ns });
 
     try {
+      assertK8sLabel(ns, 'namespace');
       // Find candidate deployment name
-      const { stdout } = await execAsync(
-        `kubectl get deployments -n ${JSON.stringify(ns)} -o jsonpath='{.items[*].metadata.name}'`,
+      const { stdout } = await execFileAsync(
+        'kubectl',
+        ['get', 'deployments', '-n', ns, '-o', 'jsonpath={.items[*].metadata.name}'],
         { env }
       ).catch(() => ({ stdout: '' }));
 
@@ -572,9 +575,10 @@ export class WaffleWatcher extends EventEmitter {
       );
 
       if (matched) {
-        await execAsync(`kubectl rollout restart deployment/${matched} -n ${JSON.stringify(ns)}`, { env });
+        assertK8sObjectName(matched, 'deployment name');
+        await execFileAsync('kubectl', ['rollout', 'restart', `deployment/${matched}`, '-n', ns], { env });
         this.log(`[WATCHER] [${target.name}] Dispatched rollout restart for deployment "${matched}". Waiting for status...`);
-        await execAsync(`kubectl rollout status deployment/${matched} -n ${JSON.stringify(ns)} --timeout=90s`, { env });
+        await execFileAsync('kubectl', ['rollout', 'status', `deployment/${matched}`, '-n', ns, '--timeout=90s'], { env });
         this.log(`[WATCHER] [${target.name}] Deployment "${matched}" successfully rolled out.`);
         this.emit('deploy_complete', { target: target.name, release: matched, namespace: ns, status: 'rolled_out' });
         return true;

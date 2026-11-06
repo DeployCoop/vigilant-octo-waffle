@@ -30,12 +30,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-
     // Critical permission: scaling and node-join/provisioning actions.
     const denied = await authorizeRequest(req, 'cluster:nodes:join');
     if (denied) return denied;
 
+    const body = (await req.json().catch(() => null)) ?? {};
     const root = getProjectRoot();
     const { action, clusterName = 'vigilant-octo-waffle', targetAgentCount, delta = 1 } = body;
 
@@ -81,10 +80,17 @@ export async function POST(req: Request) {
       // that dies instantly: on a fresh install there is no targets file
       // yet, and the route previously returned success regardless.
       if (!body.targets?.length) {
-        const targetsFile = body.targetsFile || 'targets';
+        const targetsFile = String(body.targetsFile || 'targets');
         const fs = await import('node:fs');
         const path = await import('node:path');
-        if (!fs.existsSync(path.join(root, targetsFile))) {
+        const resolvedRoot = path.resolve(root);
+        const resolvedTargets = path.resolve(resolvedRoot, targetsFile);
+        if (!resolvedTargets.startsWith(resolvedRoot + path.sep)) {
+          return apiError(400, 'Invalid targetsFile path: must remain within project root', {
+            route: 'POST /api/cluster/nodes',
+          });
+        }
+        if (!fs.existsSync(resolvedTargets)) {
           return apiError(
             400,
             `Targets file '${targetsFile}' not found. Create it with one SSH target (user@host) per line, or pass explicit targets, before running a batch join.`,

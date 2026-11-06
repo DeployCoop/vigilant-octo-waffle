@@ -91,7 +91,7 @@ export async function fetchClusterTraces(
       rootService: 'traefik-ingress',
       totalDurationMs: 310,
       timestamp: new Date(now - 45000).toISOString(),
-      spansCount: 4,
+      spansCount: 3,
       hasErrors: true,
       spans: [
         {

@@ -8,7 +8,7 @@ import { loadProjectConfig, getChartsDirectory } from './config.js';
 import type { AppCategory } from './registry.js';
 
 const execAsync = promisify(exec);
-import { execFileAsync, ExecArgvError } from './exec-argv.js';
+import { execFileAsync, ExecArgvError, assertK8sLabel, assertK8sObjectName } from './exec-argv.js';
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -93,6 +93,8 @@ export async function listHelmReleases(): Promise<HelmReleaseInfo[]> {
  * Retrieves the user-supplied values for a deployed Helm release
  */
 export async function getHelmReleaseValues(name: string, namespace: string): Promise<string> {
+  assertK8sObjectName(name, 'release name');
+  assertK8sLabel(namespace, 'namespace');
   try {
     const { stdout } = await execFileAsync('helm', ['get', 'values', name, '-n', namespace, '-a']);
     return stdout;
@@ -314,6 +316,8 @@ export function installLocalChart(
   const releaseName = options.releaseName || chartDetail.id;
   const namespace = options.namespace || config.cluster.namespace || 'default';
   const timeout = options.timeout || config.raw['THIS_HELM_TIMEOUT'] || '15m0s';
+  assertK8sObjectName(releaseName, 'release name');
+  assertK8sLabel(namespace, 'namespace');
 
   const args: string[] = [
     'upgrade',
@@ -370,6 +374,8 @@ export function uninstallLocalChart(
   releaseName: string,
   namespace: string = 'default'
 ): TaskRun {
+  assertK8sObjectName(releaseName, 'release name');
+  assertK8sLabel(namespace, 'namespace');
   const config = loadProjectConfig(projectRoot);
   return processManager.runCommand(
     'helm',
@@ -402,11 +408,10 @@ export async function lintLocalChart(
     };
   } catch (err) {
     // execFileAsync failures are ExecArgvError (stdout/stderr attached).
-    // The expression shape (including its || grouping) is preserved.
     const execErr = err instanceof ExecArgvError ? err : null;
     return {
       valid: false,
-      output: (execErr?.stdout || '' + '\n' + (execErr?.stderr || errorMessage(err))).trim(),
+      output: [execErr?.stdout, execErr?.stderr || errorMessage(err)].filter(Boolean).join('\n').trim(),
     };
   }
 }
@@ -435,6 +440,8 @@ export async function templateLocalChart(
   const config = loadProjectConfig(projectRoot);
   const releaseName = options.releaseName || chartDetail.id;
   const namespace = options.namespace || 'default';
+  assertK8sObjectName(releaseName, 'release name');
+  assertK8sLabel(namespace, 'namespace');
 
   const valuesArgs: string[] = [];
   if (options.valuesYaml && options.valuesYaml.trim()) {
@@ -442,7 +449,8 @@ export async function templateLocalChart(
     if (!fs.existsSync(cacheDir)) {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
-    const valuesFile = path.join(cacheDir, `temp-${chartId}-values.yaml`);
+    const safeChartId = chartDetail.id.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const valuesFile = path.join(cacheDir, `temp-${safeChartId}-values.yaml`);
     fs.writeFileSync(valuesFile, options.valuesYaml, 'utf-8');
     valuesArgs.push('-f', valuesFile);
   }

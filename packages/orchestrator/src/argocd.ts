@@ -4,6 +4,7 @@ import { substituteVariables } from './template.js';
 import { mergeYamlStrings } from './yaml.js';
 import { processManager, type TaskRun } from './executor.js';
 import { loadProjectConfig } from './config.js';
+import { assertK8sObjectName } from './exec-argv.js';
 
 export interface ArgoAppManifestResult {
   appName: string;
@@ -18,6 +19,7 @@ export class ArgoManager {
    * Reads, merges overrides, and templates an ArgoCD application manifest
    */
   public prepareAppManifest(appName: string): ArgoAppManifestResult {
+    assertK8sObjectName(appName, 'application name');
     const config = loadProjectConfig(this.projectRoot);
     const baseArgoPath = path.join(this.projectRoot, 'argo', appName, 'argocd.yaml');
     const overrideArgoPath = path.join(this.projectRoot, '.argo_overrides', appName, 'argocd.yaml');
@@ -97,6 +99,7 @@ export class ArgoManager {
    * Syncs an ArgoCD application
    */
   public syncApp(appName: string): TaskRun {
+    assertK8sObjectName(appName, 'application name');
     const config = loadProjectConfig(this.projectRoot);
 
     return processManager.runCommand(

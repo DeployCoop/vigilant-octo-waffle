@@ -5,6 +5,7 @@ import { loadProjectConfig } from './config.js';
 import { processManager, type TaskRun } from './executor.js';
 import { substituteVariables } from './template.js';
 import { deepMergeYaml } from './yaml.js';
+import { assertK8sLabel, assertK8sObjectName } from './exec-argv.js';
 
 // The Argo CD Application fields the Argo-to-Flux conversion reads.
 interface ArgoApplicationYaml {
@@ -33,6 +34,7 @@ export class FluxManager {
    * Seamlessly synthesizes Flux resources from argo/<app>/argocd.yaml if native flux.yaml is absent.
    */
   public prepareAppManifest(appName: string): PreparedFluxManifest {
+    assertK8sObjectName(appName, 'application name');
     const config = loadProjectConfig(this.projectRoot);
     const fluxNs = config.cluster.fluxNamespace || 'flux-system';
     const baseFluxPath = path.join(this.projectRoot, 'flux', appName, 'flux.yaml');
@@ -222,8 +224,10 @@ export class FluxManager {
    * Syncs / Reconciles a FluxCD application via standard reconcile annotation
    */
   public syncApp(appName: string, namespace?: string): TaskRun {
+    assertK8sObjectName(appName, 'application name');
     const config = loadProjectConfig(this.projectRoot);
     const targetNs = namespace || config.cluster.namespace || 'default';
+    assertK8sLabel(targetNs, 'namespace');
     const now = String(Date.now());
 
     // Annotate HelmRelease to trigger immediate reconciliation

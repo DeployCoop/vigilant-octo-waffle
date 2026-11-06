@@ -1,7 +1,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadProjectConfig, saveEnablerFile } from './config.js';
-import type { AppCategory } from './registry.js';
+import { APP_CATALOG, type AppCategory } from './registry.js';
+import { assertK8sLabel } from './exec-argv.js';
+
+function quoteYamlSingle(value: string, label: string): string {
+  if (/[\r\n\0]/.test(value)) {
+    throw new Error(`Invalid ${label}: must not contain control characters or newlines`);
+  }
+  return `'${value.replace(/'/g, "''")}'`;
+}
 
 export interface CustomAppOptions {
   id: string;
@@ -46,13 +54,27 @@ export function scaffoldCustomApp(
   options: CustomAppOptions,
   projectRoot: string
 ): { success: boolean; manifestPath: string; app: CustomAppDefinition } {
-  const id = options.id.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
-  if (!id) {
-    throw new Error('Invalid application identifier');
+  const id = (options.id || '').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  assertK8sLabel(id, 'application id');
+
+  if (APP_CATALOG.some((a) => a.id === id)) {
+    throw new Error(`Cannot scaffold custom app over built-in application '${id}'`);
   }
 
+  const repoURL = quoteYamlSingle(options.repoURL, 'repoURL');
+  const chart = quoteYamlSingle(options.chart || id, 'chart');
+  const targetRevision = quoteYamlSingle(
+    options.targetRevision || (options.sourceType === 'helm' ? 'latest' : 'HEAD'),
+    'targetRevision'
+  );
+  const gitPath = quoteYamlSingle(options.path || '.', 'path');
+
   const enablerVar = `${id.toUpperCase().replace(/-/g, '_')}_ENABLED`;
-  const argoDir = path.join(projectRoot, 'argo', id);
+  const argoBase = path.resolve(projectRoot, 'argo');
+  const argoDir = path.resolve(argoBase, id);
+  if (!argoDir.startsWith(argoBase + path.sep)) {
+    throw new Error('Invalid application path');
+  }
 
   if (fs.existsSync(argoDir)) {
     throw new Error(`Application directory argo/${id} already exists`);
@@ -64,9 +86,9 @@ export function scaffoldCustomApp(
   let sourceBlock: string;
   if (options.sourceType === 'helm') {
     sourceBlock = `  source:
-    repoURL: '${options.repoURL}'
-    chart: '${options.chart || id}'
-    targetRevision: '${options.targetRevision || 'latest'}'
+    repoURL: ${repoURL}
+    chart: ${chart}
+    targetRevision: ${targetRevision}
     helm:
       values: |
 ${(options.valuesYaml || '# Custom values\n')
@@ -75,9 +97,9 @@ ${(options.valuesYaml || '# Custom values\n')
   .join('\n')}`;
   } else {
     sourceBlock = `  source:
-    repoURL: '${options.repoURL}'
-    targetRevision: '${options.targetRevision || 'HEAD'}'
-    path: '${options.path || '.'}'`;
+    repoURL: ${repoURL}
+    targetRevision: ${targetRevision}
+    path: ${gitPath}`;
   }
 
   const manifestContent = `apiVersion: argoproj.io/v1alpha1
@@ -131,7 +153,18 @@ ${sourceBlock}
 }
 
 export function deleteCustomApp(id: string, projectRoot: string): void {
-  const argoDir = path.join(projectRoot, 'argo', id);
+  assertK8sLabel(id, 'application id');
+
+  if (APP_CATALOG.some((a) => a.id === id)) {
+    throw new Error(`Cannot delete built-in application '${id}'`);
+  }
+
+  const argoBase = path.resolve(projectRoot, 'argo');
+  const argoDir = path.resolve(argoBase, id);
+  if (!argoDir.startsWith(argoBase + path.sep)) {
+    throw new Error('Invalid application path');
+  }
+
   if (fs.existsSync(argoDir)) {
     fs.rmSync(argoDir, { recursive: true, force: true });
   }

@@ -1,5 +1,5 @@
 import * as k8s from '@kubernetes/client-node';
-import { execFileAsync } from './exec-argv.js';
+import { execFileAsync, assertK8sLabel, assertK8sObjectName } from './exec-argv.js';
 
 export interface RolloutInfo {
   name: string;
@@ -24,6 +24,9 @@ const inMemoryCanaryWeights = new Map<string, number>();
 
 export async function listRollouts(namespace?: string): Promise<RolloutInfo[]> {
   const rollouts: RolloutInfo[] = [];
+  if (namespace && namespace !== 'all') {
+    assertK8sLabel(namespace, 'namespace');
+  }
   const nsArgs = namespace && namespace !== 'all' ? ['-n', namespace] : ['-A'];
 
   try {
@@ -103,13 +106,16 @@ export async function listRollouts(namespace?: string): Promise<RolloutInfo[]> {
 }
 
 export async function setCanaryWeight(name: string, namespace: string, weight: number): Promise<{ success: boolean; message: string; weight: number }> {
-  const boundedWeight = Math.max(0, Math.min(100, Math.round(weight)));
+  assertK8sObjectName(name, 'rollout name');
+  assertK8sLabel(namespace, 'namespace');
+  const numericWeight = Number.isFinite(weight) ? weight : 0;
+  const boundedWeight = Math.max(0, Math.min(100, Math.round(numericWeight)));
   const key = `${namespace}/${name}`;
   inMemoryCanaryWeights.set(key, boundedWeight);
 
   try {
     // Attempt updating Ingress weighted service annotation or Rollout spec
-    const annotation = `traefik.ingress.kubernetes.io/service.weights: "${name}-stable:${100 - boundedWeight}, ${name}-canary:${boundedWeight}"`;
+    const annotation = `traefik.ingress.kubernetes.io/service.weights=${name}-stable:${100 - boundedWeight},${name}-canary:${boundedWeight}`;
     await execFileAsync('kubectl', ['annotate', 'service', name, '-n', namespace, annotation, '--overwrite']).catch(() => {});
   } catch {}
 
@@ -121,6 +127,8 @@ export async function setCanaryWeight(name: string, namespace: string, weight: n
 }
 
 export async function promoteRollout(name: string, namespace: string, full = false): Promise<{ success: boolean; message: string }> {
+  assertK8sObjectName(name, 'rollout name');
+  assertK8sLabel(namespace, 'namespace');
   const key = `${namespace}/${name}`;
   const current = inMemoryCanaryWeights.get(key) ?? 20;
   const newWeight = full ? 100 : Math.min(100, current + 25);
@@ -139,6 +147,8 @@ export async function promoteRollout(name: string, namespace: string, full = fal
 }
 
 export async function abortRollout(name: string, namespace: string): Promise<{ success: boolean; message: string }> {
+  assertK8sObjectName(name, 'rollout name');
+  assertK8sLabel(namespace, 'namespace');
   const key = `${namespace}/${name}`;
   inMemoryCanaryWeights.set(key, 0);
 

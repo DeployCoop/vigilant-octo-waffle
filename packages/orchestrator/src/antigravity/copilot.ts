@@ -4,6 +4,7 @@
  */
 import * as path from 'node:path';
 import { processManager } from '../executor.js';
+import { assertK8sLabel, assertK8sObjectName } from '../exec-argv.js';
 import { type AntigravityResponse, type AskAntigravityOptions } from './types.js';
 import { askAntigravity } from './engine.js';
 
@@ -227,6 +228,8 @@ export async function executeCopilotTool(
     case 'kubectl_describe_pod': {
       const podName = String(params.podName || '');
       const ns = String(params.namespace || 'default');
+      assertK8sLabel(podName, 'pod name');
+      assertK8sLabel(ns, 'namespace');
       const task = processManager.runCommand('kubectl', ['describe', 'pod', podName, '-n', ns], { cwd: root });
       return { success: true, message: `Describing pod ${ns}/${podName}`, taskId: task.id };
     }
@@ -234,15 +237,22 @@ export async function executeCopilotTool(
     case 'kubectl_tail_logs': {
       const podName = String(params.podName || '');
       const ns = String(params.namespace || 'default');
-      const lines = String(params.lines || 100);
-      const task = processManager.runCommand('kubectl', ['logs', podName, '-n', ns, `--tail=${lines}`], { cwd: root });
+      assertK8sLabel(podName, 'pod name');
+      assertK8sLabel(ns, 'namespace');
+      const linesNum = Math.max(1, Math.min(5000, Math.floor(Number(params.lines) || 100)));
+      const task = processManager.runCommand('kubectl', ['logs', podName, '-n', ns, `--tail=${linesNum}`], { cwd: root });
       return { success: true, message: `Tailing logs for ${ns}/${podName}`, taskId: task.id };
     }
 
     case 'kubectl_restart_rollout': {
-      const type = String(params.resourceType || 'deployment');
+      const type = String(params.resourceType || 'deployment').toLowerCase();
+      if (!['deployment', 'statefulset', 'daemonset'].includes(type)) {
+        throw new Error(`Invalid resourceType for rollout restart: ${type}`);
+      }
       const name = String(params.resourceName || '');
       const ns = String(params.namespace || 'default');
+      assertK8sObjectName(name, 'resource name');
+      assertK8sLabel(ns, 'namespace');
       const task = processManager.runCommand('kubectl', ['rollout', 'restart', `${type}/${name}`, '-n', ns], { cwd: root });
       return { success: true, message: `Rolling restart dispatched for ${type}/${name} in ${ns}`, taskId: task.id };
     }

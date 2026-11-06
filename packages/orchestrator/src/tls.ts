@@ -89,6 +89,14 @@ export async function ensureDevCertificate(
   const { dir, certPath, keyPath } = getDevCertificatePaths(projectRoot);
   const caroot = await getMkcertCaRoot();
 
+  if (options.hostnames) {
+    for (const h of options.hostnames) {
+      if (!h || h.startsWith('-') || !/^[a-zA-Z0-9.*:[\]_-]+$/.test(h)) {
+        throw new Error(`Invalid certificate hostname: ${h}`);
+      }
+    }
+  }
+
   if (!options.force && hasDevCertificate(projectRoot)) {
     return {
       certPath,
@@ -102,7 +110,7 @@ export async function ensureDevCertificate(
 
   const hostnames = Array.from(
     new Set([...discoverLocalHostnames(), ...(options.hostnames || [])])
-  );
+  ).filter((h) => Boolean(h) && !h.startsWith('-') && /^[a-zA-Z0-9.*:[\]_-]+$/.test(h));
 
   try {
     await execFileAsync('mkcert', ['-cert-file', certPath, '-key-file', keyPath, ...hostnames], { cwd: projectRoot });

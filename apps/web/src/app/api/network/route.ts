@@ -22,7 +22,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json().catch(() => null)) ?? {};
     const { action, appId, namespace = 'default', allowedCallers = [] } = body;
 
     const denied = await authorizeRequest(req, 'network:manage', { namespace, appId });
