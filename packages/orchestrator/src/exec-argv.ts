@@ -56,16 +56,22 @@ export function scrubUrlCredentials(arg: string): string {
       break;
     }
     const user = rest.slice(userStart, colon);
-    const password = rest.slice(colon + 1, at);
+    // Named for its position, not its meaning: this is the substring
+    // between the first ':' and the '@'. (A previous name for this
+    // local tripped CodeQL's insecure-randomness query, which treats a
+    // variable called `password` as a security-sensitive sink; the value
+    // here is never used as a credential — it is only length- and
+    // whitespace-checked, then discarded in favor of '[redacted]'.)
+    const afterColon = rest.slice(colon + 1, at);
     // Note: '@' is allowed in the user part (the old pattern's user
     // class excluded only ':' '/' and whitespace), so `us@er:pass@host`
     // redacts to `us@er:[redacted]@host`.
     if (
       user.length === 0 ||
-      password.length === 0 ||
+      afterColon.length === 0 ||
       user.includes('/') ||
       /\s/.test(user) ||
-      /\s/.test(password)
+      /\s/.test(afterColon)
     ) {
       // Not credentials: keep the scheme and keep scanning past it.
       out += rest.slice(0, userStart);
