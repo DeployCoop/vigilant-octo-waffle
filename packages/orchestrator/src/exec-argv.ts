@@ -23,10 +23,63 @@ import { redactSensitiveArgs } from './taskStore.js';
  * otherwise surface verbatim in spawn-failure error messages). The spawn
  * itself always uses the real args; only the label is scrubbed.
  */
+/**
+ * Scrub credentials from one argv value for display, without a regular
+ * expression. The previous regex was quadratic on hostile input (CodeQL
+ * js/polynomial-redos on this line: a 120KB crafted argv took 5.3s in
+ * V8, 30KB took 400ms). This is a linear indexOf scan with identical
+ * redaction behavior: `scheme://user:password@host` becomes
+ * `scheme://user:[redacted]@host`. Values with no userinfo, a port
+ * instead of credentials, or whitespace in the credentials pass through
+ * unchanged; a '/' in the password is still redacted, matching the old
+ * pattern, while a '/' before the ':' means the ':' belongs to a
+ * path/port rather than credentials.
+ */
+export function scrubUrlCredentials(arg: string): string {
+  let out = '';
+  let rest = arg;
+  for (;;) {
+    const scheme = rest.indexOf('://');
+    if (scheme === -1) {
+      out += rest;
+      break;
+    }
+    const userStart = scheme + 3;
+    const colon = rest.indexOf(':', userStart);
+    if (colon === -1) {
+      out += rest;
+      break;
+    }
+    const at = rest.indexOf('@', colon + 1);
+    if (at === -1) {
+      out += rest;
+      break;
+    }
+    const user = rest.slice(userStart, colon);
+    const password = rest.slice(colon + 1, at);
+    // Note: '@' is allowed in the user part (the old pattern's user
+    // class excluded only ':' '/' and whitespace), so `us@er:pass@host`
+    // redacts to `us@er:[redacted]@host`.
+    if (
+      user.length === 0 ||
+      password.length === 0 ||
+      user.includes('/') ||
+      /\s/.test(user) ||
+      /\s/.test(password)
+    ) {
+      // Not credentials: keep the scheme and keep scanning past it.
+      out += rest.slice(0, userStart);
+      rest = rest.slice(userStart);
+      continue;
+    }
+    out += rest.slice(0, colon + 1) + '[redacted]';
+    rest = rest.slice(at);
+  }
+  return out;
+}
+
 function redactLabelArgs(args: string[]): string[] {
-  return redactSensitiveArgs(args).map((a) =>
-    a.replace(/:\/\/([^:/\s]+):([^@\s]+)@/g, '://$1:[redacted]@')
-  );
+  return redactSensitiveArgs(args).map(scrubUrlCredentials);
 }
 
 export interface ExecArgvOptions {

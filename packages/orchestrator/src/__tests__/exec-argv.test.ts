@@ -13,6 +13,7 @@ import {
   assertK8sLabel,
   assertK8sObjectName,
   assertImageRef,
+  scrubUrlCredentials,
   ExecArgvError,
 } from '../exec-argv.js';
 
@@ -87,6 +88,40 @@ describe('error labels redact credentials (bug-hunt Batch A5 follow-up)', () => 
         return true;
       }
     );
+  });
+});
+
+describe('scrubUrlCredentials (CodeQL js/polynomial-redos fix)', () => {
+  it('redacts URL credentials and leaves everything else alone', () => {
+    const cases: Array<[string, string]> = [
+      ['https://user:s3cret@host.example/repo.git', 'https://user:[redacted]@host.example/repo.git'],
+      ['https://user@host.example/repo.git', 'https://user@host.example/repo.git'],
+      ['https://host:8080/path', 'https://host:8080/path'],
+      ['https://user:pa/ss@host', 'https://user:[redacted]@host'],
+      ['https://user:pa ss@host', 'https://user:pa ss@host'],
+      ['https://us@er:pass@host', 'https://us@er:[redacted]@host'],
+      ['https://user:@host', 'https://user:@host'],
+      ['https://:pass@host', 'https://:pass@host'],
+      ['git@github.com:user/repo.git', 'git@github.com:user/repo.git'],
+      ['ssh://git@github.com:22/repo', 'ssh://git@github.com:22/repo'],
+      ['https://a:b@h1 and https://c:d@h2', 'https://a:[redacted]@h1 and https://c:[redacted]@h2'],
+      ['plain-arg', 'plain-arg'],
+      ['', ''],
+    ];
+    for (const [input, expected] of cases) {
+      assert.equal(scrubUrlCredentials(input), expected, JSON.stringify(input));
+    }
+  });
+
+  it('handles the CodeQL pathological input in linear time', () => {
+    // The old regex took 5.3s on this exact shape at 20k repetitions
+    // (400ms at 5k); the indexOf scan must stay well under a second.
+    const hostile = '://!:' + '://!:!'.repeat(20000);
+    const t0 = Date.now();
+    const out = scrubUrlCredentials(hostile);
+    const elapsed = Date.now() - t0;
+    assert.equal(out, hostile);
+    assert.ok(elapsed < 1000, `took ${elapsed}ms`);
   });
 });
 
