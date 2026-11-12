@@ -4,6 +4,7 @@ import { apiError, routeError } from '@/lib/route-error';
 import { loadProjectConfig, saveEnvFile } from '@vow/orchestrator';
 import { authorizeRequest, callerCan } from '@/lib/authz';
 import { redactSecrets } from '@/lib/redaction';
+import { isSensitiveConfigKey } from '@/lib/sensitive-config';
 
 export async function GET(req: Request) {
   const denied = await authorizeRequest(req, 'config:read');
@@ -37,6 +38,16 @@ export async function POST(req: Request) {
 
     if (!updates || typeof updates !== 'object') {
       return apiError(400, 'Invalid updates');
+    }
+
+    // Security-sensitive keys need the owner-only permission on top of
+    // config:update; otherwise an admin could escalate to owner by
+    // persisting a bootstrap credential or redirecting identity trust.
+    // (With authz disabled this second check passes, matching the
+    // zero-config model; the first gate already passed in that case.)
+    if (Object.keys(updates).some(isSensitiveConfigKey)) {
+      const deniedSensitive = await authorizeRequest(req, 'users:manage_permissions');
+      if (deniedSensitive) return deniedSensitive;
     }
 
     const currentConfig = loadProjectConfig(root);

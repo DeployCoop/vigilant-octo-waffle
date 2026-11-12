@@ -6,6 +6,125 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadProjectConfig } from '../config.js';
 import { processManager, type TaskRun } from '../executor.js';
+import { assertK8sLabel } from '../exec-argv.js';
+
+// ---------------------------------------------------------------------------
+// Shell quoting + identifier validation for the generated join artifacts.
+// The one-liners and scripts below are executed by a shell (locally pasted
+// or piped to `sudo bash -s` on a remote node), so every interpolated value
+// must be either a validated identifier or a safely quoted word. Previously
+// all values were interpolated raw: a nodeName, token, or URL containing
+// `;`, `$(...)`, quotes, or newlines executed as shell code.
+// ---------------------------------------------------------------------------
+
+/**
+ * shlex.quote semantics for a single shell word: words made only of safe
+ * characters pass through unchanged (so benign one-liners/scripts stay
+ * byte-identical), anything else is wrapped in single quotes with embedded
+ * single quotes escaped as '\''. A leading `-` also forces quoting so a
+ * value can never be reinterpreted as a flag.
+ */
+export function shellQuote(value: string): string {
+  if (value.length > 0 && !value.startsWith('-') && /^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Quoting for `NAME=value` env assignments in the generated artifacts.
+ * Values that cannot expand inside double quotes keep the historical
+ * `NAME="value"` form; anything containing `$`, backtick, `"`, `\`, `!`,
+ * or a newline is emitted single-quoted via shellQuote instead, so a
+ * hostile token or URL can never break out of the assignment.
+ */
+export function shellQuoteEnvValue(value: string): string {
+  if (/^[^$`"\\!\n]*$/.test(value)) {
+    return `"${value}"`;
+  }
+  return shellQuote(value);
+}
+
+/** Kubernetes label key: optional DNS-subdomain prefix + `/` + name. */
+const K8S_LABEL_KEY = /^(?:[a-z0-9]([-a-z0-9.]*[a-z0-9])?\/)?[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$/;
+/** Kubernetes label value: empty, or alphanumerics with `-`, `_`, `.` inside. */
+const K8S_LABEL_VALUE = /^([A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?)?$/;
+
+function assertK8sLabelPair(pair: string, what: string): void {
+  const eq = pair.indexOf('=');
+  if (eq <= 0) {
+    throw new Error(`Invalid ${what}: ${JSON.stringify(pair)} (expected key=value)`);
+  }
+  const key = pair.slice(0, eq);
+  const value = pair.slice(eq + 1);
+  if (
+    key.length > 253 ||
+    value.length > 63 ||
+    !K8S_LABEL_KEY.test(key) ||
+    !K8S_LABEL_VALUE.test(value)
+  ) {
+    throw new Error(`Invalid ${what}: ${JSON.stringify(pair)} (expected a Kubernetes label key=value)`);
+  }
+}
+
+function assertK8sTaint(taint: string): void {
+  const colon = taint.lastIndexOf(':');
+  if (colon <= 0) {
+    throw new Error(`Invalid node taint: ${JSON.stringify(taint)} (expected key=value:effect or key:effect)`);
+  }
+  const kv = taint.slice(0, colon);
+  const effect = taint.slice(colon + 1);
+  if (effect !== 'NoSchedule' && effect !== 'PreferNoSchedule' && effect !== 'NoExecute') {
+    throw new Error(`Invalid node taint effect: ${JSON.stringify(effect)} (expected NoSchedule, PreferNoSchedule, or NoExecute)`);
+  }
+  if (kv.includes('=')) {
+    assertK8sLabelPair(kv, 'node taint');
+  } else if (!K8S_LABEL_KEY.test(kv) || kv.length > 253) {
+    throw new Error(`Invalid node taint key: ${JSON.stringify(kv)} (expected a Kubernetes label key)`);
+  }
+}
+
+/**
+ * Builds the `--node-name/--node-ip/--node-label/--node-taint` flag words
+ * for the join command, shared by the one-liner and the script generators
+ * so they cannot diverge. Structured identifiers are validated (fail
+ * closed); opaque values (node IP, extra args) are shell-quoted. Valid
+ * identifiers quote to themselves, so benign output is unchanged.
+ */
+function buildJoinFlags(options: K3sJoinOptions): string {
+  const flags: string[] = [];
+  if (options.nodeName) {
+    flags.push('--node-name', shellQuote(assertK8sLabel(options.nodeName, 'node name')));
+  }
+  if (options.nodeIp) {
+    flags.push('--node-ip', shellQuote(options.nodeIp));
+  }
+  if (options.labels) {
+    for (const [k, v] of Object.entries(options.labels)) {
+      if (k && v) {
+        assertK8sLabelPair(`${k}=${v}`, 'node label');
+        flags.push('--node-label', shellQuote(`${k}=${v}`));
+      }
+    }
+  }
+  if (options.taints && options.taints.length > 0) {
+    for (const t of options.taints) {
+      if (t) {
+        assertK8sTaint(t);
+        flags.push('--node-taint', shellQuote(t));
+      }
+    }
+  }
+  if (options.extraArgs && options.extraArgs.length > 0) {
+    // Each element is one word: a multi-word element used to split into
+    // several words (and could inject flags/commands); quoting keeps it a
+    // single argument. No in-repo caller passes extraArgs today.
+    for (const a of options.extraArgs) {
+      if (a) flags.push(shellQuote(a));
+    }
+  }
+  return flags.length > 0 ? ` ${flags.join(' ')}` : '';
+}
 
 export type K3sNodeRole = 'agent' | 'server';
 
@@ -140,74 +259,41 @@ export function resolveK3sToken(projectRoot: string, overrideToken?: string): st
  * Generates single-line curl join command for copy-pasting onto a node
  */
 export function generateK3sOneLiner(options: K3sJoinOptions): string {
-  const role = options.role || 'agent';
+  const role = options.role === 'server' ? 'server' : 'agent';
   const serverUrl = options.serverUrl || 'https://127.0.0.1:6443';
   const token = options.token || '';
 
-  const extraFlags: string[] = [];
-  if (options.nodeName) extraFlags.push(`--node-name ${options.nodeName}`);
-  if (options.nodeIp) extraFlags.push(`--node-ip ${options.nodeIp}`);
-  if (options.labels) {
-    for (const [k, v] of Object.entries(options.labels)) {
-      if (k && v) extraFlags.push(`--node-label ${k}=${v}`);
-    }
-  }
-  if (options.taints && options.taints.length > 0) {
-    for (const t of options.taints) {
-      if (t) extraFlags.push(`--node-taint ${t}`);
-    }
-  }
-  if (options.extraArgs && options.extraArgs.length > 0) {
-    extraFlags.push(...options.extraArgs);
-  }
+  const flagsStr = buildJoinFlags(options);
 
-  const flagsStr = extraFlags.length > 0 ? ` ${extraFlags.join(' ')}` : '';
-
-  if (role === 'agent') {
-    return `curl -sfL https://get.k3s.io | K3S_URL="${serverUrl}" K3S_TOKEN="${token}" sh -s - agent${flagsStr}`;
-  } else {
-    return `curl -sfL https://get.k3s.io | K3S_URL="${serverUrl}" K3S_TOKEN="${token}" sh -s - server${flagsStr}`;
-  }
+  return `curl -sfL https://get.k3s.io | K3S_URL=${shellQuoteEnvValue(serverUrl)} K3S_TOKEN=${shellQuoteEnvValue(token)} sh -s - ${role}${flagsStr}`;
 }
 
 /**
  * Generates complete bash join script for a worker or server node
  */
 export function generateK3sJoinScript(options: K3sJoinOptions): string {
-  const role = options.role || 'agent';
+  // Role is a closed set: anything else normalizes to agent so it can never
+  // inject text into the script body (previously interpolated raw).
+  const role = options.role === 'server' ? 'server' : 'agent';
   const serverUrl = options.serverUrl || 'https://127.0.0.1:6443';
   const token = options.token || '';
 
-  const extraFlags: string[] = [];
-  if (options.nodeName) extraFlags.push(`--node-name ${options.nodeName}`);
-  if (options.nodeIp) extraFlags.push(`--node-ip ${options.nodeIp}`);
-  if (options.labels) {
-    for (const [k, v] of Object.entries(options.labels)) {
-      if (k && v) extraFlags.push(`--node-label ${k}=${v}`);
-    }
-  }
-  if (options.taints && options.taints.length > 0) {
-    for (const t of options.taints) {
-      if (t) extraFlags.push(`--node-taint ${t}`);
-    }
-  }
-  if (options.extraArgs && options.extraArgs.length > 0) {
-    extraFlags.push(...options.extraArgs);
-  }
-
-  const flagsStr = extraFlags.length > 0 ? ` ${extraFlags.join(' ')}` : '';
+  const flagsStr = buildJoinFlags(options);
   const now = new Date().toISOString();
+  // The header comment is not a quoted context: strip newlines so a hostile
+  // URL cannot smuggle command lines into the script body.
+  const commentServerUrl = serverUrl.replace(/[\r\n]/g, '');
 
   return `#!/usr/bin/env bash
 # ==============================================================================
 # K3s Node Join Script (${role.toUpperCase()})
 # Generated: ${now}
-# Primary Server: ${serverUrl}
+# Primary Server: ${commentServerUrl}
 # ==============================================================================
 set -euo pipefail
 
-export K3S_URL="${serverUrl}"
-export K3S_TOKEN="${token}"
+export K3S_URL=${shellQuoteEnvValue(serverUrl)}
+export K3S_TOKEN=${shellQuoteEnvValue(token)}
 
 # Verify root privileges
 if [[ $(id -u) -ne 0 ]]; then

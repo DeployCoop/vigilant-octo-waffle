@@ -20,6 +20,7 @@ import {
 } from '../antigravity/providers.js';
 import { detectManifestPatch } from '../antigravity/engine.js';
 import { isIpAddressLiteral } from '../exec-argv.js';
+import { validateCommand } from '../executor.js';
 import {
   WaffleRunner,
   resolvePathWithinBase,
@@ -168,6 +169,48 @@ test('resolvePathWithinBase keeps build paths inside their base directory', () =
     () => resolvePathWithinBase(base, '/etc', 'tgt', 'context'),
     /resolves outside its base directory/
   );
+});
+
+test('resolvePathWithinBase rejects symlink escapes while allowing in-base symlinks', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-confine-sym-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-confine-out-'));
+  fs.writeFileSync(path.join(outside, 'secret.txt'), 'x');
+  // A symlink inside the base pointing outside: the lexical path looks
+  // in-bounds, but the filesystem resolves it outside (bug-hunt A7).
+  fs.symlinkSync(outside, path.join(base, 'link'));
+  assert.throws(
+    () => resolvePathWithinBase(base, 'link/secret.txt', 'tgt', 'context'),
+    /resolves outside its base directory/
+  );
+  // Not-yet-existing paths under the escaping symlink are rejected too
+  // (the nearest existing ancestor is resolved through the link).
+  assert.throws(
+    () => resolvePathWithinBase(base, 'link/not-yet-created.txt', 'tgt', 'context'),
+    /resolves outside its base directory/
+  );
+  // A symlink to a directory inside the base still resolves inside, and
+  // the lexical path is what is returned.
+  const inner = path.join(base, 'inner');
+  fs.mkdirSync(inner);
+  fs.symlinkSync(inner, path.join(base, 'inner-link'));
+  assert.equal(
+    resolvePathWithinBase(base, 'inner-link/file.txt', 'tgt', 'context'),
+    path.join(base, 'inner-link', 'file.txt')
+  );
+});
+
+test('validateCommand rejects bash scripts that are symlinks escaping the project root', () => {
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-bash-sym-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-bash-out-'));
+  fs.mkdirSync(path.join(proj, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(outside, 'evil.sh'), '#!/bin/bash\necho hi\n');
+  fs.symlinkSync(path.join(outside, 'evil.sh'), path.join(proj, 'src', 'link.sh'));
+  const res = validateCommand('bash', ['src/link.sh'], proj);
+  assert.equal(res.allowed, false, res.reason ?? 'expected rejection');
+  assert.match(res.reason ?? '', /symlink escape/);
+  // Positive control: a regular in-project script still passes.
+  fs.writeFileSync(path.join(proj, 'src', 'real.sh'), '#!/bin/bash\necho hi\n');
+  assert.equal(validateCommand('bash', ['src/real.sh'], proj).allowed, true);
 });
 
 test('assertSafeGitValue rejects git option smuggling and accepts real refs', () => {

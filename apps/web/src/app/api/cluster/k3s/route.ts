@@ -188,17 +188,99 @@ export async function GET(req: Request) {
   }
 }
 
+/**
+ * BUG FIX (bug hunt B5): POST actions used to share one
+ * `cluster:nodes:join` gate, so a principal granted that permission
+ * solely to join nodes could also kill the cluster, rotate its certs
+ * and secrets-encryption keys, restore etcd, and patch workloads.
+ * Actions are now gated by effect:
+ *
+ * - `cluster:nodes:join`: joining/provisioning nodes and routine,
+ *   node-scoped lifecycle (drain/cordon/uncordon, node tuning and
+ *   kernel modules, ping, read-only security scan, alert dispatch,
+ *   pooled-node provisioning/drain, and etcd snapshot SAVE only).
+ * - `cluster:manage`: everything cluster-wide or destructive —
+ *   cluster build/up/teardown, cert/secrets rotation, upgrades,
+ *   VIP/CNI/storage/monitoring/GPU/model-cache/gateway setup and
+ *   teardown, etcd snapshot PRUNE/RESTORE, backup sync, airgap
+ *   bundles, volume snapshots, healer auto-remediation (including
+ *   the hardcoded repair-gotrue run), DR drills, right-sizing
+ *   patches, and copilot tool execution.
+ * - Unknown actions keep the previous nodes:join gate and then 400,
+ *   preserving the old behavior for unrecognized input.
+ */
+const K3S_JOIN_ACTIONS: ReadonlySet<string> = new Set([
+  'join-info',
+  'generate-script',
+  'ssh-join',
+  'batch-join',
+  'tune',
+  'kmod',
+  'ping',
+  'drain',
+  'uncordon',
+  'cordon',
+  'security-scan',
+  'alert-dispatch',
+  'pool-provision',
+  'pool-drain',
+]);
+
+const K3S_MANAGE_ACTIONS: ReadonlySet<string> = new Set([
+  'kill',
+  'build',
+  'rebuild',
+  'up',
+  'registries',
+  'rotate-certs',
+  'upgrade',
+  'vip-setup',
+  'vip-teardown',
+  'backup-sync',
+  'airgap-bundle',
+  'cni-install',
+  'secrets-rotate',
+  'storage-install',
+  'storage-snapshot',
+  'monitoring-install',
+  'gpu-setup',
+  'model-cache-setup',
+  'model-cache-preload',
+  'healer-run',
+  'repair-gotrue',
+  'dr-drill-run',
+  'gateway-install-crds',
+  'gateway-deploy',
+  'gateway-canary',
+  'finops-apply',
+  'copilot-tool-exec',
+]);
+
+function k3sPostPermission(
+  action: string,
+  body: { operation?: unknown }
+): 'cluster:nodes:join' | 'cluster:manage' {
+  // etcd snapshots split by operation: saving a backup is routine node
+  // lifecycle; pruning deletes backups and restoring rewrites cluster
+  // state, so both need the manage permission.
+  if (action === 'snapshot') {
+    return body.operation === 'restore' || body.operation === 'prune'
+      ? 'cluster:manage'
+      : 'cluster:nodes:join';
+  }
+  if (K3S_JOIN_ACTIONS.has(action)) return 'cluster:nodes:join';
+  if (K3S_MANAGE_ACTIONS.has(action)) return 'cluster:manage';
+  return 'cluster:nodes:join';
+}
+
 export async function POST(req: Request) {
   try {
     const root = getProjectRoot();
     const body = await req.json();
 
-    // Critical permission: every action here joins, provisions, or kills
-    // cluster nodes (and join-info responses carry the cluster join token).
-    const denied = await authorizeRequest(req, 'cluster:nodes:join');
-    if (denied) return denied;
-
     const { action = 'join-info' } = body;
+    const denied = await authorizeRequest(req, k3sPostPermission(action, body));
+    if (denied) return denied;
 
     if (action === 'join-info') {
       const joinInfo = getK3sJoinInfo(root, {

@@ -51,6 +51,7 @@ export default function SecretOpsPage() {
   const [targetSecret, setTargetSecret] = useState('app-api-token');
   const [targetNamespace, setTargetNamespace] = useState('default');
   const [generatedSealedYaml, setGeneratedSealedYaml] = useState<string | null>(null);
+  const [sealedError, setSealedError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const fetchReport = async () => {
@@ -104,7 +105,14 @@ export default function SecretOpsPage() {
       });
       const data = await res.json();
       if (data.success) {
+        setSealedError(null);
         setGeneratedSealedYaml(data.manifest);
+      } else {
+        // SealedSecret generation is not implemented server-side (it
+        // refuses to emit a fake sealed manifest); surface that error
+        // instead of silently doing nothing.
+        setGeneratedSealedYaml(null);
+        setSealedError(data.error?.message || 'SealedSecret generation failed');
       }
     } catch (err) {
       console.error('SealedSecret generation failed:', err);
@@ -328,6 +336,12 @@ export default function SecretOpsPage() {
             </button>
           </div>
         </div>
+
+        {sealedError && (
+          <div className="mt-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300">
+            {sealedError}
+          </div>
+        )}
 
         {generatedSealedYaml && (
           <div className="mt-4 space-y-2">

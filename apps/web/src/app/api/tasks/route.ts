@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { processManager } from '@vow/orchestrator';
-import { authorizeRequest } from '@/lib/authz';
+import { processManager, redactSensitiveArgs } from '@vow/orchestrator';
+import { authorizeRequest, canViewTask, resolveAuthzContext } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
 
 export async function GET(req: Request) {
@@ -8,16 +8,24 @@ export async function GET(req: Request) {
   if (denied) return denied;
 
   try {
-    const tasks = processManager.getAllTasks().map((t) => ({
-      id: t.id,
-      command: t.command,
-      args: t.args,
-      status: t.status,
-      exitCode: t.exitCode,
-      startedAt: t.startedAt,
-      finishedAt: t.finishedAt,
-      logCount: t.logs.length,
-    }));
+    // Task scoping (bug-hunt Batch A5): a caller sees their own tasks
+    // plus system tasks; owner/admin see everything. Args go through
+    // the same redaction as the task log line, so a live task's argv
+    // cannot leak a credential even before it is persisted.
+    const { principal } = await resolveAuthzContext(req);
+    const tasks = processManager
+      .getAllTasks()
+      .filter((t) => canViewTask(t.principalId, principal))
+      .map((t) => ({
+        id: t.id,
+        command: t.command,
+        args: redactSensitiveArgs(t.args),
+        status: t.status,
+        exitCode: t.exitCode,
+        startedAt: t.startedAt,
+        finishedAt: t.finishedAt,
+        logCount: t.logs.length,
+      }));
 
     return NextResponse.json({ tasks });
   } catch (err) {

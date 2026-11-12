@@ -1,5 +1,5 @@
 import { processManager, type TaskLogEntry } from '@vow/orchestrator';
-import { authorizeRequest } from '@/lib/authz';
+import { authorizeRequest, canViewTask, resolveAuthzContext } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +16,10 @@ export async function GET(req: Request) {
   }
 
   const task = processManager.getTask(taskId);
-  if (!task) {
+  // Task scoping (bug-hunt Batch A5): an invisible task is reported
+  // exactly like a missing one, so the 404 does not leak existence.
+  const { principal } = await resolveAuthzContext(req);
+  if (!task || !canViewTask(task.principalId, principal)) {
     return new Response('Task not found', { status: 404 });
   }
 

@@ -42,7 +42,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const denied = await authorizeRequest(req, 'secrets:read');
+  // BUG FIX (bug hunt B4): this rotates ~20 cluster secrets and
+  // overwrites .secrets/<name>.yaml, so it requires the manage
+  // permission, not the read one. GET stays secrets:read.
+  const denied = await authorizeRequest(req, 'secrets:manage');
   if (denied) return denied;
 
   try {

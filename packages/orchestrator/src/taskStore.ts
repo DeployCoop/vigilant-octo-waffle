@@ -227,11 +227,48 @@ export function taskStorePath(projectRoot: string): string {
   return path.join(projectRoot, '.vow', 'state.db');
 }
 
+/**
+ * Redacts credential-bearing flag values from an argv list for display
+ * (bug-hunt Batch A5): `--token <value>` and `--token=<value>` become
+ * `--token [redacted]`. Lives here (not executor.ts) so taskStore can
+ * use it without an executor↔taskStore import cycle; executor imports
+ * it from here. The spawn itself always uses the real args; only
+ * recorded/logged/surfaced copies go through this helper.
+ */
+export function redactSensitiveArgs(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--token') {
+      out.push(arg);
+      if (i + 1 < args.length) {
+        out.push('[redacted]');
+        i++;
+      }
+      continue;
+    }
+    if (arg.startsWith('--token=')) {
+      out.push('--token=[redacted]');
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
 /** Build the persisted record for a live task. */
 export function taskToRecord(task: TaskRun): TaskRecord {
+  // The label and meta.args are surfaced via the tasks API (label is
+  // also the fallback command on hydrate), so they go through the same
+  // redaction as the Executing log line — otherwise a --token value
+  // would leak through the record even with the log line redacted.
+  // The spawn itself always used the real args; only the recorded
+  // copies are redacted. principalId rides in schemaless meta, so no
+  // SQLite migration is needed; pre-fix rows hydrate as system tasks.
+  const redactedArgs = redactSensitiveArgs(task.args);
   return {
     id: task.id,
-    label: `${task.command} ${task.args.join(' ')}`.trim(),
+    label: `${task.command} ${redactedArgs.join(' ')}`.trim(),
     kind: 'command',
     status: task.status,
     pid: task.childProcess?.pid ?? null,
@@ -242,7 +279,8 @@ export function taskToRecord(task: TaskRun): TaskRecord {
     meta: {
       cwd: task.cwd,
       command: task.command,
-      args: task.args,
+      args: redactedArgs,
+      principalId: task.principalId ?? null,
       ...(task.childProcess?.pid
         ? { pidStartMs: processStartMs(task.childProcess.pid) ?? undefined }
         : {}),

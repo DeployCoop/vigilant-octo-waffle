@@ -25,7 +25,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const denied = await authorizeRequest(req, 'secrets:read');
+  // BUG FIX (bug hunt B4): rotation and sealed-secret generation mutate
+  // credentials, so they require the manage permission, not the read one.
+  const denied = await authorizeRequest(req, 'secrets:manage');
   if (denied) return denied;
 
   try {
@@ -42,12 +44,27 @@ export async function POST(req: Request) {
       if (!secretName || !namespace) {
         return apiError(400, 'secretName and namespace are required for sealed secret');
       }
-      const manifest = generateSealedSecretManifest(
-        secretName,
-        namespace,
-        keyValues || { password: 'changeme123' }
-      );
-      return NextResponse.json({ success: true, manifest });
+      // BUG FIX (bug hunt B2): no default credential. An omitted or
+      // empty keyValues object used to mint a "sealed" credential with
+      // the public password 'changeme123'.
+      if (
+        !keyValues ||
+        typeof keyValues !== 'object' ||
+        Array.isArray(keyValues) ||
+        Object.keys(keyValues).length === 0
+      ) {
+        return apiError(400, 'keyValues (a non-empty object) is required for sealed secret');
+      }
+      // BUG FIX (bug hunt B1): generateSealedSecretManifest refuses to
+      // emit a fake sealed manifest — it throws. Surface that as 501
+      // (not implemented) with its message, and never return a manifest
+      // or any plaintext-derived content.
+      try {
+        const manifest = generateSealedSecretManifest(secretName, namespace, keyValues);
+        return NextResponse.json({ success: true, manifest });
+      } catch (err) {
+        return apiError(501, err instanceof Error ? err.message : 'SealedSecret generation is not implemented');
+      }
     } else {
       return apiError(400, `Unknown action: ${action}. Expected rotate or generate_sealed`);
     }

@@ -85,12 +85,16 @@ export default function MigratePage() {
       const res = await fetch('/api/migrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'execute', version }),
+        // Execute lints the DDL server-side before applying it, so the
+        // lint textarea content travels with the request.
+        body: JSON.stringify({ action: 'execute', version, sql: ddlSql }),
       });
       const data = await res.json();
       if (data.success) {
         setActionMessage(data.message);
         fetchMigrations();
+      } else {
+        setActionMessage(data.error?.message || 'Migration execution failed');
       }
     } catch (err) {
       console.error('Execution failed:', err);

@@ -8,6 +8,17 @@ import type { NextRequest } from 'next/server';
  * 2. Enforces CSRF / Origin validation against localhost / local network / host
  * 3. Enforces optional token authentication if VOW_API_TOKEN is defined
  * 4. Defers /api/argo/webhook to its own service token when VOW_WEBHOOK_TOKEN is defined
+ *
+ * NOTE (bug hunt B9): the authorization layer's "local board"
+ * (loopback) concept is derived from the client-controlled Host header
+ * (see isLocalBoardRequest), NOT from the socket peer address — the App
+ * Router cannot see the peer. Host-derived loopback is therefore not a
+ * network control: it only means anything because the deployment binds
+ * port 3000 to 127.0.0.1 (see docker-compose.yaml and the README
+ * localhost-only warning). If the port is ever reachable beyond
+ * loopback, Host-based loopback detection must be treated as
+ * untrusted, and bootstrap additionally requires VOW_API_TOKEN when one
+ * is configured (see api/authz/init/route.ts).
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
