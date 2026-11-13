@@ -42,8 +42,17 @@ export interface RouteErrorOptions {
   /** Force the envelope code. */
   code?: string;
   principalId?: string;
-  /** Message when the thrown value carries none (generic branch). */
+  /** Message for the generic branch (see below). */
   fallbackMessage?: string;
+  /**
+   * Opt into passing the thrown error's raw message through on the
+   * generic branch. Default off: raw messages on 4xx used to leak
+   * filesystem paths, command lines, and DB error text (bug hunt B13).
+   * Only set this when the call site has established the message is
+   * benign (e.g. a validated string) — otherwise supply a
+   * fallbackMessage, which always wins when present.
+   */
+  allowRawMessage?: boolean;
 }
 
 export function routeError(err: unknown, opts: RouteErrorOptions): NextResponse {
@@ -74,13 +83,19 @@ export function routeError(err: unknown, opts: RouteErrorOptions): NextResponse 
     // returned verbatim — orchestrator exec failures carry full command
     // lines, internal paths and cluster stderr, disclosed to any caller
     // who passed the route guard. The full error is still logged above.
-    // Call sites that deliberately classify a failure as a client error
-    // (status < 500) keep their message; server errors get the generic
-    // fallback.
+    // BUG FIX (bug hunt B13): that suppression previously applied only
+    // to 500s; the status < 500 branch returned err.message verbatim
+    // and ignored fallbackMessage, so 4xx call sites leaked filesystem
+    // paths and DB error text. Now fallbackMessage always wins when
+    // supplied; otherwise a generic message is used unless the call
+    // site explicitly opts into raw passthrough with allowRawMessage.
     message =
-      status < 500 && err instanceof Error && err.message
+      opts.fallbackMessage ??
+      (opts.allowRawMessage && err instanceof Error && err.message
         ? err.message
-        : (opts.fallbackMessage ?? 'Internal error');
+        : status < 500
+          ? 'Invalid request'
+          : 'Internal error');
     code = opts.code ?? codeForStatus(status);
   }
 

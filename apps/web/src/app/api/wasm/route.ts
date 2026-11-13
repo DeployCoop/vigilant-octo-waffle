@@ -4,9 +4,10 @@ import {
   getWasmBenchmarks,
   getWasmCatalog,
   deployWasmMicroservice,
+  wasmDeploySchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
-import { apiError, routeError } from '@/lib/route-error';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,11 +41,11 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { serviceId, namespace = 'default' } = body;
-
-    if (!serviceId) {
-      return apiError(400, 'serviceId is required');
-    }
+    // C7: serviceId/namespace must be DNS-1123 labels (C6 builds the
+    // manifests as objects, so a hostile name cannot inject YAML fields).
+    // C4: an unknown serviceId stays 200-with-success:false (per the C8
+    // scope) and is surfaced by the page's POST else branch.
+    const { serviceId, namespace } = wasmDeploySchema.parse(body);
 
     const result = await deployWasmMicroservice(serviceId, namespace);
     return NextResponse.json(result);

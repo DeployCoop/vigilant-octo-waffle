@@ -144,7 +144,17 @@ export async function POST(req: Request) {
     const next = upsertPrincipal(store, principal);
     saveAuthzStore(getProjectRoot(), next);
   } catch (err) {
-    return routeError(err, { route: 'POST /api/authz/principals', status: 400 });
+    // NOTE (bug hunt B13): the benign messages here (zod validation,
+    // last-owner invariant) travel through routeError's classified
+    // branches, not the generic one — so this site supplies a fallback
+    // instead of opting into raw passthrough. The generic branch can
+    // only carry store-write failures here, whose messages may contain
+    // filesystem paths.
+    return routeError(err, {
+      route: 'POST /api/authz/principals',
+      status: 400,
+      fallbackMessage: 'Failed to save principal',
+    });
   }
 
   return NextResponse.json(

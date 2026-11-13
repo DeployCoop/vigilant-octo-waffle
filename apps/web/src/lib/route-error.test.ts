@@ -76,15 +76,38 @@ describe('routeError classification', () => {
     });
     expect((await bodyOf(resFb)).error.message).toBe('Failed to load the thing');
 
-    // Deliberate client errors (status override < 500) keep their message.
-    const res400 = routeError(new Error('bad input'), {
+    // BUG FIX (bug hunt B13): the <500 branch is generic by default
+    // now — a raw message (paths, command lines) must not reach the
+    // client unless the call site opts in explicitly or supplies a
+    // fallback, which wins over the raw message.
+    const res400 = routeError(new Error('bad input with /secret/path'), {
       route: 'POST /api/x',
       status: 400,
     });
     expect(res400.status).toBe(400);
     const body400 = await bodyOf(res400);
     expect(body400.error.code).toBe('bad_request');
-    expect(body400.error.message).toBe('bad input');
+    expect(body400.error.message).toBe('Invalid request');
+    expect(body400.error.message).not.toContain('/secret/path');
+  });
+
+  it('fallbackMessage wins over the raw message for <500 errors too (B13)', async () => {
+    const res = routeError(new Error('open /etc/passwd: denied'), {
+      route: 'GET /api/waffle',
+      status: 400,
+      fallbackMessage: 'Failed to validate pipeline path',
+    });
+    expect(res.status).toBe(400);
+    expect((await bodyOf(res)).error.message).toBe('Failed to validate pipeline path');
+  });
+
+  it('allowRawMessage opts a call site into raw passthrough explicitly (B13)', async () => {
+    const res = routeError(new Error('bad input'), {
+      route: 'POST /api/x',
+      status: 400,
+      allowRawMessage: true,
+    });
+    expect((await bodyOf(res)).error.message).toBe('bad input');
   });
 
   it('non-Error throwables → 500 with a generic message', async () => {
@@ -107,5 +130,34 @@ describe('apiError', () => {
   it('carries an explicit reason', async () => {
     const res = apiError(409, 'Not enabled', { reason: 'authz_not_enabled' });
     expect((await bodyOf(res)).error.reason).toBe('authz_not_enabled');
+  });
+
+  it('503 maps to cluster_unavailable (studio-wiring no-cluster contract, F1)', async () => {
+    // Explicit code, the form wired studio routes use.
+    const res = apiError(503, 'Cluster unavailable', { code: 'cluster_unavailable' });
+    expect(res.status).toBe(503);
+    expect((await bodyOf(res)).error).toEqual({
+      code: 'cluster_unavailable',
+      message: 'Cluster unavailable',
+    });
+
+    // Default mapping: codeForStatus(503) supplies the same code.
+    const resDefault = apiError(503, 'Cluster unavailable');
+    expect(resDefault.status).toBe(503);
+    expect((await bodyOf(resDefault)).error.code).toBe('cluster_unavailable');
+  });
+});
+
+describe('routeError 503 mapping', () => {
+  it('a 503 override maps to cluster_unavailable', async () => {
+    const res = routeError(new Error('boom'), {
+      route: 'GET /api/x',
+      status: 503,
+      fallbackMessage: 'Cluster unavailable',
+    });
+    expect(res.status).toBe(503);
+    const body = await bodyOf(res);
+    expect(body.error.code).toBe('cluster_unavailable');
+    expect(body.error.message).toBe('Cluster unavailable');
   });
 });

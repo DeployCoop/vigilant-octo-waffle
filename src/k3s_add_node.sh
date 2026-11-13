@@ -101,6 +101,38 @@ normalize_server_url() {
   printf '%s' "$u"
 }
 
+# Quote one shell word for reuse in a generated script / one-liner
+# (bash printf '%q': safe words pass through unchanged, anything else is
+# escaped so it cannot break out of its position when the artifact runs).
+shell_quote() {
+  printf '%q' "$1"
+}
+
+# Validate one k=v label pair (value may be empty). Returns 1 on failure.
+valid_label() {
+  local pair="$1"
+  [[ "${pair}" == *=* ]] || return 1
+  local k="${pair%%=*}" v="${pair#*=}"
+  [[ ${#v} -le 63 ]] || return 1
+  [[ "${k}" =~ ^([a-z0-9]([-a-z0-9.]*[a-z0-9])?/)?[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$ ]] || return 1
+  [[ -z "${v}" || "${v}" =~ ^[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$ ]] || return 1
+  return 0
+}
+
+# Validate one k=v:effect (or k:effect) taint. Returns 1 on failure.
+valid_taint() {
+  local t="$1"
+  [[ "${t}" == *:* ]] || return 1
+  local kv="${t%:*}" eff="${t##*:}"
+  [[ "${eff}" == "NoSchedule" || "${eff}" == "PreferNoSchedule" || "${eff}" == "NoExecute" ]] || return 1
+  if [[ "${kv}" == *=* ]]; then
+    valid_label "${kv}" || return 1
+  else
+    [[ "${kv}" =~ ^([a-z0-9]([-a-z0-9.]*[a-z0-9])?/)?[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$ ]] || return 1
+  fi
+  return 0
+}
+
 # Auto-detect K3s server URL
 resolve_server_url() {
   if [[ -n "${SERVER_URL}" ]]; then
@@ -300,6 +332,34 @@ if [[ "${ROLE}" != "agent" && "${ROLE}" != "server" ]]; then
   exit 1
 fi
 
+# Validate node identity inputs against Kubernetes syntax before they are
+# interpolated into the generated join script / one-liner. A bad value
+# fails here with a clear error instead of executing on the joining node.
+if [[ -n "${NODE_NAME}" ]]; then
+  if [[ ${#NODE_NAME} -gt 63 || ! ${NODE_NAME} =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
+    echo "Error: --node-name '${NODE_NAME}' is not a valid DNS-1123 label (lowercase alphanumerics and '-', max 63 chars)" >&2
+    exit 1
+  fi
+fi
+if [[ -n "${LABELS}" ]]; then
+  IFS=',' read -ra _LABEL_ARRAY <<< "${LABELS}"
+  for lbl in "${_LABEL_ARRAY[@]}"; do
+    if [[ -n "${lbl}" ]] && ! valid_label "${lbl}"; then
+      echo "Error: --labels entry '${lbl}' is not a valid Kubernetes label (key=value)" >&2
+      exit 1
+    fi
+  done
+fi
+if [[ -n "${TAINTS}" ]]; then
+  IFS=',' read -ra _TAINT_ARRAY <<< "${TAINTS}"
+  for tnt in "${_TAINT_ARRAY[@]}"; do
+    if [[ -n "${tnt}" ]] && ! valid_taint "${tnt}"; then
+      echo "Error: --taints entry '${tnt}' is not a valid Kubernetes taint (key=value:effect)" >&2
+      exit 1
+    fi
+  done
+fi
+
 RESOLVED_SERVER_URL=$(resolve_server_url)
 RESOLVED_TOKEN=$(resolve_token)
 
@@ -334,14 +394,30 @@ if [[ -n "${TAINTS}" ]]; then
   done
 fi
 
-ARGS_STRING="${EXTRA_ARGS[*]}"
+# Quote every word: EXTRA_ARGS holds flag/value pairs, and joining them
+# bare (the old ARGS_STRING) let a value containing spaces, $, quotes, or
+# ; execute when the generated script / one-liner runs. %q leaves safe
+# words unchanged, so benign output is identical.
+ARGS_STRING=""
+for _arg in "${EXTRA_ARGS[@]}"; do
+  _q=$(shell_quote "${_arg}")
+  if [[ -z "${ARGS_STRING}" ]]; then
+    ARGS_STRING="${_q}"
+  else
+    ARGS_STRING="${ARGS_STRING} ${_q}"
+  fi
+done
+
+# Env assignments in the artifacts use the same quoting: a token or URL
+# containing $, backticks, quotes, or backslashes can never break out of
+# its assignment. The header comment below is not a quoted context, so it
+# gets a newline-stripped URL instead.
+QUOTED_SERVER_URL=$(shell_quote "${RESOLVED_SERVER_URL}")
+QUOTED_TOKEN=$(shell_quote "${RESOLVED_TOKEN}")
+COMMENT_SERVER_URL=$(printf '%s' "${RESOLVED_SERVER_URL}" | tr -d '\r\n')
 
 # Generate one-line curl command
-if [[ "${ROLE}" == "agent" ]]; then
-  ONE_LINER="curl -sfL https://get.k3s.io | K3S_URL=\"${RESOLVED_SERVER_URL}\" K3S_TOKEN=\"${RESOLVED_TOKEN}\" sh -s - agent ${ARGS_STRING}"
-else
-  ONE_LINER="curl -sfL https://get.k3s.io | K3S_URL=\"${RESOLVED_SERVER_URL}\" K3S_TOKEN=\"${RESOLVED_TOKEN}\" sh -s - server ${ARGS_STRING}"
-fi
+ONE_LINER="curl -sfL https://get.k3s.io | K3S_URL=${QUOTED_SERVER_URL} K3S_TOKEN=${QUOTED_TOKEN} sh -s - ${ROLE} ${ARGS_STRING}"
 
 # Mode: Print command only
 if [[ "${PRINT_COMMAND}" == "true" ]]; then
@@ -356,12 +432,12 @@ generate_script() {
 # ==============================================================================
 # K3s Node Join Script (${ROLE^^})
 # Generated on: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-# Cluster Server: ${RESOLVED_SERVER_URL}
+# Cluster Server: ${COMMENT_SERVER_URL}
 # ==============================================================================
 set -euo pipefail
 
-export K3S_URL="${RESOLVED_SERVER_URL}"
-export K3S_TOKEN="${RESOLVED_TOKEN}"
+export K3S_URL=${QUOTED_SERVER_URL}
+export K3S_TOKEN=${QUOTED_TOKEN}
 
 # Verify root privileges
 if [[ \$(id -u) -ne 0 ]]; then

@@ -38,9 +38,14 @@ export async function POST(req: Request) {
     // Service-token gate: when VOW_WEBHOOK_TOKEN is configured, this route
     // requires its own credential (Authorization: Bearer <token> or the
     // x-vow-webhook-token header). The middleware defers to this check for
-    // this path. When the token is not configured, behavior is unchanged
-    // from before, but we warn once so the open posture is visible in logs.
-    const auth = authorizeWebhookRequest(req.headers);
+    // this path. When the token is not configured AND no authz store is
+    // active, behavior is unchanged from before, but we warn once so the
+    // open posture is visible in logs. BUG FIX (bug hunt B7): when an
+    // authz store IS active and the token is unset, the request is
+    // denied — the webhook must not stay open behind an enabled
+    // authorization system.
+    const storeActive = ctx.loaded.status === 'ready';
+    const auth = authorizeWebhookRequest(req.headers, process.env, storeActive);
     if (!auth.authorized) {
       recordAudit(req, 'webhook:argo', { allowed: false, reason: 'deny_unauthenticated' });
       return apiError(auth.status, auth.error ?? 'Unauthorized');

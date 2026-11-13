@@ -52,6 +52,8 @@ export * from './storage.js';
 export * from './app-deployer.js';
 export * from './k3s-admin.js';
 export * from './tls.js';
+export * from './studio-store.js';
+export * from './studio-validation.js';
 export * from './ebpf.js';
 export * from './previews.js';
 export * from './drift.js';

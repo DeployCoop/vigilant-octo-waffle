@@ -12,9 +12,11 @@ import { createHash, timingSafeEqual } from 'node:crypto';
  * - Set `VOW_WEBHOOK_TOKEN` in the environment to enable enforcement.
  * - Callers present it as `Authorization: Bearer <token>` or the
  *   `x-vow-webhook-token` header.
- * - When the variable is unset, the route keeps its previous behavior
- *   (no dedicated credential) and the caller is told via the result mode
- *   so the route can log a warning.
+ * - When the variable is unset and no authz store is active, the route
+ *   keeps its previous behavior (no dedicated credential) and the caller
+ *   is told via the result mode so the route can log a warning. When an
+ *   authz store IS active, an unset token denies instead: the route
+ *   must not stay open behind an enabled authorization system.
  *
  * This module is the seam where the future authz service-principal store
  * (see authz_implementation.md, permission `webhook:argo`) will plug in:
@@ -70,14 +72,28 @@ export function webhookTokensEqual(provided: string, expected: string): boolean 
  *
  * - Token configured + matching credential  → { authorized: true, mode: 'token' }
  * - Token configured + missing/wrong         → { authorized: false, status: 401 }
- * - Token not configured                     → { authorized: true, mode: 'unconfigured' }
+ * - Token not configured + store inactive    → { authorized: true, mode: 'unconfigured' }
+ *   (the pre-authz zero-config behavior; the route logs a warning)
+ * - Token not configured + store ACTIVE      → { authorized: false, status: 401 }
+ *   (BUG FIX: an operator who enabled authorization reasonably expects
+ *   unauthenticated callers to be rejected; leaving the webhook open
+ *   until a *separate* env token is set defeats that expectation)
  */
 export function authorizeWebhookRequest(
   headers: Headers,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  storeActive = false
 ): WebhookAuthResult {
   const expected = getConfiguredWebhookToken(env);
   if (!expected) {
+    if (storeActive) {
+      return {
+        authorized: false,
+        status: 401,
+        error:
+          'Unauthorized: authorization is enabled but no webhook token is configured (set VOW_WEBHOOK_TOKEN or call with a principal holding webhook:argo)',
+      };
+    }
     return { authorized: true, mode: 'unconfigured' };
   }
 

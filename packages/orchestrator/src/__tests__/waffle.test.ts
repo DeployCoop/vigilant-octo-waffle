@@ -6,6 +6,7 @@ import {
   loadWafflePipeline,
   validateWafflePipeline,
   WaffleRunner,
+  redactHelmDisplayArgs,
   WaffleRunHistory,
   getBuiltinBlueprints,
   getBlueprintById,
@@ -324,5 +325,24 @@ stages:
     } finally {
       process.env = saved;
     }
+  });
+});
+
+describe('redactHelmDisplayArgs (bug-hunt Batch A5 follow-up)', () => {
+  it('redacts sensitive --set values and leaves others alone', () => {
+    const out = redactHelmDisplayArgs([
+      'upgrade', 'rel', 'chart',
+      '--set', 'password=hunter2',
+      '--set', 'replicas=3',
+      '--set=image.tag=v1',
+      '--set-string', 'apiKey=sekrit',
+    ]);
+    assert.deepEqual(out, [
+      'upgrade', 'rel', 'chart',
+      '--set', 'password=[redacted]',
+      '--set', 'replicas=3',
+      '--set=image.tag=v1',
+      '--set-string', 'apiKey=[redacted]',
+    ]);
   });
 });

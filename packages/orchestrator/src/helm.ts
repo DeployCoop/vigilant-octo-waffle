@@ -1,13 +1,10 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import YAML from 'yaml';
-import { processManager, type TaskRun } from './executor.js';
+import { processManager, assertCommandSuccess, type TaskRun } from './executor.js';
 import { loadProjectConfig, getChartsDirectory } from './config.js';
 import type { AppCategory } from './registry.js';
 
-const execAsync = promisify(exec);
 import { execFileAsync, ExecArgvError } from './exec-argv.js';
 
 function errorMessage(err: unknown): string {
@@ -67,26 +64,31 @@ export interface LocalChartDetail extends LocalChartDefinition {
 }
 
 /**
- * Lists all active Helm releases across all namespaces in the current cluster
+ * Lists all active Helm releases across all namespaces in the current cluster.
+ *
+ * Q8: argv form through the task executor (validator + task log) instead
+ * of a raw shell string — and a failed `helm list` now THROWS instead of
+ * silently returning `[]`: with no cluster there are no releases to
+ * list, and callers must see the error, not an empty page (studio
+ * wiring: no-cluster default is error/unavailable, never fabricated data).
  */
 export async function listHelmReleases(): Promise<HelmReleaseInfo[]> {
-  try {
-    const { stdout } = await execAsync('helm list -A -o json');
-    const parsed: HelmReleaseEntry[] = JSON.parse(stdout);
-    if (!Array.isArray(parsed)) return [];
+  const result = await processManager.runCommandAndWait('helm', ['list', '-A', '-o', 'json'], {
+    cwd: process.cwd(),
+  });
+  assertCommandSuccess(result, 'helm list -A -o json');
+  const parsed: HelmReleaseEntry[] = JSON.parse(result.stdout);
+  if (!Array.isArray(parsed)) return [];
 
-    return parsed.map((item) => ({
-      name: item.name || '',
-      namespace: item.namespace || '',
-      revision: String(item.revision || '1'),
-      updated: item.updated || '',
-      status: item.status || 'unknown',
-      chart: item.chart || '',
-      appVersion: item.app_version || '',
-    }));
-  } catch {
-    return [];
-  }
+  return parsed.map((item) => ({
+    name: item.name || '',
+    namespace: item.namespace || '',
+    revision: String(item.revision || '1'),
+    updated: item.updated || '',
+    status: item.status || 'unknown',
+    chart: item.chart || '',
+    appVersion: item.app_version || '',
+  }));
 }
 
 /**
