@@ -25,6 +25,8 @@ describe('codeForStatus', () => {
     expect(codeForStatus(409)).toBe('conflict');
     expect(codeForStatus(500)).toBe('internal');
     expect(codeForStatus(502)).toBe('internal');
+    // Studio wiring (Phase 0, F1): 503 is the no-cluster contract.
+    expect(codeForStatus(503)).toBe('cluster_unavailable');
     expect(codeForStatus(418)).toBe('error');
   });
 });

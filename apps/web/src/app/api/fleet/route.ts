@@ -3,6 +3,7 @@ import {
   listFleetClusters,
   switchClusterContext,
   broadcastApplication,
+  fleetActionSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
@@ -30,23 +31,18 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { action, clusterId, appId, targetClusterIds } = body;
+    // C7: discriminated action schema (unknown actions and empty target
+    // arrays are rejected); C8: unknown ids 404.
+    const parsed = fleetActionSchema.parse(body);
 
-    if (action === 'switch_context') {
-      if (!clusterId) {
-        return apiError(400, 'clusterId is required');
-      }
-      const result = await switchClusterContext(clusterId);
+    if (parsed.action === 'switch_context') {
+      const result = await switchClusterContext(parsed.clusterId);
+      if (!result.success) return apiError(404, result.message);
       return NextResponse.json(result);
-    } else if (action === 'broadcast') {
-      if (!appId || !targetClusterIds || !Array.isArray(targetClusterIds)) {
-        return apiError(400, 'appId and targetClusterIds array are required');
-      }
-      const result = await broadcastApplication(appId, targetClusterIds);
-      return NextResponse.json(result);
-    } else {
-      return apiError(400, `Unknown action: ${action}`);
     }
+    const result = await broadcastApplication(parsed.appId, parsed.targetClusterIds);
+    if (!result.success) return apiError(404, result.message);
+    return NextResponse.json(result);
   } catch (err) {
     return routeError(err, {
       route: 'POST /api/fleet',

@@ -1,3 +1,5 @@
+import { requireFound } from './studio-store.js';
+
 export interface ClusterStateSnapshot {
   id: string;
   timestamp: string;
@@ -54,8 +56,12 @@ export async function listHistoricalSnapshots(): Promise<ClusterStateSnapshot[]>
   return [...snapshotsStore];
 }
 
-export async function compareSnapshotWithLive(snapshotId: string): Promise<{ snapshotId: string; deltas: SnapshotDelta[] }> {
-  const target = snapshotsStore.find((s) => s.id === snapshotId) || snapshotsStore[0];
+export async function compareSnapshotWithLive(
+  snapshotId: string
+): Promise<{ snapshotId: string; deltas: SnapshotDelta[] } | null> {
+  // C4: an unknown snapshot is a miss (null), never compare against snapshotsStore[0].
+  const target = requireFound(snapshotsStore, (s) => s.id === snapshotId);
+  if (!target) return null;
 
   const deltas: SnapshotDelta[] = [
     {

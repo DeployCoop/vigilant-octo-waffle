@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
+import { resolveWafflePathInRoot } from '@/lib/waffle-path';
 import {
   getWaffleSourceManager,
   getWaffleRunner,
@@ -32,11 +33,19 @@ export async function GET(req: Request) {
     // 1. Validate on-the-fly path
     if (validatePath) {
       try {
-        const { pipeline, baseDir } = await loadWafflePipeline(validatePath);
+        // BUG FIX (bug hunt B11): confine to the project root — the
+        // old code let a tasks:read viewer read any valid waffle.yaml
+        // on disk via ?validatePath=.
+        const confinedPath = resolveWafflePathInRoot(root, validatePath);
+        const { pipeline, baseDir } = await loadWafflePipeline(confinedPath);
         const validation = validateWafflePipeline(pipeline, baseDir);
         return NextResponse.json({ valid: validation.valid, validation, pipeline });
       } catch (err) {
-        return routeError(err, { route: 'GET /api/waffle', status: 400 });
+        return routeError(err, {
+          route: 'GET /api/waffle',
+          status: 400,
+          fallbackMessage: 'Failed to validate pipeline path',
+        });
       }
     }
 
@@ -47,7 +56,11 @@ export async function GET(req: Request) {
         const validation = validateWafflePipeline(pipeline, source.localPath);
         return NextResponse.json({ pipeline, source, validation });
       } catch (err) {
-        return routeError(err, { route: 'GET /api/waffle', status: 404 });
+        return routeError(err, {
+          route: 'GET /api/waffle',
+          status: 404,
+          fallbackMessage: 'Source not found',
+        });
       }
     }
 

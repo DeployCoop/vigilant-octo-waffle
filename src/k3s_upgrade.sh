@@ -151,11 +151,20 @@ if [[ -n "${TARGETS_FILE}" && -f "${TARGETS_FILE}" ]]; then
       "${SCRIPT_DIR}/k3s_drain.sh" drain "${host}" --grace-period 30 2>/dev/null || true
 
       echo "Executing remote upgrade on ${host}..."
-      ssh -o BatchMode=yes -o ConnectTimeout=5 "${host}" "
-        export INSTALL_K3S_VERSION='${TARGET_VERSION}'
-        curl -sfL https://get.k3s.io | sh -s -
-        sudo systemctl restart k3s-agent || sudo systemctl restart k3s
-      " 2>/dev/null || echo "Notice: SSH upgrade command finished on ${host}."
+      # Pass the version via remote-side env argv (the same pattern as the
+      # control-plane phase's local `env` call), never interpolated into a
+      # remote shell string: a quote in TARGET_VERSION used to terminate
+      # the export assignment and run following text on the remote host.
+      # ssh joins argv with spaces for the remote shell, so both the
+      # version value and the -c script are %q-quoted into single words
+      # that the remote shell unescapes back to their literal values.
+      remote_script='curl -sfL https://get.k3s.io | sh -s -; sudo systemctl restart k3s-agent || sudo systemctl restart k3s'
+      ssh_upgrade_cmd=(ssh -o BatchMode=yes -o ConnectTimeout=5 "${host}" env)
+      if [[ -n "${TARGET_VERSION}" ]]; then
+        ssh_upgrade_cmd+=("INSTALL_K3S_VERSION=$(printf '%q' "${TARGET_VERSION}")")
+      fi
+      ssh_upgrade_cmd+=(bash -c "$(printf '%q' "${remote_script}")")
+      "${ssh_upgrade_cmd[@]}" 2>/dev/null || echo "Notice: SSH upgrade command finished on ${host}."
 
       # Uncordon
       "${SCRIPT_DIR}/k3s_drain.sh" uncordon "${host}" 2>/dev/null || true

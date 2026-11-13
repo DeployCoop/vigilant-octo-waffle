@@ -3,6 +3,7 @@ import {
   listHistoricalSnapshots,
   compareSnapshotWithLive,
   rewindToSnapshot,
+  rewindActionSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
@@ -25,22 +26,31 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const denied = await authorizeRequest(req, 'argo:sync');
-  if (denied) return denied;
-
   try {
     const body = await req.json();
-    const { action, snapshotId } = body;
+    const { action } = body;
 
-    if (!snapshotId) {
-      return apiError(400, 'snapshotId is required');
-    }
+    // BUG FIX (bug hunt B6): comparing a snapshot is a read, but
+    // rewinding the cluster to one is a cluster-wide rollback, not a
+    // sync — the old single argo:sync gate let any operator roll the
+    // cluster back. Unknown actions keep the previous gate, then 400.
+    const denied = await authorizeRequest(
+      req,
+      action === 'compare' ? 'cluster:read' : action === 'rewind' ? 'cluster:manage' : 'argo:sync'
+    );
+    if (denied) return denied;
 
+    // C7: snapshotId validated inside the branches, after the per-action
+    // gate, preserving the B6 gate ordering. C8: unknown snapshots 404.
     if (action === 'compare') {
+      const { snapshotId } = rewindActionSchema.parse(body);
       const result = await compareSnapshotWithLive(snapshotId);
+      if (!result) return apiError(404, `Snapshot ${snapshotId} not found.`);
       return NextResponse.json({ success: true, comparison: result });
     } else if (action === 'rewind') {
+      const { snapshotId } = rewindActionSchema.parse(body);
       const result = await rewindToSnapshot(snapshotId);
+      if (!result.success) return apiError(404, result.message);
       return NextResponse.json(result);
     } else {
       return apiError(400, `Unknown action: ${action}`);

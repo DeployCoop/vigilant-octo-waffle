@@ -11,7 +11,8 @@ import { EventEmitter } from 'node:events';
 import { checkOpenEbsStatus } from '../storage.js';
 import { getChartsDirectory } from '../config.js';
 import { getWaffleExecutionEnv, errMessage } from './shared.js';
-import { execFileAsync, killActiveChildren } from '../exec-argv.js';
+import { killActiveChildren } from '../exec-argv.js';
+import { processManager, assertCommandSuccess } from '../executor.js';
 import { type WaffleSecretKey, type WaffleStep, type WafflePipeline, type WaffleBuildTarget } from './schema.js';
 import { getWaffleRunHistory } from './registry.js';
 import {
@@ -87,6 +88,45 @@ export interface WaffleRunProgress {
   error?: string;
   deployedDomains: Array<{ name: string; domain: string; url: string }>;
   dryRun?: boolean;
+}
+
+const SENSITIVE_HELM_KEY =
+  /(password|passwd|secret|token|api[-_]?key|private[-_]?key|access[-_]?key|client[-_]?secret)/i;
+
+function scrubHelmSetValue(entry: string): string {
+  const eq = entry.indexOf('=');
+  if (eq <= 0) return entry;
+  return SENSITIVE_HELM_KEY.test(entry.slice(0, eq))
+    ? `${entry.slice(0, eq + 1)}[redacted]`
+    : entry;
+}
+
+/**
+ * Redact sensitive --set values from a helm argv list for display in run
+ * logs (bug-hunt Batch A5 follow-up): pipeline --set entries can carry
+ * credentials, and the run log prints the full helm command. Execution
+ * args are untouched; only the logged copy is scrubbed.
+ */
+export function redactHelmDisplayArgs(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--set' || arg === '--set-string' || arg === '--set-file') {
+      out.push(arg);
+      if (i + 1 < args.length) {
+        out.push(scrubHelmSetValue(args[i + 1]));
+        i++;
+      }
+      continue;
+    }
+    const m = /^(--set(?:-string|-file)?)=(.*)$/.exec(arg);
+    if (m) {
+      out.push(`${m[1]}=${scrubHelmSetValue(m[2])}`);
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
 }
 
 export class WaffleRunner extends EventEmitter {
@@ -348,7 +388,7 @@ export class WaffleRunner extends EventEmitter {
    * registry:2 inside the cluster (hostPort), so kubelet can pull "localhost:<port>/..." images.
    */
   private async ensureLocalRegistry(registry: string): Promise<void> {
-    return ensureLocalRegistryImpl(registry, (message) => this.logToRun(message));
+    return ensureLocalRegistryImpl(registry, (message) => this.logToRun(message), this.projectRoot);
   }
 
   /**
@@ -356,7 +396,7 @@ export class WaffleRunner extends EventEmitter {
    * node and every other cluster node. Throws on failure so the build is not reported as OK.
    */
   private async importImageToCluster(target: { name: string; image: string; tag?: string }, fullTag: string): Promise<void> {
-    return importImageToClusterImpl(target, fullTag, (message) => this.logToRun(message));
+    return importImageToClusterImpl(target, fullTag, (message) => this.logToRun(message), this.projectRoot);
   }
 
   /**
@@ -399,7 +439,14 @@ export class WaffleRunner extends EventEmitter {
         if (localOpenEBSChart) {
           this.logToRun(`[PREFLIGHT] Found local OpenEBS chart at ${localOpenEBSChart}. Installing via Helm...`);
           try {
-            await execFileAsync('helm', ['upgrade', '--install', 'openebs', localOpenEBSChart, '--namespace', 'openebs', '--create-namespace', '--wait', '--timeout', '5m']);
+            // Q8: helm runs through the task executor (validator +
+            // task log) instead of execFileAsync, which bypassed both.
+            const helmResult = await processManager.runCommandAndWait(
+              'helm',
+              ['upgrade', '--install', 'openebs', localOpenEBSChart, '--namespace', 'openebs', '--create-namespace', '--wait', '--timeout', '5m'],
+              { cwd: baseDir }
+            );
+            assertCommandSuccess(helmResult, 'helm upgrade --install openebs');
             this.logToRun('[PREFLIGHT] Successfully deployed OpenEBS Dynamic LocalPV provisioner.');
           } catch (err) {
             const recheck = await checkOpenEbsStatus(this.projectRoot);
@@ -414,7 +461,14 @@ export class WaffleRunner extends EventEmitter {
           const storageScript = path.join(this.projectRoot, 'src', 'k3s_storage.sh');
           if (fs.existsSync(storageScript)) {
             this.logToRun('[PREFLIGHT] Running src/k3s_storage.sh install --engine openebs...');
-            await execFileAsync('bash', [storageScript, 'install', '--engine', 'openebs']);
+            // Q8: the storage script runs through the task executor;
+            // validateCommand confines it to src/*.sh under the project.
+            const storageResult = await processManager.runCommandAndWait(
+              'bash',
+              [storageScript, 'install', '--engine', 'openebs'],
+              { cwd: this.projectRoot }
+            );
+            assertCommandSuccess(storageResult, 'bash src/k3s_storage.sh install --engine openebs');
             this.logToRun('[PREFLIGHT] OpenEBS provisioned via cluster storage script.');
           } else {
             this.logToRun('[PREFLIGHT] Warning: OpenEBS provisioner script not available. Proceeding with deployment...');
@@ -570,17 +624,26 @@ export class WaffleRunner extends EventEmitter {
       // Dry-run mode
       if (dryRun) {
         helmArgs.push('--dry-run');
-        log(`Running in DRY-RUN mode: helm ${helmArgs.join(' ')}`);
+        log(`Running in DRY-RUN mode: helm ${redactHelmDisplayArgs(helmArgs).join(' ')}`);
       }
 
       // Execute Helm command. The display string is for the log only;
       // execution is argv-based (no shell), so step values such as the
       // namespace, release name, chart and --set entries can never be
       // reinterpreted as shell syntax.
-      log(`Executing: helm ${helmArgs.map((a) => (a.includes(' ') || a.includes('=') ? JSON.stringify(a) : a)).join(' ')}`);
+      log(`Executing: helm ${redactHelmDisplayArgs(helmArgs).map((a) => (a.includes(' ') || a.includes('=') ? JSON.stringify(a) : a)).join(' ')}`);
 
       if (!dryRun) {
-        const { stdout, stderr } = await execFileAsync('helm', helmArgs, { cwd: baseDir, env: getWaffleExecutionEnv() });
+        // Q8: helm runs through the task executor (validator + task
+        // log). A non-zero exit throws with stderr in the message, as
+        // execFileAsync used to — the catch below matches on that text
+        // for the OpenEBS immutable-field fallback.
+        const helmResult = await processManager.runCommandAndWait('helm', helmArgs, {
+          cwd: baseDir,
+          env: getWaffleExecutionEnv(),
+        });
+        assertCommandSuccess(helmResult, 'helm upgrade --install');
+        const { stdout, stderr } = helmResult;
         if (stdout) log(stdout.trim());
         if (stderr) log(stderr.trim());
 
@@ -588,7 +651,7 @@ export class WaffleRunner extends EventEmitter {
         stepProg.status = 'verifying';
         this.emit('progress', runProgress);
         log(`Verifying deployment readiness in namespace "${namespace}"...`);
-        await this.verifyStepHealth(step, namespace, log);
+        await this.verifyStepHealth(step, namespace, log, baseDir);
       } else {
         log('Dry-run completed successfully (manifests simulated).');
       }
@@ -661,8 +724,8 @@ export class WaffleRunner extends EventEmitter {
   /**
    * Verifies health of deployed resources
    */
-  private async verifyStepHealth(step: WaffleStep, namespace: string, log: (msg: string) => void): Promise<void> {
-    return verifyStepHealthImpl(step, namespace, log);
+  private async verifyStepHealth(step: WaffleStep, namespace: string, log: (msg: string) => void, cwd?: string): Promise<void> {
+    return verifyStepHealthImpl(step, namespace, log, cwd);
   }
 
   private logToRun(message: string): void {

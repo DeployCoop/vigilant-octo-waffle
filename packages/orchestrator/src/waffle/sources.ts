@@ -14,6 +14,80 @@ import { type WafflePipelineMetadata, type WafflePipeline, loadWafflePipeline, v
 // 3. MULTI-SOURCE MONITORING & REGISTRATION
 // ============================================================================
 
+/**
+ * Git URL / branch validation for source registration (bug-hunt B12).
+ *
+ * Previously `addSource`/`syncSource` passed `pathOrUrl` straight to
+ * `git clone` after only `.trim()`ing it, so an `ext::` transport URL or
+ * an option-like value (`--upload-pack=…`) was parsed by git as a
+ * transport/option rather than a repository location. This environment's
+ * git blocks those shapes itself, but the safety must not rest on
+ * git's version-dependent guards. Validation runs BEFORE the clone
+ * try/catch blocks on purpose: those catches convert every failure
+ * into a stored `status: 'error'`, which would silently swallow a
+ * rejected URL instead of failing the registration loudly.
+ */
+export function validateGitSourceUrl(url: string): void {
+  if (url.startsWith('-')) {
+    throw new Error(
+      `Git source URL "${url}" must not begin with '-' (it would be parsed as a git option)`
+    );
+  }
+  if (url.startsWith('ext::')) {
+    throw new Error(
+      'Git source URL must not use the ext:: transport (it executes an arbitrary command)'
+    );
+  }
+  // Control characters / whitespace can smuggle option boundaries through
+  // transports that re-split the URL. (Checked by code point, not a
+  // regex, so no-control-regex stays satisfied.)
+  const hasControlOrWhitespace = [...url].some((ch) => {
+    const code = ch.charCodeAt(0);
+    return code <= 0x20 || code === 0x7f || /\s/.test(ch);
+  });
+  if (hasControlOrWhitespace) {
+    throw new Error('Git source URL must not contain whitespace or control characters');
+  }
+  const isHttps = url.startsWith('https://');
+  const isSsh = url.startsWith('ssh://');
+  // scp-like syntax: [user@]host:path — no scheme, exactly one colon
+  // separating a hostname from a path, and no leading dash (checked above).
+  const isScpLike = /^[^/:@\s]+@[^/:@\s]+:[^:\s][^\s]*$/.test(url);
+  if (!isHttps && !isSsh && !isScpLike) {
+    throw new Error(
+      `Git source URL "${url}" is not an allowed shape (expected https://, ssh://, or user@host:path)`
+    );
+  }
+}
+
+/** Same leading-dash rule as `assertSafeGitValue` (waffle/images.ts). */
+export function validateGitBranch(branch: string): void {
+  if (branch.startsWith('-')) {
+    throw new Error(
+      `Git branch "${branch}" must not begin with '-' (it would be parsed as a git option)`
+    );
+  }
+}
+
+/**
+ * Local-directory sources must be absolute paths contained in the project
+ * root: a relative or outside-root directory would let a source
+ * registration point the pipeline loader (and chart scans) at arbitrary
+ * on-disk trees.
+ */
+export function validateLocalSourcePath(projectRoot: string, dir: string): void {
+  if (!path.isAbsolute(dir)) {
+    throw new Error(`Local source directory "${dir}" must be an absolute path`);
+  }
+  const resolvedRoot = path.resolve(projectRoot);
+  const resolvedDir = path.resolve(dir);
+  if (resolvedDir !== resolvedRoot && !resolvedDir.startsWith(resolvedRoot + path.sep)) {
+    throw new Error(
+      `Local source directory "${dir}" must be inside the project root "${resolvedRoot}"`
+    );
+  }
+}
+
 export interface WaffleSource {
   id: string;
   name: string;
@@ -120,6 +194,15 @@ export class WaffleSourceManager {
     const sources = await this.getSources();
 
     const normalizedPath = input.pathOrUrl.trim();
+    // Validate BEFORE the clone try/catch below: that catch converts
+    // every failure into a stored 'error' status, which must not swallow
+    // a rejected URL/branch.
+    if (input.type === 'git') {
+      validateGitSourceUrl(normalizedPath);
+      if (input.branch) validateGitBranch(input.branch);
+    } else {
+      validateLocalSourcePath(this.projectRoot, normalizedPath);
+    }
     const existing = sources.find((s) => s.pathOrUrl === normalizedPath);
     if (existing) {
       throw new Error(`Waffle source with path/URL "${normalizedPath}" is already registered (id: ${existing.id})`);
@@ -141,7 +224,9 @@ export class WaffleSourceManager {
       try {
         const cloneArgs = ['clone', '--depth', '1'];
         if (input.branch) cloneArgs.push('-b', input.branch);
-        cloneArgs.push(normalizedPath, targetDir);
+        // '--' keeps the URL positional even if a future validator change
+        // lets a dash-led value through.
+        cloneArgs.push('--', normalizedPath, targetDir);
         await execFileAsync('git', cloneArgs);
         const { stdout: shaOut } = await execAsync('git rev-parse HEAD', { cwd: targetDir });
         currentSha = shaOut.trim();
@@ -226,6 +311,15 @@ export class WaffleSourceManager {
     }
 
     const source = sources[sourceIndex];
+    // Re-validate a stored source before re-cloning: a source registered
+    // before the URL allowlist existed (or edited by hand in
+    // .vow_waffles.json) must not reach git unchecked. This throws
+    // before the try/catch below so it fails loudly instead of becoming
+    // a stored 'error' status.
+    if (source.type === 'git') {
+      validateGitSourceUrl(source.pathOrUrl);
+      if (source.branch) validateGitBranch(source.branch);
+    }
     source.status = 'syncing';
     await this.saveSources(sources);
 
@@ -235,7 +329,7 @@ export class WaffleSourceManager {
         if (!fs.existsSync(targetDir)) {
           const cloneArgs = ['clone', '--depth', '1'];
           if (source.branch) cloneArgs.push('-b', source.branch);
-          cloneArgs.push(source.pathOrUrl, targetDir);
+          cloneArgs.push('--', source.pathOrUrl, targetDir);
           await execFileAsync('git', cloneArgs);
         } else {
           await execAsync('git fetch --depth 1', { cwd: targetDir });

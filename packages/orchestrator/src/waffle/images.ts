@@ -8,10 +8,25 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
-import { execFileAsync, pipeExecs, isIpAddressLiteral } from '../exec-argv.js';
+import { pipeExecs, isIpAddressLiteral } from '../exec-argv.js';
+import { processManager, assertCommandSuccess } from '../executor.js';
 import { getWaffleExecutionEnv, errMessage, debug, type WaffleLogFn } from './shared.js';
 import { type WaffleGitSource, type WafflePipeline, type WaffleBuildTarget } from './schema.js';
+
+/**
+ * Q8: registry liveness probe over Node fetch, not curl — curl is not
+ * in the executor allowlist and must not be added for a probe. A
+ * non-2xx response or a fetch failure (timeout, refused) reads as
+ * "not reachable", exactly like curl -f failing before.
+ */
+async function isRegistryReachable(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * CodeQL round 3 (js/path-injection): blueprint-supplied paths must stay
@@ -19,6 +34,30 @@ import { type WaffleGitSource, type WafflePipeline, type WaffleBuildTarget } fro
  * check in executor.ts (validateCommand): resolve, then require the result
  * to be the base itself or strictly beneath it.
  */
+/**
+ * realpath of a path that may not exist yet: resolve the nearest
+ * existing ancestor, then re-append the remaining segments. A symlink
+ * component anywhere in the existing prefix is resolved through, so
+ * the result reflects where the filesystem would actually land.
+ * Non-ENOENT failures (ELOOP, EACCES, …) fail closed by throwing.
+ */
+function realpathWithAncestor(p: string): string {
+  const suffix: string[] = [];
+  let cur = p;
+  for (;;) {
+    try {
+      const real = fs.realpathSync(cur);
+      return suffix.length > 0 ? path.join(real, ...suffix) : real;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      const parent = path.dirname(cur);
+      if (parent === cur) throw err;
+      suffix.unshift(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
 export function resolvePathWithinBase(
   baseDir: string,
   relPath: string,
@@ -28,6 +67,20 @@ export function resolvePathWithinBase(
   const resolvedBase = path.resolve(baseDir);
   const resolved = path.resolve(resolvedBase, relPath);
   if (resolved !== resolvedBase && !resolved.startsWith(resolvedBase + path.sep)) {
+    throw new Error(
+      `Build target "${targetName}": ${field} path "${relPath}" resolves outside its base directory (${resolvedBase})`
+    );
+  }
+  // Symlink confinement (bug-hunt Batch A7): the lexical check above
+  // only sees the spelling of the path. A symlink inside the base
+  // pointing outside (git preserves symlinks, so a cloned blueprint can
+  // carry one) would pass it while docker/git/bash follow it outside.
+  // Resolve both sides through the filesystem and re-check containment.
+  // The lexical path is still what is returned, preserving caller
+  // behavior for the in-bounds case.
+  const realBase = realpathWithAncestor(resolvedBase);
+  const realResolved = realpathWithAncestor(resolved);
+  if (realResolved !== realBase && !realResolved.startsWith(realBase + path.sep)) {
     throw new Error(
       `Build target "${targetName}": ${field} path "${relPath}" resolves outside its base directory (${resolvedBase})`
     );
@@ -74,7 +127,7 @@ export async function buildImages(
   }
 
   const failedTargets: string[] = [];
-  await ensureLocalRegistry(registry, log);
+  await ensureLocalRegistry(registry, log, baseDir);
 
   for (const target of pipeline.builds.targets) {
     try {
@@ -126,7 +179,7 @@ export async function buildSingleTarget(
     return;
   }
 
-  await ensureLocalRegistry(registry, log);
+  await ensureLocalRegistry(registry, log, baseDir);
 
   // 1. Auto-clone or pull from Git if target.git is defined
   if (gitConfig) {
@@ -151,33 +204,81 @@ export async function buildSingleTarget(
         // '--' ends option parsing: the repo and directory are positional
         // from here on, whatever they look like (defense in depth behind
         // the assertSafeGitValue check above).
+        // Q8: git runs through the task executor (validator + task log)
+        // instead of execFileAsync, which bypassed both. Failure labels
+        // stay static — the repo URL must not land in error text, where
+        // it could carry embedded credentials into the logs.
         cloneArgs.push('--', repoUrl, cloneDir);
-        await execFileAsync('git', cloneArgs);
+        const clone = await processManager.runCommandAndWait('git', cloneArgs, { cwd: baseDir });
+        assertCommandSuccess(clone, 'git clone');
 
         if (gitConfig.commit) {
-          await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.commit]);
+          const checkout = await processManager.runCommandAndWait(
+            'git',
+            ['-C', cloneDir, 'checkout', gitConfig.commit],
+            { cwd: baseDir }
+          );
+          assertCommandSuccess(checkout, 'git checkout');
         } else if (gitConfig.tag) {
-          await execFileAsync('git', ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`]);
+          const checkout = await processManager.runCommandAndWait(
+            'git',
+            ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`],
+            { cwd: baseDir }
+          );
+          assertCommandSuccess(checkout, 'git checkout');
         }
         log(`[BUILDS] Target "${target.name}": Repository successfully cloned into ${cloneDir}.`);
       } else if (hasGit) {
         log(`[BUILDS] Target "${target.name}": Existing repository detected at ${cloneDir}; fetching updates...`);
-        await execFileAsync('git', ['-C', cloneDir, 'fetch', '--tags']).catch((err: unknown) => {
-          debug(`buildSingleTarget "${target.name}": git fetch --tags failed: ${errMessage(err)}`);
-        });
+        const fetchTags = await processManager.runCommandAndWait(
+          'git',
+          ['-C', cloneDir, 'fetch', '--tags'],
+          { cwd: baseDir }
+        );
+        if (fetchTags.code !== 0) {
+          debug(
+            `buildSingleTarget "${target.name}": git fetch --tags failed: ${fetchTags.stderr.trim() || `exit code ${fetchTags.code}`}`
+          );
+        }
         if (gitConfig.branch) {
-          await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.branch]).catch((err: unknown) => {
-            debug(`buildSingleTarget "${target.name}": git checkout ${gitConfig.branch} failed: ${errMessage(err)}`);
-          });
-          await execFileAsync('git', ['-C', cloneDir, 'pull', 'origin', gitConfig.branch]).catch((err: unknown) => {
-            debug(`buildSingleTarget "${target.name}": git pull origin ${gitConfig.branch} failed: ${errMessage(err)}`);
-          });
+          const checkoutBranch = await processManager.runCommandAndWait(
+            'git',
+            ['-C', cloneDir, 'checkout', gitConfig.branch],
+            { cwd: baseDir }
+          );
+          if (checkoutBranch.code !== 0) {
+            debug(
+              `buildSingleTarget "${target.name}": git checkout ${gitConfig.branch} failed: ${checkoutBranch.stderr.trim() || `exit code ${checkoutBranch.code}`}`
+            );
+          }
+          const pull = await processManager.runCommandAndWait(
+            'git',
+            ['-C', cloneDir, 'pull', 'origin', gitConfig.branch],
+            { cwd: baseDir }
+          );
+          if (pull.code !== 0) {
+            debug(
+              `buildSingleTarget "${target.name}": git pull origin ${gitConfig.branch} failed: ${pull.stderr.trim() || `exit code ${pull.code}`}`
+            );
+          }
         } else if (gitConfig.commit) {
-          await execFileAsync('git', ['-C', cloneDir, 'checkout', gitConfig.commit]).catch((err: unknown) => {
-            debug(`buildSingleTarget "${target.name}": git checkout ${gitConfig.commit} failed: ${errMessage(err)}`);
-          });
+          const checkoutCommit = await processManager.runCommandAndWait(
+            'git',
+            ['-C', cloneDir, 'checkout', gitConfig.commit],
+            { cwd: baseDir }
+          );
+          if (checkoutCommit.code !== 0) {
+            debug(
+              `buildSingleTarget "${target.name}": git checkout ${gitConfig.commit} failed: ${checkoutCommit.stderr.trim() || `exit code ${checkoutCommit.code}`}`
+            );
+          }
         } else if (gitConfig.tag) {
-          await execFileAsync('git', ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`]);
+          const checkoutTag = await processManager.runCommandAndWait(
+            'git',
+            ['-C', cloneDir, 'checkout', `tags/${gitConfig.tag}`],
+            { cwd: baseDir }
+          );
+          assertCommandSuccess(checkoutTag, 'git checkout');
         }
       }
     } catch (gitErr) {
@@ -197,38 +298,42 @@ export async function buildSingleTarget(
     }
     buildArgs.push(contextPath);
 
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn('docker', buildArgs);
-      proc.stdout?.on('data', (d) => {
-        const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
+    // Q8: docker build runs through the task executor (validator +
+    // task log). Build output still streams live via onLog, as the raw
+    // spawn's data handlers did before.
+    const buildResult = await processManager.runCommandAndWait('docker', buildArgs, {
+      cwd: baseDir,
+      onLog: (entry) => {
+        if (entry.type !== 'stdout' && entry.type !== 'stderr') return;
+        const lines = entry.message.split('\n').filter((l: string) => l.trim().length > 0);
         for (const line of lines) {
           log(`[DOCKER] [${target.name}] ${line}`);
         }
-      });
-      proc.stderr?.on('data', (d) => {
-        const lines = d.toString().split('\n').filter((l: string) => l.trim().length > 0);
-        for (const line of lines) {
-          log(`[DOCKER] [${target.name}] ${line}`);
-        }
-      });
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`docker build exited with code ${code}`));
-      });
-      proc.on('error', reject);
+      },
     });
+    assertCommandSuccess(buildResult, 'docker build');
 
     // Push to the in-cluster/local registry when it is reachable (best effort; the
     // containerd import below is what guarantees the cluster can run the image).
     log(`[BUILDS] Pushing image ${fullTag}...`);
-    await execFileAsync('docker', ['push', '--tls-verify=false', fullTag]).catch(async () => {
-      await execFileAsync('docker', ['push', fullTag]).catch((pushErr) => {
-        log(`[BUILDS] Notice: Registry push to "${registry}" skipped or unavailable: ${String(pushErr.message).split('\n')[0]}`);
+    const pushResult = await processManager.runCommandAndWait(
+      'docker',
+      ['push', '--tls-verify=false', fullTag],
+      { cwd: baseDir }
+    );
+    if (pushResult.code !== 0) {
+      const retryResult = await processManager.runCommandAndWait('docker', ['push', fullTag], {
+        cwd: baseDir,
       });
-    });
+      if (retryResult.code !== 0) {
+        log(
+          `[BUILDS] Notice: Registry push to "${registry}" skipped or unavailable: ${(retryResult.stderr.trim() || `exit code ${retryResult.code}`).split('\n')[0]}`
+        );
+      }
+    }
 
     // MANDATORY: make the image available to every cluster node's containerd.
-    await importImageToCluster(target, fullTag, log);
+    await importImageToCluster(target, fullTag, log, baseDir);
 
     log(`[BUILDS] Target "${target.name}" successfully built and published.`);
   } catch (err) {
@@ -241,19 +346,21 @@ export async function buildSingleTarget(
  * Ensures a registry is serving on the configured localhost:<port> endpoint by running
  * registry:2 inside the cluster (hostPort), so kubelet can pull "localhost:<port>/..." images.
  */
-export async function ensureLocalRegistry(registry: string, log: WaffleLogFn): Promise<void> {
+export async function ensureLocalRegistry(
+  registry: string,
+  log: WaffleLogFn,
+  cwd: string = process.cwd()
+): Promise<void> {
   const m = /^(localhost|127\.0\.0\.1):(\d+)$/.exec(registry);
   if (!m) return;
   const port = m[2];
   const env = getWaffleExecutionEnv();
-  try {
-    await execFileAsync('curl', ['-fsS', '-m', '3', `http://localhost:${port}/v2/`]);
+  // Q8: the liveness probe is a Node fetch, not a curl subprocess —
+  // curl is not in the executor allowlist.
+  if (await isRegistryReachable(`http://localhost:${port}/v2/`)) {
     return;
-  } catch (err) {
-    // Not reachable yet; deploy it. The probe error itself goes nowhere
-    // else, so leave a debug trace (§5.7).
-    debug(`ensureLocalRegistry: probe of ${registry} failed: ${errMessage(err)}`);
   }
+  debug(`ensureLocalRegistry: probe of ${registry} failed`);
   log(`[BUILDS] No registry on ${registry}; deploying in-cluster registry (namespace "registry")...`);
   const manifest = `apiVersion: v1
 kind: Namespace
@@ -326,27 +433,28 @@ spec:
       targetPort: 5000
 `;
   try {
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn('kubectl', ['apply', '-f', '-'], { env });
-      let err = '';
-      // Drain BOTH streams: an undrained stdout pipe fills its buffer
-      // (~64KB) and blocks kubectl forever, hanging the pipeline.
-      proc.stdout?.on('data', () => {});
-      proc.stderr?.on('data', (d) => (err += d.toString()));
-      proc.stdin?.on('error', () => {});
-      proc.on('close', (c) => (c === 0 ? resolve() : reject(new Error(err || `kubectl apply exited ${c}`))));
-      proc.on('error', reject);
-      proc.stdin?.end(manifest);
+    // Q8: kubectl apply runs through the task executor; the manifest
+    // travels via the runCommand `input` option (stdin), as the raw
+    // spawn's stdin.write did before. The executor captures both
+    // streams to the task log, so no manual draining is needed.
+    const applyResult = await processManager.runCommandAndWait('kubectl', ['apply', '-f', '-'], {
+      cwd,
+      env,
+      input: manifest,
     });
-    await execFileAsync('kubectl', ['rollout', 'status', 'deployment/registry', '-n', 'registry', '--timeout=120s'], { env });
+    assertCommandSuccess(applyResult, 'kubectl apply -f - (registry)');
+    const rolloutResult = await processManager.runCommandAndWait(
+      'kubectl',
+      ['rollout', 'status', 'deployment/registry', '-n', 'registry', '--timeout=120s'],
+      { cwd, env }
+    );
+    assertCommandSuccess(rolloutResult, 'kubectl rollout status deployment/registry');
     for (let i = 0; i < 15; i++) {
-      try {
-        await execFileAsync('curl', ['-fsS', '-m', '3', `http://localhost:${port}/v2/`]);
+      if (await isRegistryReachable(`http://localhost:${port}/v2/`)) {
         log(`[BUILDS] In-cluster registry is serving on ${registry}.`);
         return;
-      } catch {
-        await new Promise((r) => setTimeout(r, 1000));
       }
+      await new Promise((r) => setTimeout(r, 1000));
     }
     log(`[BUILDS] Notice: registry deployed but ${registry} not reachable yet; relying on containerd import.`);
   } catch (e) {
@@ -358,11 +466,18 @@ spec:
  * Imports a built image (under every name kubelet might use) into containerd on the local
  * node and every other cluster node. Throws on failure so the build is not reported as OK.
  */
-export async function importImageToCluster(target: { name: string; image: string; tag?: string }, fullTag: string, log: WaffleLogFn): Promise<void> {
+export async function importImageToCluster(
+  target: { name: string; image: string; tag?: string },
+  fullTag: string,
+  log: WaffleLogFn,
+  cwd: string = process.cwd()
+): Promise<void> {
   const shortName = `${target.image}:${target.tag || 'latest'}`;
   const names = [fullTag, shortName, `docker.io/${shortName}`];
   for (const n of names.slice(1)) {
-    await execFileAsync('docker', ['tag', fullTag, n]);
+    // Q8: docker runs through the task executor (validator + task log).
+    const tagResult = await processManager.runCommandAndWait('docker', ['tag', fullTag, n], { cwd });
+    assertCommandSuccess(tagResult, 'docker tag');
   }
   const env = getWaffleExecutionEnv();
 
@@ -380,18 +495,23 @@ export async function importImageToCluster(target: { name: string; image: string
     Object.values(os.networkInterfaces()).flatMap((l) => (l || []).map((a) => a.address))
   );
   let peers: string[] = [];
-  try {
-    const { stdout } = await execFileAsync(
-      'kubectl',
-      ['get', 'nodes', '-o', 'jsonpath={range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\\n"}{end}'],
-      { env }
-    );
-    peers = stdout.split('\n').map((l) => l.trim()).filter((ip) => ip && !localIps.has(ip) && isIpAddressLiteral(ip));
-  } catch (err) {
+  const nodesResult = await processManager.runCommandAndWait(
+    'kubectl',
+    ['get', 'nodes', '-o', 'jsonpath={range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\\n"}{end}'],
+    { cwd, env }
+  );
+  if (nodesResult.code === 0) {
+    peers = nodesResult.stdout
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((ip) => ip && !localIps.has(ip) && isIpAddressLiteral(ip));
+  } else {
     // Cannot list nodes; single-node assumption. A genuine peer-discovery
     // failure is indistinguishable from a single-node cluster at this
     // point, so leave a debug trace (§5.7).
-    debug(`importImageToCluster: listing cluster nodes failed: ${errMessage(err)}`);
+    debug(
+      `importImageToCluster: listing cluster nodes failed: ${nodesResult.stderr.trim() || `exit code ${nodesResult.code}`}`
+    );
   }
   for (const ip of peers) {
     try {

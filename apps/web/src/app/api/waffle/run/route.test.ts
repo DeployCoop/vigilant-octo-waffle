@@ -12,6 +12,7 @@ const hoisted = vi.hoisted(() => ({
   getSourcePipeline: vi.fn(),
   getBlueprintById: vi.fn(),
   loadWafflePipeline: vi.fn(),
+  validateWafflePipeline: vi.fn(),
 }));
 
 vi.mock('@vow/orchestrator', async (importOriginal) => {
@@ -26,6 +27,7 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
     getWaffleSourceManager: () => ({ getSourcePipeline: hoisted.getSourcePipeline }),
     getBlueprintById: hoisted.getBlueprintById,
     loadWafflePipeline: hoisted.loadWafflePipeline,
+    validateWafflePipeline: hoisted.validateWafflePipeline,
   };
 });
 
@@ -72,8 +74,13 @@ beforeEach(() => {
   hoisted.activeRun = null;
   for (const fn of [
     hoisted.executePipeline, hoisted.getActiveRun, hoisted.getSourcePipeline,
-    hoisted.getBlueprintById, hoisted.loadWafflePipeline,
+    hoisted.getBlueprintById, hoisted.loadWafflePipeline, hoisted.validateWafflePipeline,
   ]) fn.mockReset();
+  // The real validator would reject these fixtures (no stages); the
+  // route's pre-execute validation is covered by its own cases below.
+  hoisted.validateWafflePipeline.mockReturnValue({
+    valid: true, errors: [], warnings: [], stagesCount: 0, stepsCount: 0,
+  });
   hoisted.getActiveRun.mockImplementation(() => hoisted.activeRun);
   hoisted.executePipeline.mockImplementation((opts: { sourceId: string }) => {
     hoisted.activeRun = { id: 'run-1', status: 'running', sourceId: opts.sourceId };
@@ -163,9 +170,12 @@ describe('POST /api/waffle/run — launch contract', () => {
   it('loads a custom pipeline from disk with its own base dir', async () => {
     const pipeline = { metadata: { name: 'Ad Hoc' }, steps: [] };
     hoisted.loadWafflePipeline.mockResolvedValue({ pipeline, baseDir: '/tmp/adhoc' });
-    const res = await POST(postReq({ customPath: '/tmp/adhoc/waffle.yaml' }));
+    // In-root relative customPath stays legitimate after B11 confinement.
+    const res = await POST(postReq({ customPath: 'adhoc/waffle.yaml' }));
     expect(res.status).toBe(200);
-    expect(hoisted.loadWafflePipeline).toHaveBeenCalledWith('/tmp/adhoc/waffle.yaml');
+    expect(hoisted.loadWafflePipeline).toHaveBeenCalledWith(
+      path.join(hoisted.root, 'adhoc/waffle.yaml')
+    );
     expect(hoisted.executePipeline).toHaveBeenCalledWith({
       sourceId: 'custom', pipeline, baseDir: '/tmp/adhoc',
       dryRun: false, buildOnly: false,
@@ -177,6 +187,32 @@ describe('POST /api/waffle/run — launch contract', () => {
     const res = await POST(postReq({ blueprintId: 'bp-1' }));
     expect(res.status).toBe(409);
     expect((await res.json()).error.message).toContain('currently in progress');
+    expect(hoisted.executePipeline).not.toHaveBeenCalled();
+  });
+
+  // BUG FIX (bug hunt B11): customPath confinement + pre-execute validation.
+  it('rejects an absolute customPath outside the project root', async () => {
+    const res = await POST(postReq({ customPath: '/tmp/adhoc/waffle.yaml' }));
+    expect(res.status).toBe(400);
+    expect(hoisted.loadWafflePipeline).not.toHaveBeenCalled();
+    expect(hoisted.executePipeline).not.toHaveBeenCalled();
+  });
+
+  it('rejects a customPath that escapes the root with ../', async () => {
+    const res = await POST(postReq({ customPath: '../escape/waffle.yaml' }));
+    expect(res.status).toBe(400);
+    expect(hoisted.loadWafflePipeline).not.toHaveBeenCalled();
+    expect(hoisted.executePipeline).not.toHaveBeenCalled();
+  });
+
+  it('rejects a pipeline that fails structural validation before executing', async () => {
+    hoisted.validateWafflePipeline.mockReturnValue({
+      valid: false, errors: ['duplicate stage id "build"'], warnings: [],
+      stagesCount: 0, stepsCount: 0,
+    });
+    const res = await POST(postReq({ blueprintId: 'bp-1' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toContain('duplicate stage id');
     expect(hoisted.executePipeline).not.toHaveBeenCalled();
   });
 
