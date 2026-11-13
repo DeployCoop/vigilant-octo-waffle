@@ -145,6 +145,54 @@ function asArgoSyncStatus(value: string | undefined): ArgoAppStatus['syncStatus'
   }
 }
 
+// Telemetry cache (studio wiring, Phase 0 F1): `getTelemetry()` is the
+// `isConnected` probe every wired studio calls per request, and each
+// uncached call costs four list calls (nodes, pods, namespaces,
+// ingresses). `K8sClient` is constructed fresh per request, so an
+// instance cache would never hit — this is module-level, shared across
+// instances, and keyed by kubeconfig context.
+//
+// TTL is 10s, the top of the plan's 5–10s range: telemetry is a
+// point-in-time status snapshot, and counts 10s stale are invisible to
+// operators (dashboard polling runs on the same cadence), while the
+// cache collapses the 14-studio probe fan-out (up to 56 list calls per
+// page load) to one fetch per 10s per context. It also bounds the cost
+// of probing a dead API server — four failing list calls, each with its
+// own client timeout — to once per 10s. A shorter TTL would halve the
+// savings for no visible freshness gain; a longer one risks reporting
+// a dead cluster as connected well past an operator's reaction time.
+// The failure (offline) result is cached under the same bound, so a
+// cluster that comes back is reported connected within 10s.
+const TELEMETRY_CACHE_TTL_MS = 10_000;
+
+interface TelemetryCacheEntry {
+  telemetry: ClusterTelemetry;
+  fetchedAtMs: number;
+}
+
+// One entry per kubeconfig context: the fleet views probe several
+// contexts, and a single-entry cache would thrash between them. The
+// key set is the kubeconfig's context list (small and fixed), so the
+// map stays tiny.
+const telemetryCache = new Map<string, TelemetryCacheEntry>();
+
+/** Drop the cached telemetry (context switches; tests). */
+export function clearTelemetryCache(): void {
+  telemetryCache.clear();
+}
+
+// Cache entries are never handed out directly: callers get a copy, so
+// in-place mutation of a returned telemetry object (e.g. sorting
+// `nodes`) cannot corrupt the shared entry.
+function copyTelemetry(t: ClusterTelemetry): ClusterTelemetry {
+  return {
+    ...t,
+    nodes: [...t.nodes],
+    namespaces: [...t.namespaces],
+    ingresses: [...t.ingresses],
+  };
+}
+
 export class K8sClient {
   private kc: k8s.KubeConfig;
   private coreApi?: k8s.CoreV1Api;
@@ -185,6 +233,15 @@ export class K8sClient {
         namespaces: [],
         ingresses: [],
       };
+    }
+
+    // Serve a fresh-enough probe from the cache: the wired studios
+    // call this per request, and the four list calls are the expensive
+    // part. The no-API early return above is not cached — it performs
+    // no I/O, so there is nothing to save.
+    const cached = telemetryCache.get(currentContext);
+    if (cached && Date.now() - cached.fetchedAtMs < TELEMETRY_CACHE_TTL_MS) {
+      return copyTelemetry(cached.telemetry);
     }
 
     try {
@@ -260,7 +317,7 @@ export class K8sClient {
         }));
       });
 
-      return {
+      const telemetry: ClusterTelemetry = {
         isConnected: nodes.length > 0,
         context: currentContext,
         detectedPlatform,
@@ -273,8 +330,14 @@ export class K8sClient {
         namespaces,
         ingresses,
       };
+      telemetryCache.set(currentContext, { telemetry, fetchedAtMs: Date.now() });
+      return copyTelemetry(telemetry);
     } catch {
-      return {
+      // The failure result is cached under the same bound: when the API
+      // server is down, each of the four list calls fails (after its
+      // own client timeout), so an uncached probe would pay that cost
+      // on every studio request.
+      const telemetry: ClusterTelemetry = {
         isConnected: false,
         context: currentContext,
         detectedPlatform: 'unknown',
@@ -287,6 +350,8 @@ export class K8sClient {
         namespaces: [],
         ingresses: [],
       };
+      telemetryCache.set(currentContext, { telemetry, fetchedAtMs: Date.now() });
+      return copyTelemetry(telemetry);
     }
   }
 
@@ -305,6 +370,10 @@ export class K8sClient {
     this.netApi = this.kc.makeApiClient(k8s.NetworkingV1Api);
     this.customApi = this.kc.makeApiClient(k8s.CustomObjectsApi);
     this.storageApi = this.kc.makeApiClient(k8s.StorageV1Api);
+    // The cache is keyed by context, but drop it explicitly: a switch
+    // that leaves currentContext empty (no current-context in the
+    // kubeconfig) would otherwise keep serving the old context's entry.
+    clearTelemetryCache();
   }
 
   public async getCertificates(): Promise<CertificateInfo[]> {

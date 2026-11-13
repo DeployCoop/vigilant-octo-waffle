@@ -90,3 +90,12 @@ describe('POST /api/mesh gates (B3)', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('POST /api/mesh validation (C7)', () => {
+  it('rejects a non-label namespace with 400', async () => {
+    readyStore();
+    const res = await POST(postReq({ namespace: 'Bad_Ns' }, ownerToken));
+    expect(res.status).toBe(400);
+    expect(hoisted.enforceStrictMtls).not.toHaveBeenCalled();
+  });
+});

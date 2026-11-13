@@ -6,8 +6,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { execAsync, getWaffleExecutionEnv } from './shared.js';
-import { execFileAsync, assertK8sLabel } from '../exec-argv.js';
+import { getWaffleExecutionEnv } from './shared.js';
+import { assertK8sLabel } from '../exec-argv.js';
+import { processManager, assertCommandSuccess } from '../executor.js';
 import {
   loadWafflePipeline,
   type WafflePipeline,
@@ -381,7 +382,14 @@ export class WaffleWatcher extends EventEmitter {
     if (isGit) {
       if (this.fetchRemote && !this.dryRun) {
         try {
-          await execAsync('git fetch --depth 1', { cwd: target.context, timeout: 10000 });
+          // Q8: argv form through the task executor. persist: false —
+          // this runs every poll cycle per target; recording every
+          // fetch would flood the task store (see RunCommandOptions).
+          await processManager.runCommandAndWait('git', ['fetch', '--depth', '1'], {
+            cwd: target.context,
+            timeoutMs: 10000,
+            persist: false,
+          });
         } catch {
           // Ignore transient network/git fetch errors
         }
@@ -396,10 +404,15 @@ export class WaffleWatcher extends EventEmitter {
         };
       }
 
-      // Check for uncommitted working tree modifications
-      const { stdout: statusOut } = await execAsync('git status --porcelain', {
+      // Check for uncommitted working tree modifications. A failed
+      // status check (no git, not a repo) reads as a clean tree, as
+      // before — runCommandAndWait resolves on non-zero exit, so the
+      // old .catch(() => ({ stdout: '' })) becomes a code check.
+      const statusResult = await processManager.runCommandAndWait('git', ['status', '--porcelain'], {
         cwd: target.context,
-      }).catch(() => ({ stdout: '' }));
+        persist: false,
+      });
+      const statusOut = statusResult.code === 0 ? statusResult.stdout : '';
 
       const currentMtime = await this.getDirectoryMtime(target.context);
       if (statusOut.trim().length > 0 && target.lastMtime && currentMtime > target.lastMtime + 1000) {
@@ -567,12 +580,14 @@ export class WaffleWatcher extends EventEmitter {
 
     try {
       // Find candidate deployment name (argv form: no shell, no parsing
-      // of ns/matched by any shell).
-      const { stdout } = await execFileAsync(
+      // of ns/matched by any shell). A failed listing reads as "no
+      // deployment matched", as before.
+      const deployResult = await processManager.runCommandAndWait(
         'kubectl',
         ['get', 'deployments', '-n', ns, '-o', 'jsonpath={.items[*].metadata.name}'],
-        { env }
-      ).catch(() => ({ stdout: '' }));
+        { cwd: this.baseDir, env }
+      );
+      const stdout = deployResult.code === 0 ? deployResult.stdout : '';
 
       const deployments = stdout.split(/\s+/).filter(Boolean);
       const matched = deployments.find(
@@ -580,9 +595,23 @@ export class WaffleWatcher extends EventEmitter {
       );
 
       if (matched) {
-        await execFileAsync('kubectl', ['rollout', 'restart', `deployment/${matched}`, '-n', ns], { env });
+        // Q8: rollout runs through the task executor (validator +
+        // task log). These run only when a change was detected, so
+        // they keep the default persisted task record (audit trail
+        // for an automated cluster mutation).
+        const restartResult = await processManager.runCommandAndWait(
+          'kubectl',
+          ['rollout', 'restart', `deployment/${matched}`, '-n', ns],
+          { cwd: this.baseDir, env }
+        );
+        assertCommandSuccess(restartResult, `kubectl rollout restart deployment/${matched}`);
         this.log(`[WATCHER] [${target.name}] Dispatched rollout restart for deployment "${matched}". Waiting for status...`);
-        await execFileAsync('kubectl', ['rollout', 'status', `deployment/${matched}`, '-n', ns, '--timeout=90s'], { env });
+        const statusResult = await processManager.runCommandAndWait(
+          'kubectl',
+          ['rollout', 'status', `deployment/${matched}`, '-n', ns, '--timeout=90s'],
+          { cwd: this.baseDir, env }
+        );
+        assertCommandSuccess(statusResult, `kubectl rollout status deployment/${matched}`);
         this.log(`[WATCHER] [${target.name}] Deployment "${matched}" successfully rolled out.`);
         this.emit('deploy_complete', { target: target.name, release: matched, namespace: ns, status: 'rolled_out' });
         return true;
@@ -604,7 +633,13 @@ export class WaffleWatcher extends EventEmitter {
     if (fs.existsSync(ecosystemDir) && fs.existsSync(path.join(ecosystemDir, 'Chart.yaml'))) {
       try {
         this.log('[WATCHER] Rebuilding umbrella chart dependencies: helm dependency update ./ecosystem...');
-        await execAsync('helm dependency update ./ecosystem', { cwd: this.baseDir });
+        // Q8: argv form through the task executor.
+        const depResult = await processManager.runCommandAndWait(
+          'helm',
+          ['dependency', 'update', './ecosystem'],
+          { cwd: this.baseDir }
+        );
+        assertCommandSuccess(depResult, 'helm dependency update ./ecosystem');
         this.log('[WATCHER] Umbrella ecosystem dependencies updated.');
       } catch (err) {
         this.log(`[WATCHER] Warning: Umbrella dependency update failed: ${errMessage(err)}`);
@@ -646,8 +681,13 @@ export class WaffleWatcher extends EventEmitter {
 
   private async getGitSha(dir: string): Promise<string | undefined> {
     try {
-      const { stdout } = await execAsync('git rev-parse HEAD', { cwd: dir });
-      return stdout.trim();
+      // Q8: argv form through the task executor. persist: false —
+      // this runs every poll cycle per target (see RunCommandOptions).
+      const result = await processManager.runCommandAndWait('git', ['rev-parse', 'HEAD'], {
+        cwd: dir,
+        persist: false,
+      });
+      return result.code === 0 ? result.stdout.trim() : undefined;
     } catch {
       return undefined;
     }

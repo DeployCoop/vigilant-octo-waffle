@@ -10,6 +10,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface SecretLeakFinding {
   id: string;
@@ -44,6 +45,7 @@ interface SecretOpsReport {
 export default function SecretOpsPage() {
   const [report, setReport] = useState<SecretOpsReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [rotatingSecret, setRotatingSecret] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -56,12 +58,15 @@ export default function SecretOpsPage() {
 
   const fetchReport = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/secretops');
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       setReport(data);
     } catch (err) {
       console.error('Failed to load secretops report:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setLoading(false);
     }
@@ -80,12 +85,17 @@ export default function SecretOpsPage() {
         body: JSON.stringify({ action: 'rotate', secretName, namespace }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
+        setError(null);
         setActionMessage(data.message);
         fetchReport();
+      } else {
+        setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
       }
     } catch (err) {
       console.error('Rotation failed:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setRotatingSecret(null);
     }
@@ -105,6 +115,7 @@ export default function SecretOpsPage() {
       });
       const data = await res.json();
       if (data.success) {
+        setError(null);
         setSealedError(null);
         setGeneratedSealedYaml(data.manifest);
       } else {
@@ -116,6 +127,7 @@ export default function SecretOpsPage() {
       }
     } catch (err) {
       console.error('SealedSecret generation failed:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     }
   };
 
@@ -129,6 +141,12 @@ export default function SecretOpsPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
+      {error && (
+        <div className="flex items-center space-x-2 px-4 py-3 bg-rose-950/50 border border-rose-800 rounded text-rose-300 text-sm">
+          <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
         <div className="flex items-center space-x-3">

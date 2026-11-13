@@ -81,3 +81,12 @@ describe('POST /api/drift gates (B6)', () => {
     expect(hoisted.reconcileClusterFromGit).toHaveBeenCalled();
   });
 });
+
+describe('POST /api/drift validation (C7)', () => {
+  it('rejects reconcile without a driftId with 400', async () => {
+    readyStore();
+    const res = await POST(postReq({ action: 'reconcile' }, operatorToken));
+    expect(res.status).toBe(400);
+    expect(hoisted.reconcileClusterFromGit).not.toHaveBeenCalled();
+  });
+});

@@ -356,11 +356,83 @@ export interface TaskRun {
  * Running under multi-instance, clustered, or stateless serverless runtimes will not share task state.
  * For production multi-replica deployments, backing state with Redis, PostgreSQL, or a persistent job queue is required.
  */
+/**
+ * Options for ProcessManager.runCommand / runCommandAndWait (Q8).
+ *
+ * `persist` defaults to true: the task record writes through to the
+ * SQLite store like every other task. Set it false ONLY for
+ * high-frequency background probes — the watcher poll loop's per-cycle
+ * git checks — whose records would otherwise flood the store (one
+ * record per target per poll, every few seconds, forever). A
+ * non-persisted task still exists in memory with its logs and is still
+ * pruned by the terminal-task cap; it simply never reaches SQLite.
+ */
+export interface RunCommandOptions {
+  cwd: string;
+  // Record<string, string | undefined> (not Record<string, string>):
+  // callers pass getWaffleExecutionEnv(), which spreads process.env and
+  // therefore carries `string | undefined` values — the same type spawn
+  // accepts. NOT NodeJS.ProcessEnv: Next.js augments that type with
+  // required members (NODE_ENV), which plain records cannot satisfy.
+  env?: Record<string, string | undefined>;
+  /** Kill the task (SIGTERM, then SIGKILL after a grace period) after this many ms. */
+  timeoutMs?: number;
+  /**
+   * Principal launching the task (bug-hunt Batch A5 task scoping).
+   * Omitted/null means a system task, visible to every tasks:read
+   * holder. The web tasks/run route passes the caller; internal
+   * orchestrator callers (k3s, copilot, cluster, …) do not yet
+   * thread a principal, so their tasks stay system-visible.
+   */
+  principalId?: string | null;
+  /**
+   * Write to the child's stdin, then close it (mirrors
+   * ExecArgvOptions.input in exec-argv.ts). Used by `kubectl apply
+   * -f -` stdin sites, which previously went through execFileAsync.
+   */
+  input?: string | Buffer;
+  /** Persist the task record to the SQLite store (default true). See above. */
+  persist?: boolean;
+  /** Called for every task log entry (stdout/stderr/system) as it lands. */
+  onLog?: (entry: TaskLogEntry) => void;
+}
+
+/**
+ * Result of ProcessManager.runCommandAndWait: the task's terminal
+ * state plus its captured output. `stdout`/`stderr` are the joined
+ * stdout/stderr log entries (system lines excluded); `logs` is the
+ * full entry list, `taskId` identifies the task record.
+ */
+export interface CommandWaitResult {
+  code: number | null;
+  status: TaskRun['status'];
+  logs: TaskLogEntry[];
+  stdout: string;
+  stderr: string;
+  taskId: string;
+}
+
+/**
+ * Throw when an awaited command did not exit 0, carrying the child's
+ * stderr in the message (the same shape execFileAsync's ExecArgvError
+ * used to give callers, so existing error handling keeps working).
+ */
+export function assertCommandSuccess(result: CommandWaitResult, label: string): void {
+  if (result.code !== 0) {
+    const detail = result.stderr.trim();
+    throw new Error(
+      `${label} failed (exit code ${result.code}${result.status === 'cancelled' ? ', cancelled' : ''})${detail ? `: ${detail}` : ''}`
+    );
+  }
+}
+
 export class ProcessManager {
   private tasks: Map<string, TaskRun> = new Map();
   private store: TaskStore | null = null;
   private lastFlush = new Map<string, number>();
   private autoAttachTried = false;
+  /** Tasks created with `persist: false` — see RunCommandOptions. */
+  private noPersist = new WeakSet<TaskRun>();
 
   /**
    * Lazy persistence (WS5): on the first task, if the task's cwd is
@@ -405,9 +477,10 @@ export class ProcessManager {
   }
 
   /** Write-through persistence: never throws (a store failure must
-   *  not break task execution). */
+   *  not break task execution). Tasks created with `persist: false`
+   *  never reach the store. */
   private persist(task: TaskRun): void {
-    if (!this.store) return;
+    if (!this.store || this.noPersist.has(task)) return;
     try {
       this.store.upsert(taskToRecord(task));
       this.lastFlush.set(task.id, Date.now());
@@ -421,7 +494,7 @@ export class ProcessManager {
     command: string,
     args: string[],
     cwd: string,
-    options: { principalId?: string | null } = {}
+    options: { principalId?: string | null; persist?: boolean } = {}
   ): TaskRun {
     this.maybeAutoAttach(cwd);
     const id = `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -438,6 +511,10 @@ export class ProcessManager {
       emitter,
       principalId: options.principalId ?? null,
     };
+
+    if (options.persist === false) {
+      this.noPersist.add(task);
+    }
 
     this.tasks.set(id, task);
     this.persist(task);
@@ -496,20 +573,7 @@ export class ProcessManager {
   public runCommand(
     command: string,
     args: string[],
-    options: {
-      cwd: string;
-      env?: Record<string, string>;
-      /** Kill the task (SIGTERM, then SIGKILL after a grace period) after this many ms. */
-      timeoutMs?: number;
-      /**
-       * Principal launching the task (bug-hunt Batch A5 task scoping).
-       * Omitted/null means a system task, visible to every tasks:read
-       * holder. The web tasks/run route passes the caller; internal
-       * orchestrator callers (k3s, copilot, cluster, …) do not yet
-       * thread a principal, so their tasks stay system-visible.
-       */
-      principalId?: string | null;
-    }
+    options: RunCommandOptions
   ): TaskRun {
     const validation = validateCommand(command, args, options.cwd);
     if (!validation.allowed) {
@@ -521,7 +585,12 @@ export class ProcessManager {
 
     const task = this.createTask(effectiveCmd, effectiveArgs, options.cwd, {
       principalId: options.principalId ?? null,
+      persist: options.persist,
     });
+
+    if (options.onLog) {
+      task.emitter.on('log', options.onLog);
+    }
 
     // The spawn uses the real args; the log line (which persists to
     // SQLite and is served via the tasks API) uses redacted ones, so a
@@ -541,6 +610,15 @@ export class ProcessManager {
 
       task.childProcess = child;
       this.persist(task);
+
+      // Stdin payload (Q8): `kubectl apply -f -` sites write their
+      // manifest here, mirroring ExecArgvOptions.input. Swallow stdin
+      // errors — a child that exits before reading raises EPIPE, which
+      // must not crash the server; the exit code decides the outcome.
+      if (options.input !== undefined) {
+        child.stdin?.on('error', () => {});
+        child.stdin?.end(options.input);
+      }
 
       // Terminal-state handling is finalize-once: whichever of close /
       // error / cancel / timeout lands first owns the status, and 'close'
@@ -636,6 +714,53 @@ export class ProcessManager {
     }
 
     return task;
+  }
+
+  /**
+   * Q8 await helper: run a validated command through the task
+   * executor and resolve when the task closes, with its terminal
+   * state and captured output. Unlike execFileAsync this RESOLVES on
+   * a non-zero exit (callers check `code` / assertCommandSuccess) —
+   * a spawn that fails synchronously (ENOENT, validation) resolves
+   * with `code: null, status: 'failed'`, because runCommand records
+   * the failure on the task and emits 'close' before returning.
+   * A validation rejection is thrown synchronously by runCommand and
+   * therefore rejects this promise.
+   */
+  public async runCommandAndWait(
+    command: string,
+    args: string[],
+    options: RunCommandOptions
+  ): Promise<CommandWaitResult> {
+    const task = this.runCommand(command, args, options);
+    if (task.status !== 'running') {
+      // Already finalized (synchronous spawn failure): 'close' was
+      // emitted before runCommand returned, so no listener would fire.
+      return this.waitResult(task);
+    }
+    const code = await new Promise<number | null>((resolve) => {
+      task.emitter.once('close', (c: number | null) => resolve(c));
+    });
+    return this.waitResult(task, code);
+  }
+
+  private waitResult(task: TaskRun, code?: number | null): CommandWaitResult {
+    const stdout = task.logs
+      .filter((l) => l.type === 'stdout')
+      .map((l) => l.message)
+      .join('');
+    const stderr = task.logs
+      .filter((l) => l.type === 'stderr')
+      .map((l) => l.message)
+      .join('');
+    return {
+      code: code ?? task.exitCode ?? null,
+      status: task.status,
+      logs: [...task.logs],
+      stdout,
+      stderr,
+      taskId: task.id,
+    };
   }
 
   public cancelTask(id: string): boolean {

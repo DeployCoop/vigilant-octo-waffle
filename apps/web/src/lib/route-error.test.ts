@@ -131,4 +131,33 @@ describe('apiError', () => {
     const res = apiError(409, 'Not enabled', { reason: 'authz_not_enabled' });
     expect((await bodyOf(res)).error.reason).toBe('authz_not_enabled');
   });
+
+  it('503 maps to cluster_unavailable (studio-wiring no-cluster contract, F1)', async () => {
+    // Explicit code, the form wired studio routes use.
+    const res = apiError(503, 'Cluster unavailable', { code: 'cluster_unavailable' });
+    expect(res.status).toBe(503);
+    expect((await bodyOf(res)).error).toEqual({
+      code: 'cluster_unavailable',
+      message: 'Cluster unavailable',
+    });
+
+    // Default mapping: codeForStatus(503) supplies the same code.
+    const resDefault = apiError(503, 'Cluster unavailable');
+    expect(resDefault.status).toBe(503);
+    expect((await bodyOf(resDefault)).error.code).toBe('cluster_unavailable');
+  });
+});
+
+describe('routeError 503 mapping', () => {
+  it('a 503 override maps to cluster_unavailable', async () => {
+    const res = routeError(new Error('boom'), {
+      route: 'GET /api/x',
+      status: 503,
+      fallbackMessage: 'Cluster unavailable',
+    });
+    expect(res.status).toBe(503);
+    const body = await bodyOf(res);
+    expect(body.error.code).toBe('cluster_unavailable');
+    expect(body.error.message).toBe('Cluster unavailable');
+  });
 });

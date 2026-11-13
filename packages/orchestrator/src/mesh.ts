@@ -1,3 +1,5 @@
+import { stringifyYaml } from './yaml.js';
+
 export interface WorkloadIdentity {
   podName: string;
   namespace: string;
@@ -152,21 +154,22 @@ export async function enforceStrictMtls(
 ): Promise<{ success: boolean; namespace: string; manifest: string; message: string }> {
   strictMtlsNamespaces.add(namespace);
 
-  const manifest = `apiVersion: security.cilium.io/v1
-kind: CiliumClusterwideNetworkPolicy
-metadata:
-  name: strict-mtls-${namespace}
-spec:
-  endpointSelector:
-    matchLabels:
-      k8s:io.kubernetes.pod.namespace: ${namespace}
-  ingress:
-  - authentication:
-      mode: required
-  egress:
-  - authentication:
-      mode: required
-`;
+  // C6: build the policy as an object and serialize it — the namespace can
+  // no longer break out of the YAML structure (a newline in `namespace`
+  // used to inject arbitrary fields). The route validates it as a label.
+  // The `k8s:io.kubernetes.pod.namespace` key is quoted by the serializer.
+  const manifest = stringifyYaml({
+    apiVersion: 'security.cilium.io/v1',
+    kind: 'CiliumClusterwideNetworkPolicy',
+    metadata: { name: `strict-mtls-${namespace}` },
+    spec: {
+      endpointSelector: {
+        matchLabels: { 'k8s:io.kubernetes.pod.namespace': namespace },
+      },
+      ingress: [{ authentication: { mode: 'required' } }],
+      egress: [{ authentication: { mode: 'required' } }],
+    },
+  });
 
   return {
     success: true,

@@ -143,3 +143,13 @@ describe('GET /api/secretops — read gate unchanged', () => {
     expect(denied.status).toBe(403);
   });
 });
+
+describe('POST /api/secretops validation (C7)', () => {
+  it('rejects a non-label namespace on rotate with 400', async () => {
+    readyStore();
+    const res = await POST(
+      postReq({ action: 'rotate', secretName: 'x', namespace: 'Bad_Ns' }, ownerToken)
+    );
+    expect(res.status).toBe(400);
+  });
+});

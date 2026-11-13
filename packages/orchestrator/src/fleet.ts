@@ -103,6 +103,14 @@ export async function broadcastApplication(
   targetClusterIds: string[]
 ): Promise<{ success: boolean; deployedClusters: string[]; message: string }> {
   const deployed = fleetStore.filter((c) => targetClusterIds.includes(c.id));
+  // C4: broadcasting to zero matching clusters is a miss, not a success.
+  if (deployed.length === 0) {
+    return {
+      success: false,
+      deployedClusters: [],
+      message: `No matching fleet clusters found for broadcast of application [${appId}].`,
+    };
+  }
   deployed.forEach((c) => {
     c.argocdSyncStatus = 'Synced';
   });

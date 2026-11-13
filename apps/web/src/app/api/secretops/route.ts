@@ -3,6 +3,8 @@ import {
   auditSecretsAndLeaks,
   rotateSecretCredential,
   generateSealedSecretManifest,
+  secretopsRotateSchema,
+  secretopsSealedSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
@@ -32,18 +34,16 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { action, secretName, namespace, keyValues } = body;
+    const { action, keyValues } = body;
 
     if (action === 'rotate') {
-      if (!secretName || !namespace) {
-        return apiError(400, 'secretName and namespace are required for rotation');
-      }
+      // C7: names must be valid K8s names (subdomain for the secret, label
+      // for the namespace).
+      const { secretName, namespace } = secretopsRotateSchema.parse(body);
       const result = await rotateSecretCredential(secretName, namespace);
       return NextResponse.json(result);
     } else if (action === 'generate_sealed') {
-      if (!secretName || !namespace) {
-        return apiError(400, 'secretName and namespace are required for sealed secret');
-      }
+      const { secretName, namespace } = secretopsSealedSchema.parse(body);
       // BUG FIX (bug hunt B2): no default credential. An omitted or
       // empty keyValues object used to mint a "sealed" credential with
       // the public password 'changeme123'.

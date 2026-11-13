@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ProcessManager, validateCommand } from '../executor.js';
+import { ProcessManager, validateCommand, assertCommandSuccess } from '../executor.js';
 import { TaskStore, taskToRecord } from '../taskStore.js';
 
 const cwd = process.cwd();
@@ -274,5 +274,169 @@ describe('token redaction and task principal (bug-hunt Batch A5)', () => {
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('runCommandAndWait + input + persist (Plan III Q8)', () => {
+  let binDir: string;
+  let workDir: string;
+
+  before(() => {
+    binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-q8-bin-'));
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-q8-work-'));
+    // kubectl stub: `apply -f -` cats stdin back out (the stdin path
+    // under test); `failer` exits 1 with stderr; anything else prints
+    // two pod lines and exits 0.
+    fs.writeFileSync(
+      path.join(binDir, 'kubectl'),
+      '#!/bin/bash\nif [ "$1" = "apply" ]; then cat; exit 0; fi\nif [ "$1" = "failer" ]; then echo boom >&2; exit 1; fi\necho pod-a\necho pod-b\nexit 0\n',
+      { mode: 0o755 }
+    );
+  });
+
+  after(() => {
+    fs.rmSync(binDir, { recursive: true, force: true });
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
+
+  const env = () => ({ PATH: `${binDir}:${process.env.PATH ?? ''}` });
+
+  it('resolves with code, status and captured stdout/stderr/logs on success', async () => {
+    const pm = new ProcessManager();
+    const result = await pm.runCommandAndWait('kubectl', ['get', 'pods'], {
+      cwd: workDir,
+      env: env(),
+    });
+    assert.equal(result.code, 0);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.stdout, 'pod-a\npod-b\n');
+    assert.equal(result.stderr, '');
+    assert.ok(result.taskId.startsWith('task_'));
+    assert.ok(result.logs.some((l) => l.type === 'stdout' && l.message.includes('pod-a')));
+    assert.ok(result.logs.some((l) => l.type === 'system' && l.message.startsWith('Executing:')));
+  });
+
+  it('resolves (does not reject) on a non-zero exit, with stderr captured', async () => {
+    const pm = new ProcessManager();
+    const result = await pm.runCommandAndWait('kubectl', ['failer'], {
+      cwd: workDir,
+      env: env(),
+    });
+    assert.equal(result.code, 1);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /boom/);
+    assert.throws(() => assertCommandSuccess(result, 'kubectl failer'), /kubectl failer failed \(exit code 1\): boom/);
+  });
+
+  it('assertCommandSuccess is a no-op on exit 0', async () => {
+    const pm = new ProcessManager();
+    const result = await pm.runCommandAndWait('echo', ['hi'], { cwd: workDir });
+    assert.equal(result.code, 0);
+    assert.doesNotThrow(() => assertCommandSuccess(result, 'echo hi'));
+  });
+
+  it('pipes input to stdin (kubectl apply -f -)', async () => {
+    const pm = new ProcessManager();
+    const manifest = 'apiVersion: v1\nkind: ConfigMap\n';
+    const result = await pm.runCommandAndWait('kubectl', ['apply', '-f', '-'], {
+      cwd: workDir,
+      env: env(),
+      input: manifest,
+    });
+    assert.equal(result.code, 0);
+    assert.equal(result.stdout, manifest);
+  });
+
+  it('streams log entries to onLog as they land', async () => {
+    const pm = new ProcessManager();
+    const seen: string[] = [];
+    const result = await pm.runCommandAndWait('echo', ['hello-onlog'], {
+      cwd: workDir,
+      onLog: (entry) => seen.push(`${entry.type}:${entry.message}`),
+    });
+    assert.equal(result.code, 0);
+    assert.ok(seen.some((s) => s.startsWith('stdout:') && s.includes('hello-onlog')));
+    assert.ok(seen.some((s) => s.startsWith('system:Executing:')));
+  });
+
+  it('rejects when the validator refuses the command', async () => {
+    const pm = new ProcessManager();
+    await assert.rejects(
+      pm.runCommandAndWait('kubectl', ['exec', 'pod', '--', 'sh'], { cwd: workDir, env: env() }),
+      /allowlist/
+    );
+  });
+
+  it('persist: false keeps the task out of the attached store', async () => {
+    const pm = new ProcessManager();
+    const store = new TaskStore(path.join(workDir, 'state.db'));
+    try {
+      pm.attachStore(store);
+      const kept = await pm.runCommandAndWait('echo', ['hi'], { cwd: workDir });
+      assert.equal(kept.status, 'completed');
+      assert.ok(store.get(kept.taskId), 'default run is persisted');
+      const skipped = await pm.runCommandAndWait('echo', ['hi'], { cwd: workDir, persist: false });
+      assert.equal(skipped.status, 'completed');
+      // TaskStore.get returns null for a missing row.
+      assert.equal(store.get(skipped.taskId), null, 'persist:false run must not reach the store');
+      // The non-persisted task still exists in memory with its logs.
+      assert.equal(pm.getTask(skipped.taskId)?.status, 'completed');
+    } finally {
+      store.close();
+    }
+  });
+
+  it('validator accepts every new Q8 call shape', () => {
+    const repoRoot = path.resolve(process.cwd(), '..', '..');
+    const storageScript = path.join(repoRoot, 'src', 'k3s_storage.sh');
+    assert.ok(fs.existsSync(storageScript), `expected project script at ${storageScript}`);
+    const allowed: Array<[string, string[], string]> = [
+      // runner.ts preflight + step deploy
+      ['helm', ['upgrade', '--install', 'openebs', '/charts/openebs', '--namespace', 'openebs', '--create-namespace', '--wait', '--timeout', '5m'], process.cwd()],
+      ['helm', ['upgrade', '--install', 'rel', 'chart', '--namespace', 'ns', '--create-namespace', '--wait', '--timeout', '5m', '--take-ownership', '--set', 'ingress.host=example.com', '--set', 'replicas=3', '--dry-run'], process.cwd()],
+      ['bash', [storageScript, 'install', '--engine', 'openebs'], repoRoot],
+      // watcher.ts poll loop + rollout
+      ['git', ['fetch', '--depth', '1'], process.cwd()],
+      ['git', ['status', '--porcelain'], process.cwd()],
+      ['git', ['rev-parse', 'HEAD'], process.cwd()],
+      ['helm', ['dependency', 'update', './ecosystem'], process.cwd()],
+      ['kubectl', ['get', 'deployments', '-n', 'ns', '-o', 'jsonpath={.items[*].metadata.name}'], process.cwd()],
+      ['kubectl', ['rollout', 'restart', 'deployment/web', '-n', 'ns'], process.cwd()],
+      ['kubectl', ['rollout', 'status', 'deployment/web', '-n', 'ns', '--timeout=90s'], process.cwd()],
+      // health.ts
+      ['kubectl', ['rollout', 'status', 'deployment/web', '-n', 'ns', '--timeout=60s'], process.cwd()],
+      ['kubectl', ['get', 'sc', 'openebs-hostpath'], process.cwd()],
+      ['kubectl', ['wait', '--for=condition=ready', 'pod', '-l', 'app.kubernetes.io/instance=rel', '-n', 'ns', '--timeout=2m'], process.cwd()],
+      // images.ts git/docker/kubectl
+      ['git', ['clone', '-b', 'main', '--depth', '1', '--', 'https://example.com/repo.git', '/tmp/x'], process.cwd()],
+      ['git', ['-C', '/tmp/x', 'fetch', '--tags'], process.cwd()],
+      ['git', ['-C', '/tmp/x', 'checkout', 'abc123'], process.cwd()],
+      ['git', ['-C', '/tmp/x', 'pull', 'origin', 'main'], process.cwd()],
+      ['docker', ['build', '-t', 'img:tag', '-f', '/tmp/Dockerfile', '/tmp/ctx'], process.cwd()],
+      ['docker', ['push', '--tls-verify=false', 'img:tag'], process.cwd()],
+      ['docker', ['push', 'img:tag'], process.cwd()],
+      ['docker', ['tag', 'img:tag', 'other:tag'], process.cwd()],
+      ['kubectl', ['apply', '-f', '-'], process.cwd()],
+      ['kubectl', ['rollout', 'status', 'deployment/registry', '-n', 'registry', '--timeout=120s'], process.cwd()],
+      ['kubectl', ['get', 'nodes', '-o', 'jsonpath={.items[*].metadata.name}'], process.cwd()],
+      // secrets.ts
+      ['kubectl', ['create', 'namespace', 'ns', '--dry-run=client', '-o', 'yaml'], process.cwd()],
+      // helm.ts / metrics.ts
+      ['helm', ['list', '-A', '-o', 'json'], process.cwd()],
+      ['kubectl', ['top', 'pods', '-A', '--no-headers'], process.cwd()],
+      ['kubectl', ['top', 'nodes', '--no-headers'], process.cwd()],
+    ];
+    for (const [binary, args, cwd] of allowed) {
+      const result = validateCommand(binary, args, cwd);
+      assert.equal(result.allowed, true, `${binary} ${args.join(' ')}: ${result.reason ?? 'ok'}`);
+    }
+    // Negative controls: the validator must still refuse these.
+    assert.equal(validateCommand('kubectl', ['exec', 'pod', '--', 'sh']).allowed, false);
+    assert.equal(
+      validateCommand('helm', ['upgrade', '--install', '--post-renderer', '/tmp/x', 'r', 'c']).allowed,
+      false
+    );
+    assert.equal(validateCommand('curl', ['-fsS', 'http://localhost:5001/v2/']).allowed, false);
   });
 });

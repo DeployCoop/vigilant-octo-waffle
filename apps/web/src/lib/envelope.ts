@@ -45,6 +45,11 @@ export function codeForStatus(status: number): string {
       return 'unprocessable';
     case 500:
       return 'internal';
+    // Studio wiring (Phase 0, F1): the no-cluster contract. Every wired
+    // studio GET/POST returns 503 with this code when the cluster is
+    // absent — never fabricated data, never a bare 'internal'.
+    case 503:
+      return 'cluster_unavailable';
     default:
       return status >= 500 ? 'internal' : 'error';
   }

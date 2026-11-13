@@ -22,7 +22,7 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
 
 vi.mock('@/lib/project', () => ({ getProjectRoot: () => hoisted.root }));
 
-import { generatePrincipalToken, hashToken, type Principal } from '@vow/orchestrator';
+import { generatePrincipalToken, hashToken, InvalidManifestError, type Principal } from '@vow/orchestrator';
 import { POST } from './route';
 
 /** Gate tests for /api/guard POST (bug hunt B3). */
@@ -87,5 +87,26 @@ describe('POST /api/guard gates (B3)', () => {
     const res = await POST(postReq({ yaml: 'apiVersion: v1' }, viewerToken));
     expect(res.status).toBe(200);
     expect(hoisted.evaluateManifest).toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/guard validation (C7) + invalid YAML (C3)', () => {
+  it('maps InvalidManifestError to 400, not 500', async () => {
+    readyStore();
+    hoisted.evaluateManifest.mockImplementation(() => {
+      throw new InvalidManifestError();
+    });
+    const res = await POST(postReq({ yaml: 'key: [unclosed' }, viewerToken));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toMatch(/Invalid YAML/);
+  });
+
+  it('rejects a non-boolean enabled with 400', async () => {
+    readyStore();
+    const res = await POST(
+      postReq({ action: 'toggle', ruleId: 'x', enabled: 1 }, ownerToken)
+    );
+    expect(res.status).toBe(400);
+    expect(hoisted.togglePolicyRule).not.toHaveBeenCalled();
   });
 });

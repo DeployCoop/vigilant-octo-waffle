@@ -4,6 +4,7 @@ import {
   reconcileClusterFromGit,
   generateReverseCommitPatch,
   resetDriftStore,
+  driftRemediateSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, driftId } = body;
+    const { action } = body;
 
     // BUG FIX (bug hunt B6): resetting wipes the remediation record
     // (resolvedDriftIds.clear()), resurrecting every drift item and
@@ -49,14 +50,14 @@ export async function POST(req: Request) {
     const denied = await authorizeRequest(req, 'argo:sync');
     if (denied) return denied;
 
-    if (!driftId) {
-      return apiError(400, 'driftId is required');
-    }
-
+    // C7: driftId validated inside the branches, after the argo:sync gate,
+    // preserving the B6 gate ordering.
     if (action === 'reconcile') {
+      const { driftId } = driftRemediateSchema.parse(body);
       const result = await reconcileClusterFromGit(driftId);
       return NextResponse.json(result);
     } else if (action === 'reverse_commit') {
+      const { driftId } = driftRemediateSchema.parse(body);
       const result = await generateReverseCommitPatch(driftId);
       return NextResponse.json(result);
     } else {

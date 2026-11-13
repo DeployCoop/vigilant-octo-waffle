@@ -3,9 +3,10 @@ import {
   captureLiveFlows,
   getDnsTelemetry,
   simulatePacketDropInspection,
+  ebpfInspectSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
-import { apiError, routeError } from '@/lib/route-error';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,13 +42,10 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { sourcePod, targetPod, port = 80 } = body;
+    // C7: strict numerics — port must be a real int 1-65535 (no Number() coercion).
+    const { sourcePod, targetPod, port } = ebpfInspectSchema.parse(body);
 
-    if (!sourcePod || !targetPod) {
-      return apiError(400, 'sourcePod and targetPod are required');
-    }
-
-    const result = await simulatePacketDropInspection(sourcePod, targetPod, Number(port));
+    const result = await simulatePacketDropInspection(sourcePod, targetPod, port);
     return NextResponse.json(result);
   } catch (err) {
     return routeError(err, {
