@@ -30,6 +30,8 @@ const NODE = {
   status: {
     conditions: [{ type: 'Ready', status: 'True' }],
     nodeInfo: { osImage: 'Ubuntu 24.04', kubeletVersion: 'v1.30.0' },
+    // 16384000Ki = 15.625 GiB -> 15.6 after the 1-decimal rounding.
+    capacity: { cpu: '8', memory: '16384000Ki' },
   },
 };
 
@@ -88,6 +90,11 @@ describe('getTelemetry offline semantics', { concurrency: 1 }, () => {
     assert.deepEqual(t.nodes, []);
     assert.deepEqual(t.namespaces, []);
     assert.deepEqual(t.ingresses, []);
+    // New telemetry fields read empty/offline, never fabricated.
+    assert.equal(t.k8sVersion, '');
+    assert.equal(t.cpuCapacityCores, 0);
+    assert.equal(t.memoryCapacityGb, 0);
+    assert.equal(typeof t.server, 'string');
   });
 });
 
@@ -102,6 +109,10 @@ describe('getTelemetry cache (Phase 0, F1)', { concurrency: 1 }, () => {
     const first = await client.getTelemetry();
     assert.equal(first.isConnected, true);
     assert.equal(first.nodeCount, 1);
+    // Version + capacity come from the same node list (Phase 1 fleet).
+    assert.equal(first.k8sVersion, 'v1.30.0');
+    assert.equal(first.cpuCapacityCores, 8);
+    assert.equal(first.memoryCapacityGb, 15.6);
     assert.deepEqual(counts, { nodes: 1, pods: 1, namespaces: 1, ingresses: 1 });
 
     const second = await client.getTelemetry();
@@ -162,5 +173,18 @@ describe('getTelemetry cache (Phase 0, F1)', { concurrency: 1 }, () => {
     assert.deepEqual(counts, { nodes: 1, pods: 1, namespaces: 1, ingresses: 1 });
     await client.getTelemetry();
     assert.deepEqual(counts, { nodes: 1, pods: 1, namespaces: 1, ingresses: 1 });
+  });
+
+  it('reports the cluster server URL from the kubeconfig', async () => {
+    clearTelemetryCache();
+    const counts = counted();
+    const client = stubbedClient('telemetry-server', counts);
+    // The sandbox kubeconfig has no cluster for the stubbed context, so
+    // point getCurrentCluster at a scripted one (own-property shadow).
+    (client as unknown as { kc: { getCurrentCluster: () => { server: string } } }).kc.getCurrentCluster =
+      () => ({ server: 'https://10.0.0.1:6443' });
+    const t = await client.getTelemetry();
+    assert.equal(t.server, 'https://10.0.0.1:6443');
+    assert.equal(t.k8sVersion, 'v1.30.0');
   });
 });

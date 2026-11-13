@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   AlertTriangle,
   Globe,
@@ -13,7 +13,7 @@ interface FleetCluster {
   id: string;
   name: string;
   environment: 'local' | 'dev' | 'staging' | 'production';
-  provider: 'kind' | 'k3d' | 'eks' | 'gke' | 'aks';
+  provider: 'kind' | 'k3d' | 'k3s' | 'eks' | 'gke' | 'aks' | 'other';
   k8sVersion: string;
   nodeCount: number;
   podCount: number;
@@ -22,7 +22,14 @@ interface FleetCluster {
   status: 'ONLINE' | 'DEGRADED' | 'OFFLINE';
   isCurrentContext: boolean;
   location: string;
-  argocdSyncStatus: 'Synced' | 'OutOfSync' | 'Progressing';
+  argocdSyncStatus: 'Synced' | 'OutOfSync' | 'Progressing' | 'Unknown';
+}
+
+interface BroadcastClusterResult {
+  clusterId: string;
+  clusterName: string;
+  success: boolean;
+  message: string;
 }
 
 export default function FleetCommanderPage() {
@@ -33,20 +40,36 @@ export default function FleetCommanderPage() {
 
   // Broadcast state
   const [broadcastApp, setBroadcastApp] = useState('nextcloud');
-  const [selectedClusterIds, setSelectedClusterIds] = useState<string[]>(['cluster-kind-local', 'cluster-k3d-edge']);
+  const [catalogApps, setCatalogApps] = useState<{ id: string; name: string }[]>([]);
+  const [selectedClusterIds, setSelectedClusterIds] = useState<string[]>([]);
   const [broadcasting, setBroadcasting] = useState(false);
+  const [broadcastResults, setBroadcastResults] = useState<BroadcastClusterResult[]>([]);
+  // The default selection is derived from the first fleet load, once —
+  // the operator's own picks are never clobbered by a refresh.
+  const selectionInitialized = useRef(false);
 
-  const fetchClusters = async () => {
+  const fetchClusters = async (): Promise<FleetCluster[]> => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch('/api/fleet');
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
-      setClusters(data.clusters || []);
+      const list = (data.clusters || []) as FleetCluster[];
+      setClusters(list);
+      if (!selectionInitialized.current) {
+        selectionInitialized.current = true;
+        // Default: the ONLINE local clusters — the old hardcoded
+        // default (kind-local + k3d-edge) in derived form.
+        setSelectedClusterIds(
+          list.filter((c) => c.environment === 'local' && c.status === 'ONLINE').map((c) => c.id)
+        );
+      }
+      return list;
     } catch (err) {
       console.error('Failed to load fleet clusters:', err);
       setError(err instanceof Error ? err.message : 'Request failed');
+      return [];
     } finally {
       setLoading(false);
     }
@@ -54,6 +77,28 @@ export default function FleetCommanderPage() {
 
   useEffect(() => {
     fetchClusters();
+    // Catalog load lives inside the effect (it is only used here) so
+    // exhaustive-deps has nothing to ask for.
+    const fetchCatalog = async () => {
+      try {
+        const res = await fetch('/api/apps');
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
+        const apps = (data.apps || []) as { id: string; name: string }[];
+        setCatalogApps(apps.map((a) => ({ id: a.id, name: a.name })));
+        // Functional update reads the current selection without the
+        // effect depending on it: if the default is not in the catalog,
+        // take the first catalog app.
+        setBroadcastApp((current) =>
+          apps.length > 0 && !apps.some((a) => a.id === current) ? apps[0].id : current
+        );
+      } catch (err) {
+        console.error('Failed to load app catalog:', err);
+        // Fall back to the current value alone: the select still works
+        // and the broadcast posts a real catalog id (nextcloud) by default.
+      }
+    };
+    fetchCatalog();
   }, []);
 
   const handleSwitchContext = async (clusterId: string) => {
@@ -68,7 +113,14 @@ export default function FleetCommanderPage() {
       if (data.success) {
         setError(null);
         setActionMessage(data.message);
-        fetchClusters();
+        const fresh = await fetchClusters();
+        // Read-back: the refetched list must show the target as the
+        // active context, or the switch did not take effect.
+        const active = fresh.find((c) => c.id === clusterId);
+        if (!active?.isCurrentContext) {
+          setActionMessage(null);
+          setError(`Context switch to ${clusterId} did not take effect (the active context did not change).`);
+        }
       } else {
         setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
       }
@@ -80,6 +132,7 @@ export default function FleetCommanderPage() {
 
   const handleBroadcast = async () => {
     setBroadcasting(true);
+    setBroadcastResults([]);
     try {
       const res = await fetch('/api/fleet', {
         method: 'POST',
@@ -92,13 +145,12 @@ export default function FleetCommanderPage() {
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
-      if (data.success) {
-        setError(null);
-        setActionMessage(data.message);
-        fetchClusters();
-      } else {
-        setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
-      }
+      // A 200 carries per-cluster outcomes even on partial failure —
+      // the results panel (not the error banner) reports them.
+      setBroadcastResults((data.results || []) as BroadcastClusterResult[]);
+      setError(null);
+      setActionMessage(data.message);
+      fetchClusters();
     } catch (err) {
       console.error('Broadcast failed:', err);
       setError(err instanceof Error ? err.message : 'Request failed');
@@ -250,10 +302,14 @@ export default function FleetCommanderPage() {
               onChange={(e) => setBroadcastApp(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 font-mono"
             >
-              <option value="nextcloud">nextcloud (Storage & Sync Suite)</option>
-              <option value="keycloak">keycloak (Single Sign-On Auth)</option>
-              <option value="postgres">postgres (Database Cluster)</option>
-              <option value="traefik">traefik (Edge Ingress Gateway)</option>
+              {(catalogApps.length > 0
+                ? catalogApps
+                : [{ id: broadcastApp, name: broadcastApp }]
+              ).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.id} ({a.name})
+                </option>
+              ))}
             </select>
           </div>
 
@@ -291,6 +347,29 @@ export default function FleetCommanderPage() {
           </div>
         </div>
       </div>
+
+      {/* Per-cluster broadcast results (partial failure is reported per cluster) */}
+      {broadcastResults.length > 0 && (
+        <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-3">
+          <h2 className="text-base font-bold text-slate-100">Broadcast Results</h2>
+          <div className="space-y-2">
+            {broadcastResults.map((r) => (
+              <div
+                key={r.clusterId}
+                className="flex items-start gap-4 p-3 bg-slate-950/70 rounded-xl border border-slate-800/80 text-xs"
+              >
+                <span className="font-mono text-slate-200 shrink-0">{r.clusterName}</span>
+                <span
+                  className={`font-semibold shrink-0 ${r.success ? 'text-emerald-400' : 'text-rose-400'}`}
+                >
+                  {r.success ? 'Synced' : 'Failed'}
+                </span>
+                <span className="text-slate-400">{r.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

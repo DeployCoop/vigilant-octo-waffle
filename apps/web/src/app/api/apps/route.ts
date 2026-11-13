@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import {
   getCombinedAppCatalog,
+  listCatalogApps,
   DEPLOYMENT_PRESETS,
   loadProjectConfig,
   saveEnablerFile,
@@ -24,6 +25,15 @@ export async function GET(req: Request) {
     const domain = config.cluster.domain;
     const catalog = getCombinedAppCatalog(root);
 
+    // Preview wiring: which catalog apps can actually be deployed —
+    // an app needs an Argo manifest or a local chart. The previews
+    // page filters its template select to these.
+    const deployableIds = new Set(
+      listCatalogApps(root)
+        .filter((a) => a.hasArgoManifest || a.hasLocalChart)
+        .map((a) => a.appId)
+    );
+
     const enabledAppIds: string[] = [];
 
     const apps = catalog.map((app) => {
@@ -36,6 +46,7 @@ export async function GET(req: Request) {
       return {
         ...app,
         enabled: isEnabled,
+        deployable: deployableIds.has(app.id),
         ingressUrl,
       };
     });

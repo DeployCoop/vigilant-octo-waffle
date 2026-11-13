@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadProjectConfig, findProjectRoot } from './config.js';
 import { substituteVariables } from './template.js';
-import { mergeYamlStrings } from './yaml.js';
+import { mergeYamlStrings, parseYaml, stringifyYaml } from './yaml.js';
 import { applyInitializerDirectory } from './initializer.js';
 import { ensureNamespaceWithSecurity } from './namespaces.js';
 
@@ -32,6 +32,22 @@ export interface DeployAppOptions {
   wait?: boolean;
   timeoutSeconds?: number;
   envOverrides?: Record<string, string | undefined>;
+  /**
+   * Override the ArgoCD Application's metadata.name (preview wiring):
+   * the name baked into argo/<app>/argocd.yaml is one per app, so two
+   * previews of the same app would apply the same Application CR and
+   * the later create would hijack the earlier preview's destination
+   * namespace. A preview passes its own preview-scoped name here.
+   * Only applies to the argocd engine; ignored otherwise.
+   */
+  applicationName?: string;
+  /**
+   * Skip the init/<app> and init/<app>_<ingress> applies (preview
+   * wiring): those manifests carry the app's production hosts and
+   * namespaces, which must not leak into an isolated preview — the
+   * preview wires its own Ingress instead.
+   */
+  skipInitDirs?: boolean;
 }
 
 export interface DeployAppResult {
@@ -169,6 +185,26 @@ export function renderAppManifest(
 }
 
 /**
+ * Rewrite an ArgoCD Application manifest's metadata.name (preview wiring).
+ * Pure function, unit-tested: the rendered manifest keeps every other
+ * field, only the Application identity changes. Throws when the YAML
+ * does not parse to a mapping — a mangled manifest must fail loudly,
+ * never deploy under the wrong name.
+ */
+export function rewriteApplicationName(manifestYaml: string, name: string): string {
+  const doc = parseYaml<Record<string, unknown>>(manifestYaml);
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    throw new Error('ArgoCD Application manifest did not parse to a mapping');
+  }
+  const metadata =
+    doc.metadata && typeof doc.metadata === 'object' && !Array.isArray(doc.metadata)
+      ? { ...(doc.metadata as Record<string, unknown>) }
+      : {};
+  metadata.name = name;
+  return stringifyYaml({ ...doc, metadata });
+}
+
+/**
  * Unified application lifecycle deployer: supports ArgoCD GitOps, Helm direct, and FluxCD
  */
 export async function deployCatalogApp(
@@ -193,9 +229,14 @@ export async function deployCatalogApp(
   // 3. Execution based on engine
   try {
     if (engine === 'argocd') {
-      const renderedManifest = renderAppManifest(projectRoot, appId, options.envOverrides);
+      let renderedManifest = renderAppManifest(projectRoot, appId, options.envOverrides);
       if (!renderedManifest) {
         throw new Error(`No ArgoCD manifest found for application '${appId}' in argo/${appId}/argocd.yaml`);
+      }
+      // Preview wiring: give this deploy its own Application identity
+      // so it cannot hijack another preview of the same app.
+      if (options.applicationName) {
+        renderedManifest = rewriteApplicationName(renderedManifest, options.applicationName);
       }
 
       // Ensure argocd namespace exists
@@ -208,10 +249,13 @@ export async function deployCatalogApp(
       // Apply Application CRD directly to Kubernetes
       await execFileAsync('kubectl', ['apply', '-f', '-'], { cwd: projectRoot, input: renderedManifest });
 
-      // 4. Post-initializers (init/<appId> and init/<appId>_<ingress>)
-      await applyInitializerDirectory(projectRoot, `init/${appId}`);
-      const ingressType = config.cluster.ingress || config.raw.THIS_CLUSTER_INGRESS || 'traefik';
-      await applyInitializerDirectory(projectRoot, `init/${appId}_${ingressType}`);
+      // 4. Post-initializers (init/<appId> and init/<appId>_<ingress>),
+      // unless the caller wires its own ingress (preview wiring).
+      if (!options.skipInitDirs) {
+        await applyInitializerDirectory(projectRoot, `init/${appId}`);
+        const ingressType = config.cluster.ingress || config.raw.THIS_CLUSTER_INGRESS || 'traefik';
+        await applyInitializerDirectory(projectRoot, `init/${appId}_${ingressType}`);
+      }
 
       return {
         appId,
@@ -234,7 +278,9 @@ export async function deployCatalogApp(
         { cwd: projectRoot, env: config.raw }
       );
 
-      await applyInitializerDirectory(projectRoot, `init/${appId}`);
+      if (!options.skipInitDirs) {
+        await applyInitializerDirectory(projectRoot, `init/${appId}`);
+      }
 
       return {
         appId,

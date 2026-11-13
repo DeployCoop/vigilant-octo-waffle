@@ -15,6 +15,55 @@ export interface ClusterTelemetry {
   nodes: { name: string; status: string; roles: string[]; age: string; osImage?: string }[];
   namespaces: string[];
   ingresses: { name: string; namespace: string; host: string; class: string }[];
+  /** Kubelet version of the first node that reports one ('' when none). */
+  k8sVersion: string;
+  /** Sum over nodes of status.capacity.cpu, in cores. */
+  cpuCapacityCores: number;
+  /** Sum over nodes of status.capacity.memory, in GiB (1 decimal). */
+  memoryCapacityGb: number;
+  /** Cluster server URL from the kubeconfig ('' when no current cluster). */
+  server: string;
+}
+
+/** Parse a Kubernetes CPU quantity ("8", "4000m") to cores. */
+function parseCpuCores(value: string | undefined): number {
+  if (!value) return 0;
+  const trimmed = value.trim();
+  if (trimmed.endsWith('m')) {
+    const n = parseFloat(trimmed.slice(0, -1));
+    return Number.isFinite(n) ? n / 1000 : 0;
+  }
+  const n = parseFloat(trimmed);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Parse a Kubernetes memory quantity ("16Gi", "16384000Ki", "17179869184")
+ * to GiB. Binary (Ki/Mi/Gi/…) and decimal (K/M/G/…) suffixes both occur
+ * on node capacity; an unparseable value contributes 0, never NaN.
+ */
+function parseMemoryGiB(value: string | undefined): number {
+  if (!value) return 0;
+  const match = /^([0-9.]+)(Ki|Mi|Gi|Ti|Pi|Ei|K|M|G|T|P|E)?$/.exec(value.trim());
+  if (!match) return 0;
+  const n = parseFloat(match[1]);
+  if (!Number.isFinite(n)) return 0;
+  const bytesPerUnit: Record<string, number> = {
+    Ki: 1024,
+    Mi: 1024 ** 2,
+    Gi: 1024 ** 3,
+    Ti: 1024 ** 4,
+    Pi: 1024 ** 5,
+    Ei: 1024 ** 6,
+    K: 1000,
+    M: 1000 ** 2,
+    G: 1000 ** 3,
+    T: 1000 ** 4,
+    P: 1000 ** 5,
+    E: 1000 ** 6,
+    '': 1,
+  };
+  return (n * (bytesPerUnit[match[2] ?? ''] ?? 0)) / 1024 ** 3;
 }
 
 export interface PodInfo {
@@ -70,6 +119,81 @@ export interface ArgoAppStatus {
   destinationNamespace?: string;
 }
 
+/**
+ * Secret metadata for the SecretOps audit (Batch C wiring).
+ *
+ * `dataKeys` carries KEY NAMES ONLY — never values. The list read must
+ * not pull every secret value in the cluster into memory on every
+ * audit; the full data map is available only through `getSecret`, which
+ * the rotation flow uses to rebuild the secret manifest, and those
+ * values are held in memory only for the apply — never logged,
+ * persisted, or returned to callers.
+ */
+export interface SecretInfo {
+  name: string;
+  namespace: string;
+  type: string;
+  creationTimestamp?: string;
+  annotations: Record<string, string>;
+  labels: Record<string, string>;
+  ownerKinds: string[];
+  dataKeys: string[];
+  resourceVersion?: string;
+  immutable?: boolean;
+}
+
+/** Single-secret read for rotation: SecretInfo plus the full data map. */
+export interface SecretDetail extends SecretInfo {
+  data: Record<string, string>;
+}
+
+export interface ConfigMapInfo {
+  name: string;
+  namespace: string;
+  /** String data values, scanned in memory for leaked credentials. */
+  data: Record<string, string>;
+}
+
+export interface PodEnvVar {
+  name: string;
+  /** Literal value, when the env var sets one directly. */
+  value?: string;
+  /** secretKeyRef / configMapKeyRef source, when the value comes from a Secret/ConfigMap. */
+  valueFromKind?: 'secretKeyRef' | 'configMapKeyRef';
+  valueFromName?: string;
+  valueFromKey?: string;
+}
+
+export interface PodContainerSpec {
+  name: string;
+  env: PodEnvVar[];
+  envFromSecrets: string[];
+  envFromConfigMaps: string[];
+  args: string[];
+}
+
+export interface PodVolumeSpec {
+  name: string;
+  secretName?: string;
+  configMapName?: string;
+}
+
+export interface PodSpecInfo {
+  name: string;
+  namespace: string;
+  ownerKind?: string;
+  ownerName?: string;
+  containers: PodContainerSpec[];
+  volumes: PodVolumeSpec[];
+}
+
+export interface ExternalSecretsStatus {
+  installed: boolean;
+  externalSecretCount: number;
+  readyExternalSecretCount: number;
+  storeReady: boolean;
+}
+
 // Wire shapes for the CustomObjectsApi calls below. The client returns
 // untyped JSON for custom resources, so these interfaces describe the
 // fields this module actually reads, and status strings are narrowed
@@ -117,6 +241,53 @@ interface ArgoApplicationObject {
     health?: { status?: string; message?: string };
     sync?: { status?: string; revision?: string };
   };
+}
+
+interface ExternalSecretObject {
+  metadata?: { name?: string; namespace?: string };
+  status?: { conditions?: CustomObjectCondition[] };
+}
+
+interface ExternalSecretStoreObject {
+  metadata?: { name?: string };
+  status?: { conditions?: CustomObjectCondition[] };
+}
+
+/**
+ * Map a V1Secret to SecretInfo: metadata plus data KEY NAMES ONLY.
+ * Values are deliberately dropped here — the list read must never pull
+ * secret values into memory.
+ */
+function secretInfoOf(s: k8s.V1Secret): SecretInfo {
+  return {
+    name: s.metadata?.name || '',
+    namespace: s.metadata?.namespace || '',
+    type: s.type || 'Opaque',
+    creationTimestamp: s.metadata?.creationTimestamp?.toISOString(),
+    annotations: { ...(s.metadata?.annotations || {}) },
+    labels: { ...(s.metadata?.labels || {}) },
+    ownerKinds: (s.metadata?.ownerReferences || [])
+      .map((o) => o.kind)
+      .filter((k): k is string => !!k),
+    dataKeys: Object.keys(s.data || {}),
+    resourceVersion: s.metadata?.resourceVersion,
+    immutable: s.immutable,
+  };
+}
+
+/**
+ * The @kubernetes/client-node API client throws HttpError (with a
+ * numeric `statusCode`) for HTTP failures. A 404 means "absent" for
+ * single-object reads and "CRD not installed" for custom-object
+ * lists; anything else is a real failure and must propagate.
+ */
+function isNotFoundError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const statusCode = (err as { statusCode?: unknown }).statusCode;
+    if (statusCode === 404) return true;
+    if (/not found/i.test(err.message)) return true;
+  }
+  return false;
 }
 
 // Argo CD's health/sync status vocabularies match the unions declared on
@@ -232,6 +403,10 @@ export class K8sClient {
         nodes: [],
         namespaces: [],
         ingresses: [],
+        k8sVersion: '',
+        cpuCapacityCores: 0,
+        memoryCapacityGb: 0,
+        server: this.kc.getCurrentCluster()?.server ?? '',
       };
     }
 
@@ -317,6 +492,21 @@ export class K8sClient {
         }));
       });
 
+      // Version + capacity come from the same node list, not from a
+      // second call: kubelet version of the first node that reports one,
+      // and the summed status.capacity across nodes. A cluster that
+      // reports no capacity (e.g. a stubbed API) reads as 0, never NaN.
+      const k8sVersion =
+        (nodesRes.items || [])
+          .map((n: k8s.V1Node) => n.status?.nodeInfo?.kubeletVersion || '')
+          .find((v) => v !== '') ?? '';
+      let cpuCapacityCores = 0;
+      let memoryCapacityGb = 0;
+      for (const n of nodesRes.items || []) {
+        cpuCapacityCores += parseCpuCores(n.status?.capacity?.cpu);
+        memoryCapacityGb += parseMemoryGiB(n.status?.capacity?.memory);
+      }
+
       const telemetry: ClusterTelemetry = {
         isConnected: nodes.length > 0,
         context: currentContext,
@@ -329,6 +519,10 @@ export class K8sClient {
         nodes,
         namespaces,
         ingresses,
+        k8sVersion,
+        cpuCapacityCores: Math.round(cpuCapacityCores * 10) / 10,
+        memoryCapacityGb: Math.round(memoryCapacityGb * 10) / 10,
+        server: this.kc.getCurrentCluster()?.server ?? '',
       };
       telemetryCache.set(currentContext, { telemetry, fetchedAtMs: Date.now() });
       return copyTelemetry(telemetry);
@@ -349,6 +543,10 @@ export class K8sClient {
         nodes: [],
         namespaces: [],
         ingresses: [],
+        k8sVersion: '',
+        cpuCapacityCores: 0,
+        memoryCapacityGb: 0,
+        server: this.kc.getCurrentCluster()?.server ?? '',
       };
       telemetryCache.set(currentContext, { telemetry, fetchedAtMs: Date.now() });
       return copyTelemetry(telemetry);
@@ -362,14 +560,52 @@ export class K8sClient {
     };
   }
 
-  public async switchContext(contextName: string): Promise<void> {
-    await execFileAsync('kubectl', ['config', 'use-context', contextName]);
-    // Reload kubeconfig
-    this.kc.loadFromDefault();
+  /**
+   * Rebuild the API clients for the kubeconfig's current context.
+   * `makeApiClient` throws when there is no current cluster, so callers
+   * must only call this when a current context exists.
+   */
+  private applyContext(): void {
     this.coreApi = this.kc.makeApiClient(k8s.CoreV1Api);
     this.netApi = this.kc.makeApiClient(k8s.NetworkingV1Api);
     this.customApi = this.kc.makeApiClient(k8s.CustomObjectsApi);
     this.storageApi = this.kc.makeApiClient(k8s.StorageV1Api);
+  }
+
+  /**
+   * Run `fn` against the named kubeconfig context without touching the
+   * kubeconfig file: the switch is in-memory only (`setCurrentContext`
+   * + rebuilt API clients) and the previous context is restored in a
+   * `finally`. Throws when the context does not exist in the kubeconfig.
+   * When the kubeconfig had no current context there is nothing to
+   * restore to (rebuilding clients with no current cluster throws), so
+   * the client is left pointed at the probed context — fleet probes use
+   * a request-scoped client that is discarded afterwards. The telemetry
+   * cache is keyed by context, so probes under different contexts do
+   * not collide.
+   */
+  public async withContext<T>(contextName: string, fn: (client: K8sClient) => Promise<T>): Promise<T> {
+    if (!this.kc.contexts.some((c) => c.name === contextName)) {
+      throw new Error(`Kubernetes context '${contextName}' not found in kubeconfig`);
+    }
+    const previous = this.kc.currentContext || '';
+    this.kc.setCurrentContext(contextName);
+    this.applyContext();
+    try {
+      return await fn(this);
+    } finally {
+      if (previous) {
+        this.kc.setCurrentContext(previous);
+        this.applyContext();
+      }
+    }
+  }
+
+  public async switchContext(contextName: string): Promise<void> {
+    await execFileAsync('kubectl', ['config', 'use-context', contextName]);
+    // Reload kubeconfig
+    this.kc.loadFromDefault();
+    this.applyContext();
     // The cache is keyed by context, but drop it explicitly: a switch
     // that leaves currentContext empty (no current-context in the
     // kubeconfig) would otherwise keep serving the old context's entry.
@@ -588,6 +824,148 @@ export class K8sClient {
       return result;
     } catch {
       return result;
+    }
+  }
+
+  /**
+   * List all Secrets (metadata + data key names only — never values).
+   *
+   * Unlike the older read methods in this class, which swallow API
+   * failures into empty lists, this throws on API failure: the SecretOps
+   * audit must fail loudly rather than report "0 secrets, 0 leaks" for
+   * a dead API server. The no-cluster case is gated earlier by the
+   * getTelemetry() probe.
+   */
+  public async getSecrets(): Promise<SecretInfo[]> {
+    if (!this.coreApi) throw new Error('Kubernetes API not connected');
+    const res = await this.coreApi.listSecretForAllNamespaces();
+    return (res.items || []).map((s: k8s.V1Secret) => secretInfoOf(s));
+  }
+
+  /**
+   * Read one Secret with its full data map (base64 values), for the
+   * rotation flow's manifest rebuild. Returns null on a 404; any other
+   * API failure throws. Values are held in memory only — never logged,
+   * persisted, or returned to callers.
+   */
+  public async getSecret(name: string, namespace: string): Promise<SecretDetail | null> {
+    if (!this.coreApi) throw new Error('Kubernetes API not connected');
+    try {
+      const s = await this.coreApi.readNamespacedSecret({ name, namespace });
+      return { ...secretInfoOf(s), data: { ...(s.data || {}) } };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  /** List all ConfigMaps with their string data (scanned in memory by the audit). */
+  public async getConfigMaps(): Promise<ConfigMapInfo[]> {
+    if (!this.coreApi) throw new Error('Kubernetes API not connected');
+    const res = await this.coreApi.listConfigMapForAllNamespaces();
+    return (res.items || []).map((cm: k8s.V1ConfigMap) => ({
+      name: cm.metadata?.name || '',
+      namespace: cm.metadata?.namespace || '',
+      data: { ...(cm.data || {}) },
+    }));
+  }
+
+  /**
+   * List pod specs — env/args/volumes/owners — for the leak scan and
+   * rotation's dependent-workload discovery. Values are needed for
+   * pattern matching and are held in memory only by the caller.
+   */
+  public async getPodSpecs(): Promise<PodSpecInfo[]> {
+    if (!this.coreApi) throw new Error('Kubernetes API not connected');
+    const res = await this.coreApi.listPodForAllNamespaces();
+    return (res.items || []).map((pod: k8s.V1Pod) => {
+      const owner = pod.metadata?.ownerReferences?.[0];
+      return {
+        name: pod.metadata?.name || '',
+        namespace: pod.metadata?.namespace || '',
+        ownerKind: owner?.kind,
+        ownerName: owner?.name,
+        containers: (pod.spec?.containers || []).map((c) => ({
+          name: c.name,
+          env: (c.env || []).map((e) => {
+            const entry: PodEnvVar = { name: e.name };
+            if (e.value !== undefined) entry.value = e.value;
+            const secretRef = e.valueFrom?.secretKeyRef;
+            const cmRef = e.valueFrom?.configMapKeyRef;
+            if (secretRef) {
+              entry.valueFromKind = 'secretKeyRef';
+              entry.valueFromName = secretRef.name;
+              entry.valueFromKey = secretRef.key;
+            } else if (cmRef) {
+              entry.valueFromKind = 'configMapKeyRef';
+              entry.valueFromName = cmRef.name;
+              entry.valueFromKey = cmRef.key;
+            }
+            return entry;
+          }),
+          envFromSecrets: (c.envFrom || [])
+            .map((f) => f.secretRef?.name)
+            .filter((n): n is string => !!n),
+          envFromConfigMaps: (c.envFrom || [])
+            .map((f) => f.configMapRef?.name)
+            .filter((n): n is string => !!n),
+          args: [...(c.args || [])],
+        })),
+        volumes: (pod.spec?.volumes || []).map((v) => {
+          const entry: PodVolumeSpec = { name: v.name };
+          if (v.secret?.secretName) entry.secretName = v.secret.secretName;
+          if (v.configMap?.name) entry.configMapName = v.configMap.name;
+          return entry;
+        }),
+      };
+    });
+  }
+
+  /**
+   * External Secrets Operator status for the audit's vault-connected
+   * flag. `installed` is false when the ESO CRDs are absent (404);
+   * any other API failure throws. Connected means a SecretStore is
+   * Ready or at least one ExternalSecret reports Ready — either proves
+   * the backend (Vault) was reached.
+   */
+  public async getExternalSecretsStatus(): Promise<ExternalSecretsStatus> {
+    const empty: ExternalSecretsStatus = {
+      installed: false,
+      externalSecretCount: 0,
+      readyExternalSecretCount: 0,
+      storeReady: false,
+    };
+    if (!this.customApi) return empty;
+    try {
+      const [esRes, storeRes] = await Promise.all([
+        this.customApi.listClusterCustomObject({
+          group: 'external-secrets.io',
+          version: 'v1beta1',
+          plural: 'externalsecrets',
+        }),
+        this.customApi.listClusterCustomObject({
+          group: 'external-secrets.io',
+          version: 'v1beta1',
+          plural: 'clustersecretstores',
+        }),
+      ]);
+      const externals = ((esRes as { items?: ExternalSecretObject[] }).items || []) as ExternalSecretObject[];
+      const stores = ((storeRes as { items?: ExternalSecretStoreObject[] }).items || []) as ExternalSecretStoreObject[];
+      const readyCount = externals.filter((es) =>
+        es.status?.conditions?.some((c) => c.type === 'Ready' && c.status === 'True')
+      ).length;
+      const storeReady = stores.some((s) =>
+        s.status?.conditions?.some((c) => c.type === 'Ready' && c.status === 'True')
+      );
+      return {
+        installed: true,
+        externalSecretCount: externals.length,
+        readyExternalSecretCount: readyCount,
+        storeReady,
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return empty;
+      throw err;
     }
   }
 }
