@@ -136,32 +136,26 @@ export async function rotateSecretCredential(
   };
 }
 
+/**
+ * SealedSecret generation is NOT implemented.
+ *
+ * The previous implementation emitted a manifest whose "encryptedData"
+ * values were a fixed sample prefix plus the first bytes of the caller's
+ * plaintext, base64-encoded — not encryption at all, and labeled as safe
+ * to commit to public repositories. Emitting anything labeled "sealed"
+ * without real sealed-secrets encryption (kubeseal-style, with the
+ * cluster's public cert) is a credential-leak vector, so this function
+ * refuses instead of fabricating output. It deliberately ignores its
+ * arguments (including any plaintext) so no caller input can reach an
+ * error message or a manifest.
+ */
 export function generateSealedSecretManifest(
-  secretName: string,
-  namespace: string,
-  keyValues: Record<string, string>
+  _secretName: string,
+  _namespace: string,
+  _keyValues: Record<string, string>
 ): string {
-  const encryptedFields = Object.entries(keyValues)
-    .map(
-      ([k, v]) =>
-        `    ${k}: AgA4b...sampleSealedCiphertext...${Buffer.from(v).toString('base64').slice(0, 10)}==`
-    )
-    .join('\n');
-
-  return `apiVersion: bitnami.com/v1alpha1
-kind: SealedSecret
-metadata:
-  name: ${secretName}
-  namespace: ${namespace}
-  annotations:
-    sealedsecrets.bitnami.com/cluster-wide: "false"
-spec:
-  encryptedData:
-${encryptedFields}
-  template:
-    metadata:
-      name: ${secretName}
-      namespace: ${namespace}
-    type: Opaque
-`;
+  throw new Error(
+    'SealedSecret encryption is not implemented: refusing to emit a fake sealed manifest. ' +
+      'Generate sealed values with kubeseal against the cluster sealed-secrets public key instead.'
+  );
 }

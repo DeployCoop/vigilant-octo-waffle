@@ -88,6 +88,17 @@ if [[ ${#MODULES_TO_LOAD[@]} -eq 0 ]]; then
   MODULES_TO_LOAD=("${DEFAULT_MODULES[@]}")
 fi
 
+# Kernel module names are [a-z0-9_]+ by construction (modprobe normalizes
+# dashes to underscores), so anything else can only be an injection attempt
+# into the remote MODULES=(...) array / sudo bash -c string below. Reject
+# before any local or remote work happens.
+for mod in "${MODULES_TO_LOAD[@]}"; do
+  if [[ ! ${mod} =~ ^[a-z0-9_]+$ ]]; then
+    echo "Error: Invalid kernel module name: '${mod}' (expected [a-z0-9_]+)" >&2
+    exit 1
+  fi
+done
+
 load_module_local() {
   local mod="$1"
   echo "==> Checking kernel module: ${mod}"

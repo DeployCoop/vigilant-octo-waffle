@@ -1,3 +1,6 @@
+import { requireFound } from './studio-store.js';
+import { stringifyYaml } from './yaml.js';
+
 export interface WasmRuntimeInfo {
   supported: boolean;
   activeRuntimeClasses: string[];
@@ -110,52 +113,61 @@ export async function deployWasmMicroservice(
   namespace: string = 'default'
 ): Promise<{ success: boolean; manifest: string; message: string }> {
   const catalog = await getWasmCatalog();
-  const service = catalog.find((s) => s.id === serviceId) || catalog[0];
+  // C4: an unknown service id is a miss, never silently deploy catalog[0].
+  const service = requireFound(catalog, (s) => s.id === serviceId);
+  if (!service) {
+    return {
+      success: false,
+      manifest: '',
+      message: `Wasm microservice ${serviceId} not found in catalog.`,
+    };
+  }
 
-  const manifest = `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ${service.id}
-  namespace: ${namespace}
-  labels:
-    app.kubernetes.io/runtime: wasm
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: ${service.id}
-  template:
-    metadata:
-      labels:
-        app: ${service.id}
-    spec:
-      runtimeClassName: ${service.runtimeClass}
-      containers:
-      - name: ${service.id}
-        image: localhost:5000/wasm/${service.id}:v1.0.0
-        command: ["/${service.id}.wasm"]
-        resources:
-          limits:
-            cpu: 100m
-            memory: 32Mi
-          requests:
-            cpu: 10m
-            memory: 8Mi
-        ports:
-        - containerPort: ${service.ports[0]}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: ${service.id}
-  namespace: ${namespace}
-spec:
-  ports:
-  - port: ${service.ports[0]}
-    targetPort: ${service.ports[0]}
-  selector:
-    app: ${service.id}
-`;
+  // C6: build the manifests as objects and serialize them — values can no
+  // longer break out of the YAML structure (a newline in `namespace` used
+  // to inject arbitrary fields). Names are validated at the route.
+  const port = service.ports[0] ?? 80;
+  const deployment = {
+    apiVersion: 'apps/v1',
+    kind: 'Deployment',
+    metadata: {
+      name: service.id,
+      namespace,
+      labels: { 'app.kubernetes.io/runtime': 'wasm' },
+    },
+    spec: {
+      replicas: 1,
+      selector: { matchLabels: { app: service.id } },
+      template: {
+        metadata: { labels: { app: service.id } },
+        spec: {
+          runtimeClassName: service.runtimeClass,
+          containers: [
+            {
+              name: service.id,
+              image: `localhost:5000/wasm/${service.id}:v1.0.0`,
+              command: [`/${service.id}.wasm`],
+              resources: {
+                limits: { cpu: '100m', memory: '32Mi' },
+                requests: { cpu: '10m', memory: '8Mi' },
+              },
+              ports: [{ containerPort: port }],
+            },
+          ],
+        },
+      },
+    },
+  };
+  const serviceManifest = {
+    apiVersion: 'v1',
+    kind: 'Service',
+    metadata: { name: service.id, namespace },
+    spec: {
+      ports: [{ port, targetPort: port }],
+      selector: { app: service.id },
+    },
+  };
+  const manifest = `${stringifyYaml(deployment)}---\n${stringifyYaml(serviceManifest)}`;
 
   return {
     success: true,

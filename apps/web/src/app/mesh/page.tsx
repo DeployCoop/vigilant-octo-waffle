@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import {
+  AlertTriangle,
   Lock,
   Key,
   RefreshCw,
   ArrowRight,
 } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface WorkloadIdentity {
   podName: string;
@@ -38,19 +40,23 @@ export default function MeshSecurityPage() {
   const [identities, setIdentities] = useState<WorkloadIdentity[]>([]);
   const [links, setLinks] = useState<TlsConnectionLink[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [enforcingNs, setEnforcingNs] = useState('nextcloud');
   const [enforcing, setEnforcing] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const fetchMeshData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/mesh');
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       setIdentities(data.identities || []);
       setLinks(data.links || []);
     } catch (err) {
       console.error('Failed to load mesh security data:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setLoading(false);
     }
@@ -69,12 +75,17 @@ export default function MeshSecurityPage() {
         body: JSON.stringify({ namespace }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
+        setError(null);
         setActionMessage(data.message);
         fetchMeshData();
+      } else {
+        setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
       }
     } catch (err) {
       console.error('Enforce strict mTLS failed:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setEnforcing(false);
     }
@@ -82,6 +93,12 @@ export default function MeshSecurityPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
+      {error && (
+        <div className="flex items-center space-x-2 px-4 py-3 bg-rose-950/50 border border-rose-800 rounded text-rose-300 text-sm">
+          <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
         <div className="flex items-center space-x-3">

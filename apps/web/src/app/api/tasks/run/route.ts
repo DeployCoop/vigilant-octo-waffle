@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProjectRoot } from '@/lib/project';
 import { processManager, loadProjectConfig, validateCommand } from '@vow/orchestrator';
-import { authorizeRequest } from '@/lib/authz';
+import { authorizeRequest, resolveAuthzContext } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
 
 export async function POST(req: Request) {
@@ -26,9 +26,14 @@ export async function POST(req: Request) {
       return apiError(400, `Command rejected by orchestrator allowlist: ${validation.reason}`);
     }
 
+    // Task scoping (bug-hunt Batch A5): record the launching principal
+    // so GET /api/tasks and /api/tasks/stream can scope reads to it.
+    // Null while authz is disabled (system task, visible to all).
+    const { principal } = await resolveAuthzContext(req);
     const task = processManager.runCommand(command, cleanArgs, {
       cwd: root,
       env: config.raw,
+      principalId: principal?.id ?? null,
     });
 
     return NextResponse.json({

@@ -3,6 +3,7 @@ import {
   getServiceSlos,
   calculateBurnRates,
   toggleSloCircuitBreaker,
+  sloToggleSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
@@ -19,6 +20,8 @@ export async function GET(req: Request) {
 
     if (serviceId) {
       const burnRate = await calculateBurnRates(serviceId);
+      // C8: an unknown service 404s instead of returning another service's rates.
+      if (!burnRate) return apiError(404, `SLO for service ${serviceId} not found`);
       return NextResponse.json(burnRate);
     }
 
@@ -38,14 +41,14 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { serviceId, action, tripped } = body;
-
-    if (!serviceId) {
-      return apiError(400, 'serviceId is required');
-    }
+    const { action } = body;
 
     if (action === 'toggle_circuit_breaker') {
-      const result = await toggleSloCircuitBreaker(serviceId, Boolean(tripped));
+      // C7: serviceId non-empty, tripped a real boolean (no Boolean() coercion).
+      const { serviceId, tripped } = sloToggleSchema.parse(body);
+      const result = await toggleSloCircuitBreaker(serviceId, tripped);
+      // C8: an unknown service 404s instead of returning success:false.
+      if (!result.success) return apiError(404, result.message);
       return NextResponse.json(result);
     }
 

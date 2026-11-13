@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { processManager } from './executor.js';
 
 export interface PodMetric {
   name: string;
@@ -58,8 +55,20 @@ export async function getPodMetrics(): Promise<{ metrics: PodMetric[]; history: 
   const metrics: PodMetric[] = [];
   const now = new Date().toLocaleTimeString();
 
-  try {
-    const { stdout } = await execAsync('kubectl top pods -A --no-headers 2>/dev/null');
+  // Q8: argv form through the task executor (validator + task log)
+  // instead of a raw shell string. A failed `kubectl top` (no cluster,
+  // no metrics-server) still reads as empty metrics, as before — the
+  // old `2>/dev/null` only ever hid the same failure.
+  // persist: false — the cluster page polls this every 8s, and TaskStore
+  // has no row pruning; a persisted row per poll would grow SQLite
+  // without bound (~900 rows/hour per open tab). Same rationale as the
+  // watcher poll loop in waffle/watcher.ts.
+  const podsTop = await processManager.runCommandAndWait('kubectl', ['top', 'pods', '-A', '--no-headers'], {
+    cwd: process.cwd(),
+    persist: false,
+  });
+  if (podsTop.code === 0) {
+    const stdout = podsTop.stdout;
     const lines = stdout.trim().split('\n').filter(Boolean);
 
     for (const line of lines) {
@@ -88,9 +97,9 @@ export async function getPodMetrics(): Promise<{ metrics: PodMetric[]; history: 
         podMetricHistory.set(key, points);
       }
     }
-  } catch {
-    // metrics-server not yet ready, return fallback empty metrics
   }
+  // A non-zero exit (no cluster, no metrics-server) leaves metrics
+  // empty, as the old `2>/dev/null` catch-all did.
 
   const historyObj: Record<string, SparklinePoint[]> = {};
   for (const [k, v] of podMetricHistory.entries()) {
@@ -103,9 +112,17 @@ export async function getPodMetrics(): Promise<{ metrics: PodMetric[]; history: 
 export async function getNodeMetrics(): Promise<NodeMetric[]> {
   const metrics: NodeMetric[] = [];
 
-  try {
-    const { stdout } = await execAsync('kubectl top nodes --no-headers 2>/dev/null');
-    const lines = stdout.trim().split('\n').filter(Boolean);
+  // Q8: argv form through the task executor (validator + task log)
+  // instead of a raw shell string. A non-zero exit (no cluster, no
+  // metrics-server) leaves metrics empty, as before.
+  // persist: false — see getPodMetrics above; same 8s poll, same
+  // unbounded-row hazard.
+  const nodesTop = await processManager.runCommandAndWait('kubectl', ['top', 'nodes', '--no-headers'], {
+    cwd: process.cwd(),
+    persist: false,
+  });
+  if (nodesTop.code === 0) {
+    const lines = nodesTop.stdout.trim().split('\n').filter(Boolean);
 
     for (const line of lines) {
       const parts = line.trim().split(/\s+/);
@@ -120,8 +137,6 @@ export async function getNodeMetrics(): Promise<NodeMetric[]> {
         });
       }
     }
-  } catch {
-    // metrics-server not yet ready
   }
 
   return metrics;

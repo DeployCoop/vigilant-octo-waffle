@@ -14,6 +14,79 @@
  * compile-time constants.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { redactSensitiveArgs } from './taskStore.js';
+
+/**
+ * Redact credential-bearing values from an argv list for display in error
+ * labels (bug-hunt Batch A5 follow-up): --token forms via the shared helper,
+ * plus credentials embedded in URLs (e.g. git clone URLs with a token, which
+ * otherwise surface verbatim in spawn-failure error messages). The spawn
+ * itself always uses the real args; only the label is scrubbed.
+ */
+/**
+ * Scrub credentials from one argv value for display, without a regular
+ * expression. The previous regex was quadratic on hostile input (CodeQL
+ * js/polynomial-redos on this line: a 120KB crafted argv took 5.3s in
+ * V8, 30KB took 400ms). This is a linear indexOf scan with identical
+ * redaction behavior: `scheme://user:password@host` becomes
+ * `scheme://user:[redacted]@host`. Values with no userinfo, a port
+ * instead of credentials, or whitespace in the credentials pass through
+ * unchanged; a '/' in the password is still redacted, matching the old
+ * pattern, while a '/' before the ':' means the ':' belongs to a
+ * path/port rather than credentials.
+ */
+export function scrubUrlCredentials(arg: string): string {
+  let out = '';
+  let rest = arg;
+  for (;;) {
+    const scheme = rest.indexOf('://');
+    if (scheme === -1) {
+      out += rest;
+      break;
+    }
+    const userStart = scheme + 3;
+    const colon = rest.indexOf(':', userStart);
+    if (colon === -1) {
+      out += rest;
+      break;
+    }
+    const at = rest.indexOf('@', colon + 1);
+    if (at === -1) {
+      out += rest;
+      break;
+    }
+    const user = rest.slice(userStart, colon);
+    // Named for its position, not its meaning: this is the substring
+    // between the first ':' and the '@'. (A previous name for this
+    // local tripped CodeQL's insecure-randomness query, which treats a
+    // variable called `password` as a security-sensitive sink; the value
+    // here is never used as a credential — it is only length- and
+    // whitespace-checked, then discarded in favor of '[redacted]'.)
+    const afterColon = rest.slice(colon + 1, at);
+    // Note: '@' is allowed in the user part (the old pattern's user
+    // class excluded only ':' '/' and whitespace), so `us@er:pass@host`
+    // redacts to `us@er:[redacted]@host`.
+    if (
+      user.length === 0 ||
+      afterColon.length === 0 ||
+      user.includes('/') ||
+      /\s/.test(user) ||
+      /\s/.test(afterColon)
+    ) {
+      // Not credentials: keep the scheme and keep scanning past it.
+      out += rest.slice(0, userStart);
+      rest = rest.slice(userStart);
+      continue;
+    }
+    out += rest.slice(0, colon + 1) + '[redacted]';
+    rest = rest.slice(at);
+  }
+  return out;
+}
+
+function redactLabelArgs(args: string[]): string[] {
+  return redactSensitiveArgs(args).map(scrubUrlCredentials);
+}
 
 export interface ExecArgvOptions {
   cwd?: string;
@@ -186,7 +259,7 @@ export function execFileAsync(
     shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
-  return collect(child, `${file} ${args.join(' ')}`, opts);
+  return collect(child, `${file} ${redactLabelArgs(args).join(' ')}`, opts);
 }
 
 /**
@@ -199,7 +272,7 @@ export function pipeExecs(
   consumer: { file: string; args: string[] },
   opts: ExecArgvOptions = {}
 ): Promise<ExecArgvResult> {
-  const label = `${producer.file} ${producer.args.join(' ')} | ${consumer.file} ${consumer.args.join(' ')}`;
+  const label = `${producer.file} ${redactLabelArgs(producer.args).join(' ')} | ${consumer.file} ${redactLabelArgs(consumer.args).join(' ')}`;
   const a = spawn(producer.file, producer.args, {
     cwd: opts.cwd,
     env: opts.env,

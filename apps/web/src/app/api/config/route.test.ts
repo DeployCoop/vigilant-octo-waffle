@@ -31,6 +31,7 @@ vi.mock('@/lib/project', () => ({ getProjectRoot: () => hoisted.root }));
 import {
   generatePrincipalToken,
   hashToken,
+  saveEnvFile,
   type AuthzStore,
   type Principal,
 } from '@vow/orchestrator';
@@ -38,6 +39,7 @@ import { GET, POST } from './route';
 
 const viewerToken = generatePrincipalToken();
 const adminToken = generatePrincipalToken();
+const ownerToken = generatePrincipalToken();
 
 const viewer: Principal = {
   id: 'p_viewer',
@@ -52,6 +54,13 @@ const admin: Principal = {
   kind: 'human',
   role: 'admin',
   tokenHash: hashToken(adminToken),
+};
+const owner: Principal = {
+  id: 'p_owner',
+  name: 'Owner',
+  kind: 'human',
+  role: 'owner',
+  tokenHash: hashToken(ownerToken),
 };
 
 function store(...principals: Principal[]): AuthzStore {
@@ -129,5 +138,42 @@ describe('POST /api/config guard', () => {
     const ok = await POST(post(adminToken));
     expect(ok.status).toBe(200);
     expect((await ok.json()).success).toBe(true);
+  });
+});
+
+// BUG FIX (bug hunt B8): writing a security-sensitive key requires
+// users:manage_permissions on top of config:update.
+describe('POST /api/config sensitive second gate', () => {
+  beforeEach(() => {
+    vi.mocked(saveEnvFile).mockClear();
+  });
+  const post = (token: string, updates: Record<string, string>) =>
+    new Request('http://localhost:3000/api/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ updates }),
+    });
+
+  it('denies an admin writing VOW_API_TOKEN (lacks users:manage_permissions)', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer, admin, owner) };
+    const res = await POST(post(adminToken, { VOW_API_TOKEN: 'new-token' }));
+    expect(res.status).toBe(403);
+    expect(vi.mocked(saveEnvFile)).not.toHaveBeenCalled();
+  });
+
+  it('allows the owner writing a sensitive key', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer, admin, owner) };
+    const res = await POST(post(ownerToken, { VOW_API_TOKEN: 'new-token' }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(saveEnvFile)).toHaveBeenCalled();
+  });
+
+  it('denies an admin writing a VOW_OIDC_* key', async () => {
+    hoisted.load = { status: 'ready', store: store(viewer, admin, owner) };
+    const res = await POST(post(adminToken, { VOW_OIDC_CLIENT_SECRET: 's3cr3t' }));
+    expect(res.status).toBe(403);
   });
 });

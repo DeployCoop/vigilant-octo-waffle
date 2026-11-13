@@ -228,6 +228,126 @@ stages:
     }
   });
 
+  describe('rolloutTarget argv safety (A1: watcher shell injection fix)', () => {
+    // A stub kubectl on PATH that records every invocation's argv and
+    // answers `get deployments` with a single deployment name. rolloutTarget
+    // builds its environment from process.env at call time, so prepending
+    // the stub dir to PATH routes the argv-form spawns to the stub.
+    function makeKubectlStub(tmpDir: string, logFile: string): string {
+      const stubDir = path.join(tmpDir, 'stubs');
+      fs.mkdirSync(stubDir, { recursive: true });
+      const stub = path.join(stubDir, 'kubectl');
+      fs.writeFileSync(
+        stub,
+        `#!/bin/bash\necho "kubectl $*" >> "${logFile}"\nif [[ "$1" == "get" ]]; then echo "myapp"; fi\nexit 0\n`,
+        { mode: 0o755 }
+      );
+      return stubDir;
+    }
+
+    it('rejects a namespace containing shell substitution before spawning anything', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waffle-rollout-evil-'));
+      const logFile = path.join(tmpDir, 'kubectl.log');
+      const pwnFile = path.join(tmpDir, 'pwned');
+      const stubDir = makeKubectlStub(tmpDir, logFile);
+      const origPath = process.env.PATH;
+      process.env.PATH = `${stubDir}:${origPath}`;
+      try {
+        const watcher = new WaffleWatcher({
+          projectRoot: tmpDir,
+          dryRun: true,
+          logger: () => {},
+        });
+        await assert.rejects(
+          (
+            watcher as unknown as {
+              rolloutTarget: (t: {
+                name: string;
+                context: string;
+                image: string;
+                tag: string;
+                releaseName: string;
+                namespace: string;
+              }) => Promise<boolean>;
+            }
+          ).rolloutTarget({
+            name: 'myapp',
+            context: tmpDir,
+            image: 'test/myapp',
+            tag: 'latest',
+            releaseName: 'myapp',
+            namespace: `x$(touch ${pwnFile})`,
+          }),
+          /Invalid namespace/
+        );
+        assert.equal(
+          fs.existsSync(logFile),
+          false,
+          'kubectl must never be invoked for an invalid namespace'
+        );
+        assert.equal(
+          fs.existsSync(pwnFile),
+          false,
+          'shell substitution in the namespace must not execute'
+        );
+      } finally {
+        process.env.PATH = origPath;
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rolls out via kubectl argv form with a valid namespace', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waffle-rollout-ok-'));
+      const logFile = path.join(tmpDir, 'kubectl.log');
+      const stubDir = makeKubectlStub(tmpDir, logFile);
+      const origPath = process.env.PATH;
+      process.env.PATH = `${stubDir}:${origPath}`;
+      try {
+        const watcher = new WaffleWatcher({
+          projectRoot: tmpDir,
+          dryRun: true,
+          logger: () => {},
+        });
+        const ok = await (
+          watcher as unknown as {
+            rolloutTarget: (t: {
+              name: string;
+              context: string;
+              image: string;
+              tag: string;
+              releaseName: string;
+              namespace: string;
+            }) => Promise<boolean>;
+          }
+        ).rolloutTarget({
+          name: 'myapp',
+          context: tmpDir,
+          image: 'test/myapp',
+          tag: 'latest',
+          releaseName: 'myapp',
+          namespace: 'myns',
+        });
+        assert.equal(ok, true);
+        const log = fs.readFileSync(logFile, 'utf8');
+        assert.ok(
+          log.includes('kubectl get deployments -n myns -o jsonpath={.items[*].metadata.name}'),
+          `expected argv-form get call, got: ${log}`
+        );
+        assert.ok(
+          log.includes('kubectl rollout restart deployment/myapp -n myns'),
+          `expected argv-form restart call, got: ${log}`
+        );
+        assert.ok(
+          log.includes('kubectl rollout status deployment/myapp -n myns --timeout=90s'),
+          `expected argv-form status call, got: ${log}`
+        );
+      } finally {
+        process.env.PATH = origPath;
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   it('resolves real charts/waffle.yaml targets if present in system', async () => {
     const waffleFile = '/root/charts/waffle.yaml';
     if (!fs.existsSync(waffleFile)) {

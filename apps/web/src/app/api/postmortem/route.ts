@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   listHistoricalPostmortems,
   generatePostmortem,
+  postmortemGenerateSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { routeError } from '@/lib/route-error';
@@ -29,17 +30,11 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const {
-      incidentTitle = 'Cascading Timeout on Authentication Subsystem',
-      affectedWorkloads = ['keycloak-0', 'postgres-postgresql-0'],
-      severity = 'SEV-2',
-    } = body;
+    // C7: severity enum + affectedWorkloads array (a non-array used to 500
+    // on .join()); defaults mirror the old destructuring defaults.
+    const params = postmortemGenerateSchema.parse(body);
 
-    const report = await generatePostmortem({
-      incidentTitle,
-      affectedWorkloads,
-      severity,
-    });
+    const report = await generatePostmortem(params);
 
     return NextResponse.json({ success: true, report });
   } catch (err) {

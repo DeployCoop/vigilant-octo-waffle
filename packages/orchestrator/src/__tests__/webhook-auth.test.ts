@@ -119,4 +119,41 @@ describe('webhook service token', () => {
       assert.deepEqual(viaBearer, viaHeader);
     });
   });
+
+  // BUG FIX (bug hunt B7): when an authz store is active, an unset
+  // webhook token must deny instead of leaving the webhook open.
+  describe('authorizeWebhookRequest with an active authz store', () => {
+    const storeEnv = { [WEBHOOK_TOKEN_ENV]: TOKEN };
+    it('denies when no token is configured and no credential is presented', () => {
+      const result = authorizeWebhookRequest(headersWith({}), {}, true);
+      assert.equal(result.authorized, false);
+      if (!result.authorized) {
+        assert.equal(result.status, 401);
+        assert.match(result.error, /no webhook token is configured/i);
+      }
+    });
+
+    it('denies when no token is configured even if a (non-principal) credential is presented', () => {
+      const result = authorizeWebhookRequest(
+        headersWith({ authorization: 'Bearer nope' }),
+        {},
+        true
+      );
+      assert.equal(result.authorized, false);
+    });
+
+    it('still allows the configured token when the store is active', () => {
+      const result = authorizeWebhookRequest(
+        headersWith({ authorization: `Bearer ${TOKEN}` }),
+        storeEnv,
+        true
+      );
+      assert.deepEqual(result, { authorized: true, mode: 'token' });
+    });
+
+    it('keeps the legacy open behavior when the store is inactive', () => {
+      const result = authorizeWebhookRequest(headersWith({}), {}, false);
+      assert.deepEqual(result, { authorized: true, mode: 'unconfigured' });
+    });
+  });
 });

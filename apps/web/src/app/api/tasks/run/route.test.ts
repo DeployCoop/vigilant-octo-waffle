@@ -151,10 +151,12 @@ describe('POST /api/tasks/run — dispatch contract', () => {
     expect(body.success).toBe(true);
     expect(body.taskId).toBe('task-7');
     expect(body.command).toBe('bash src/k3s_add_node.sh --get-url');
+    // Authz is disabled in this test, so the task is a system task
+    // (principalId null) — the scoping field must still be passed.
     expect(hoisted.runCommand).toHaveBeenCalledWith(
       'bash',
       ['src/k3s_add_node.sh', '--get-url'],
-      { cwd: hoisted.root, env: { THIS_FOO: 'bar' } }
+      { cwd: hoisted.root, env: { THIS_FOO: 'bar' }, principalId: null }
     );
   });
 

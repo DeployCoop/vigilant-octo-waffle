@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import {
+  AlertTriangle,
   Timer,
   Play,
   CheckCircle2,
   FileText,
   RefreshCw,
 } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface DRDrillStep {
   name: string;
@@ -44,21 +46,25 @@ interface DRScorecard {
 export default function DisasterRecoveryPage() {
   const [scorecard, setScorecard] = useState<DRScorecard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [scenario, setScenario] = useState('POSTGRES_VOLUME_CORRUPTION');
   const [drilling, setDrilling] = useState(false);
   const [currentDrill, setCurrentDrill] = useState<DRDrillResult | null>(null);
 
   const fetchScorecard = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/dr');
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       setScorecard(data);
       if (data.recentDrills && data.recentDrills.length > 0) {
         setCurrentDrill(data.recentDrills[0]);
       }
     } catch (err) {
       console.error('Failed to load DR scorecard:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setLoading(false);
     }
@@ -77,12 +83,17 @@ export default function DisasterRecoveryPage() {
         body: JSON.stringify({ scenario }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
+        setError(null);
         setCurrentDrill(data.drillResult);
         fetchScorecard();
+      } else {
+        setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
       }
     } catch (err) {
       console.error('Drill launch failed:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setDrilling(false);
     }
@@ -90,6 +101,12 @@ export default function DisasterRecoveryPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
+      {error && (
+        <div className="flex items-center space-x-2 px-4 py-3 bg-rose-950/50 border border-rose-800 rounded text-rose-300 text-sm">
+          <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
         <div className="flex items-center space-x-3">
