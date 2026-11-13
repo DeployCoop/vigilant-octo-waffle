@@ -3,6 +3,7 @@ import {
   listHistoricalSnapshots,
   compareSnapshotWithLive,
   rewindToSnapshot,
+  rewindActionSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
 import { apiError, routeError } from '@/lib/route-error';
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, snapshotId } = body;
+    const { action } = body;
 
     // BUG FIX (bug hunt B6): comparing a snapshot is a read, but
     // rewinding the cluster to one is a cluster-wide rollback, not a
@@ -39,15 +40,17 @@ export async function POST(req: Request) {
     );
     if (denied) return denied;
 
-    if (!snapshotId) {
-      return apiError(400, 'snapshotId is required');
-    }
-
+    // C7: snapshotId validated inside the branches, after the per-action
+    // gate, preserving the B6 gate ordering. C8: unknown snapshots 404.
     if (action === 'compare') {
+      const { snapshotId } = rewindActionSchema.parse(body);
       const result = await compareSnapshotWithLive(snapshotId);
+      if (!result) return apiError(404, `Snapshot ${snapshotId} not found.`);
       return NextResponse.json({ success: true, comparison: result });
     } else if (action === 'rewind') {
+      const { snapshotId } = rewindActionSchema.parse(body);
       const result = await rewindToSnapshot(snapshotId);
+      if (!result.success) return apiError(404, result.message);
       return NextResponse.json(result);
     } else {
       return apiError(400, `Unknown action: ${action}`);

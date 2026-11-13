@@ -107,3 +107,38 @@ describe('POST /api/migrate gates (B6)', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('POST /api/migrate validation + unknown version (C7/C8)', () => {
+  it('trips BLOCKER on a multi-line CREATE INDEX via the real linter', async () => {
+    readyStore();
+    const res = await POST(
+      postReq({ action: 'lint', sql: 'CREATE\nINDEX idx ON t (c);' }, querierToken)
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.lintResult.clean).toBe(false);
+    expect(body.lintResult.findings.some((f: { severity: string }) => f.severity === 'BLOCKER')).toBe(true);
+  });
+
+  it('does not flag CREATE INDEX inside a comment', async () => {
+    readyStore();
+    const res = await POST(
+      postReq({ action: 'lint', sql: '-- CREATE INDEX idx ON t (c);\nSELECT 1;' }, querierToken)
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).lintResult.clean).toBe(true);
+  });
+
+  it('returns 404 when executing an unknown version', async () => {
+    readyStore();
+    hoisted.executeZeroDowntimeMigration.mockResolvedValue({
+      success: false,
+      executedVersion: 'v9',
+      message: 'Migration version v9 not found.',
+    });
+    const res = await POST(
+      postReq({ action: 'execute', version: 'v9', sql: 'CREATE TABLE t (id INT);' }, ownerToken)
+    );
+    expect(res.status).toBe(404);
+  });
+});

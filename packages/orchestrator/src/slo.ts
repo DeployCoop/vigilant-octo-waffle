@@ -1,3 +1,5 @@
+import { requireFound } from './studio-store.js';
+
 export interface ServiceSloRecord {
   id: string;
   serviceName: string;
@@ -101,8 +103,10 @@ export async function getServiceSlos(): Promise<ServiceSloRecord[]> {
   return [...sloStore];
 }
 
-export async function calculateBurnRates(serviceId: string): Promise<BurnRateTelemetry> {
-  const slo = sloStore.find((s) => s.id === serviceId) || sloStore[0];
+export async function calculateBurnRates(serviceId: string): Promise<BurnRateTelemetry | null> {
+  // C4: an unknown service is a miss (null), never another service's burn rates.
+  const slo = requireFound(sloStore, (s) => s.id === serviceId);
+  if (!slo) return null;
   const timeToExhaustion =
     slo.burnRate1h > 0
       ? Math.round(((slo.errorBudgetRemainingPct / 100) * 720) / slo.burnRate1h)

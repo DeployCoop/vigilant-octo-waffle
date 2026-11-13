@@ -1,3 +1,5 @@
+import { requireFound } from './studio-store.js';
+
 export interface KedaScaledObject {
   id: string;
   name: string;
@@ -93,8 +95,11 @@ export async function listScaledObjects(): Promise<KedaScaledObject[]> {
   return [...scaledObjectsStore];
 }
 
-export async function executeSyntheticLoad(config: SyntheticLoadConfig): Promise<LoadTestResult> {
-  const target = scaledObjectsStore.find((s) => s.targetWorkload === config.targetWorkload) || scaledObjectsStore[0];
+export async function executeSyntheticLoad(config: SyntheticLoadConfig): Promise<LoadTestResult | null> {
+  // C4: an unknown workload is a miss (null), never silently run — and
+  // mutate — the first ScaledObject in the store.
+  const target = requireFound(scaledObjectsStore, (s) => s.targetWorkload === config.targetWorkload);
+  if (!target) return null;
 
   const duration = Math.min(60, Math.max(5, config.durationSeconds || 15));
   const peakRps = config.targetRps || 250;

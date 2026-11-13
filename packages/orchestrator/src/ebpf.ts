@@ -1,4 +1,5 @@
 import { K8sClient, PodInfo } from './k8s.js';
+import { scanNetworkPolicies, type NetworkPolicyReport } from './netpol.js';
 
 export interface NetworkFlowRecord {
   id: string;
@@ -187,29 +188,106 @@ export async function getDnsTelemetry(): Promise<DnsTelemetry> {
   };
 }
 
+/**
+ * Injectable seams for `simulatePacketDropInspection` (Batch C, C8). The
+ * defaults hit the real cluster; tests pass fakes. `getPods` failures
+ * propagate — a failed lookup must not be papered over with an answer.
+ */
+export interface PacketDropInspectionDeps {
+  getPods?: () => Promise<PodInfo[]>;
+  scanPolicies?: () => Promise<NetworkPolicyReport>;
+}
+
+/**
+ * Evaluate a packet-drop inspection against real NetworkPolicy state
+ * (Batch C, C8), replacing the old `targetPod.includes('postgres')`
+ * substring heuristic.
+ *
+ * - Unknown target pod: deny with a not-found reason.
+ * - No Ingress policy in the target namespace: allow (default-allow),
+ *   and say so.
+ * - An Ingress policy selecting all pods with zero ingress rules:
+ *   deny, naming the policy (default-deny).
+ * - An Ingress policy with rules: deny fail-closed — the report carries
+ *   no pod labels or port rules, so whether the source is permitted
+ *   cannot be verified.
+ * - A label-scoped Ingress policy with zero rules: deny fail-closed —
+ *   whether it selects the target pod cannot be determined from the
+ *   report (pod labels are not in it).
+ *
+ * The port is echoed but not evaluated: the report carries no port data.
+ * The source pod is not resolved either; policy evaluation here depends
+ * only on the target namespace's policies.
+ */
 export async function simulatePacketDropInspection(
   sourcePod: string,
   targetPod: string,
-  port: number
+  port: number,
+  deps: PacketDropInspectionDeps = {}
 ): Promise<FlowInspectionResult> {
-  if (targetPod.includes('postgres') && !sourcePod.includes('keycloak') && !sourcePod.includes('postgres')) {
+  const getPods = deps.getPods ?? (async () => new K8sClient().getPods());
+  const scanPolicies = deps.scanPolicies ?? scanNetworkPolicies;
+
+  const pods = await getPods();
+  const target = pods.find((p) => p.name === targetPod);
+  if (!target) {
     return {
       sourcePod,
       targetPod,
       port,
       canConnect: false,
-      reason: 'Cross-namespace ingress rejected by Zero-Trust policy: postgres-allow-keycloak-only',
-      policyBlocking: 'postgres/strict-ingress-netpol',
+      reason: `Target pod ${targetPod} not found in cluster.`,
       latencyMs: 0,
     };
   }
 
-  return {
+  const report = await scanPolicies();
+  const ingressPolicies = report.policies.filter(
+    (p) => p.namespace === target.namespace && p.policyTypes.includes('Ingress')
+  );
+
+  if (ingressPolicies.length === 0) {
+    return {
+      sourcePod,
+      targetPod,
+      port,
+      canConnect: true,
+      reason: `No Ingress NetworkPolicy selects pods in namespace ${target.namespace}; default-allow. Port ${port} is not evaluated against policy port rules.`,
+      latencyMs: 1.1,
+    };
+  }
+
+  const deny = (policyName: string, reason: string): FlowInspectionResult => ({
     sourcePod,
     targetPod,
     port,
-    canConnect: true,
-    reason: `TCP socket established on port ${port}. Handshake verified in 1.1ms.`,
-    latencyMs: 1.1,
-  };
+    canConnect: false,
+    reason,
+    policyBlocking: `${target.namespace}/${policyName}`,
+    latencyMs: 0,
+  });
+
+  const allPodsDefaultDeny = ingressPolicies.find(
+    (p) => p.podSelector === 'all pods' && p.ingressRuleCount === 0
+  );
+  if (allPodsDefaultDeny) {
+    return deny(
+      allPodsDefaultDeny.name,
+      `Ingress denied by NetworkPolicy ${allPodsDefaultDeny.name}: it selects all pods in namespace ${target.namespace} and defines no ingress rules (default-deny).`
+    );
+  }
+
+  const withRules = ingressPolicies.find((p) => p.ingressRuleCount > 0);
+  if (withRules) {
+    return deny(
+      withRules.name,
+      `Cannot verify source pod ${sourcePod} is permitted by NetworkPolicy ${withRules.name} in namespace ${target.namespace}: ingress rules are not evaluated against pod labels, so the connection is denied by default.`
+    );
+  }
+
+  const labelScopedDefaultDeny = ingressPolicies[0];
+  return deny(
+    labelScopedDefaultDeny.name,
+    `Cannot verify NetworkPolicy ${labelScopedDefaultDeny.name} in namespace ${target.namespace} selects target pod ${targetPod}: label-scoped policies are not evaluated against pod labels, so the connection is denied by default.`
+  );
 }

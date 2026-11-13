@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import {
+  AlertTriangle,
   GitCompare,
   RefreshCw,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   RotateCcw,
   FileCode,
 } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface DriftItem {
   id: string;
@@ -35,15 +37,18 @@ interface DriftReport {
 export default function DriftDetectorPage() {
   const [report, setReport] = useState<DriftReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedDrift, setSelectedDrift] = useState<DriftItem | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const fetchDriftReport = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/drift');
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       setReport(data);
       if (data.items && data.items.length > 0) {
         setSelectedDrift(data.items[0]);
@@ -52,6 +57,7 @@ export default function DriftDetectorPage() {
       }
     } catch (err) {
       console.error('Failed to load drift report:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setLoading(false);
     }
@@ -70,12 +76,17 @@ export default function DriftDetectorPage() {
         body: JSON.stringify({ action: 'reconcile', driftId }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
+        setError(null);
         setFeedback(data.message);
         fetchDriftReport();
+      } else {
+        setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
       }
     } catch (err) {
       console.error('Reconcile failed:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setActionInProgress(null);
     }
@@ -90,12 +101,17 @@ export default function DriftDetectorPage() {
         body: JSON.stringify({ action: 'reverse_commit', driftId }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
+        setError(null);
         setFeedback(`Git Commit generated: "${data.commitMessage}"`);
         fetchDriftReport();
+      } else {
+        setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
       }
     } catch (err) {
       console.error('Reverse commit failed:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setActionInProgress(null);
     }
@@ -103,19 +119,31 @@ export default function DriftDetectorPage() {
 
   const handleReset = async () => {
     try {
-      await fetch('/api/drift', {
+      const res = await fetch('/api/drift', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reset' }),
       });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(apiErrorMessage(data));
+      }
+      setError(null);
       fetchDriftReport();
     } catch (err) {
       console.error('Reset failed:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     }
   };
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
+      {error && (
+        <div className="flex items-center space-x-2 px-4 py-3 bg-rose-950/50 border border-rose-800 rounded text-rose-300 text-sm">
+          <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
         <div className="flex items-center space-x-3">
@@ -194,14 +222,14 @@ export default function DriftDetectorPage() {
         <div className="space-y-3">
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Detected Drift Inventory</h2>
 
-          {report?.items.length === 0 ? (
+          {(report?.items ?? []).length === 0 ? (
             <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-xl text-center space-y-2">
               <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
               <div className="text-sm font-semibold text-slate-200">Zero Drift Detected</div>
               <p className="text-xs text-slate-400">All live cluster resources match git repository manifests.</p>
             </div>
           ) : (
-            report?.items.map((item) => {
+            (report?.items ?? []).map((item) => {
               const isSelected = selectedDrift?.id === item.id;
               return (
                 <div

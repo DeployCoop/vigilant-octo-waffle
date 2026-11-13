@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import {
   getDRScorecard,
   executeDisasterRecoveryDrill,
-  type DRScenarioType,
+  drDrillSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
-import { apiError, routeError } from '@/lib/route-error';
+import { routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,20 +30,8 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { scenario = 'POSTGRES_VOLUME_CORRUPTION' } = body;
-
-    const validScenarios: DRScenarioType[] = [
-      'POSTGRES_VOLUME_CORRUPTION',
-      'NAMESPACE_ACCIDENTAL_DELETION',
-      'ETCD_SPLIT_BRAIN_EMULATION',
-    ];
-
-    if (!validScenarios.includes(scenario)) {
-      return apiError(
-        400,
-        `Invalid scenario: ${scenario}. Choose from ${validScenarios.join(', ')}`
-      );
-    }
+    // C7: unknown scenarios are rejected by schema (was a manual allow-list).
+    const { scenario } = drDrillSchema.parse(body);
 
     const drillResult = await executeDisasterRecoveryDrill(scenario);
     return NextResponse.json({ success: true, drillResult });

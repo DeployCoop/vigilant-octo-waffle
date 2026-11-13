@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import {
+  AlertTriangle,
   Activity,
   Radio,
   Search,
@@ -12,6 +13,7 @@ import {
   Server,
   Zap,
 } from 'lucide-react';
+import { apiErrorMessage } from '@/lib/envelope';
 
 interface NetworkFlowRecord {
   id: string;
@@ -45,6 +47,7 @@ export default function EbpfFlowsPage() {
   const [flows, setFlows] = useState<NetworkFlowRecord[]>([]);
   const [dns, setDns] = useState<DnsTelemetry | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedNamespace, setSelectedNamespace] = useState<string>('all');
   const [inspectSource, setInspectSource] = useState('nextcloud-app');
   const [inspectTarget, setInspectTarget] = useState('postgres-postgresql-0');
@@ -54,14 +57,17 @@ export default function EbpfFlowsPage() {
 
   const fetchData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const url = selectedNamespace === 'all' ? '/api/ebpf' : `/api/ebpf?namespace=${selectedNamespace}`;
       const res = await fetch(url);
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       setFlows(data.flows || []);
       setDns(data.dns || null);
     } catch (err) {
       console.error('Failed to load eBPF data:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setLoading(false);
     }
@@ -85,9 +91,12 @@ export default function EbpfFlowsPage() {
         }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
+      setError(null);
       setInspectResult(data);
     } catch (err) {
       console.error('Diagnostic failed:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setInspecting(false);
     }
@@ -95,6 +104,12 @@ export default function EbpfFlowsPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
+      {error && (
+        <div className="flex items-center space-x-2 px-4 py-3 bg-rose-950/50 border border-rose-800 rounded text-rose-300 text-sm">
+          <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
         <div>

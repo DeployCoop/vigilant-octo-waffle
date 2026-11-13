@@ -83,3 +83,29 @@ describe('POST /api/rewind gates (B6)', () => {
     expect(hoisted.rewindToSnapshot).toHaveBeenCalled();
   });
 });
+
+describe('POST /api/rewind unknown ids (C8) + validation (C7)', () => {
+  it('returns 404 when comparing an unknown snapshot', async () => {
+    readyStore();
+    hoisted.compareSnapshotWithLive.mockResolvedValue(null);
+    const res = await POST(postReq({ action: 'compare', snapshotId: 'nope' }, viewerToken));
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 when rewinding to an unknown snapshot', async () => {
+    readyStore();
+    hoisted.rewindToSnapshot.mockResolvedValue({
+      success: false,
+      message: 'Snapshot nope not found.',
+    });
+    const res = await POST(postReq({ action: 'rewind', snapshotId: 'nope' }, ownerToken));
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects a missing snapshotId with 400', async () => {
+    readyStore();
+    const res = await POST(postReq({ action: 'compare' }, viewerToken));
+    expect(res.status).toBe(400);
+    expect(hoisted.compareSnapshotWithLive).not.toHaveBeenCalled();
+  });
+});

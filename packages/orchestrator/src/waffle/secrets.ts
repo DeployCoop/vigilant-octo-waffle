@@ -7,7 +7,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHmac } from 'node:crypto';
-import { execFileAsync } from '../exec-argv.js';
+import { processManager, assertCommandSuccess } from '../executor.js';
 import { getWaffleExecutionEnv, errMessage, type WaffleLogFn } from './shared.js';
 import { type WaffleSecretKey } from './schema.js';
 
@@ -101,15 +101,22 @@ export async function provisionSecrets(
 
     if (Object.keys(secretData).length > 0) {
       try {
-        const nsManifest = await execFileAsync(
+        // Q8: kubectl runs through the task executor (validator +
+        // task log) instead of execFileAsync, which bypassed both.
+        // The manifests travel via the runCommand `input` option
+        // (stdin), as they did via ExecArgvOptions.input before.
+        const nsManifest = await processManager.runCommandAndWait(
           'kubectl',
           ['create', 'namespace', ns, '--dry-run=client', '-o', 'yaml'],
-          { env: getWaffleExecutionEnv() }
+          { cwd: projectRoot, env: getWaffleExecutionEnv() }
         );
-        await execFileAsync('kubectl', ['apply', '-f', '-'], {
+        assertCommandSuccess(nsManifest, `kubectl create namespace ${ns} --dry-run=client`);
+        const nsApply = await processManager.runCommandAndWait('kubectl', ['apply', '-f', '-'], {
+          cwd: projectRoot,
           env: getWaffleExecutionEnv(),
           input: nsManifest.stdout,
         });
+        assertCommandSuccess(nsApply, 'kubectl apply -f - (namespace)');
         const manifestObj = {
           apiVersion: 'v1',
           kind: 'Secret',
@@ -128,10 +135,12 @@ export async function provisionSecrets(
           stringData: secretData,
         };
         const manifestJson = JSON.stringify(manifestObj);
-        await execFileAsync('kubectl', ['apply', '-f', '-'], {
+        const secretApply = await processManager.runCommandAndWait('kubectl', ['apply', '-f', '-'], {
+          cwd: projectRoot,
           env: getWaffleExecutionEnv(),
           input: manifestJson,
         });
+        assertCommandSuccess(secretApply, `kubectl apply -f - (secret ${sec.name})`);
         log(`[KEYS] Secret "${sec.name}" synchronized in namespace "${ns}".`);
       } catch (err) {
         log(`[KEYS] Notice: Secret sync encountered: ${errMessage(err)}`);

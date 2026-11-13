@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import {
   listScaledObjects,
   executeSyntheticLoad,
+  kedaLoadSchema,
 } from '@vow/orchestrator';
 import { authorizeRequest } from '@/lib/authz';
-import { routeError } from '@/lib/route-error';
+import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,21 +30,14 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const {
-      targetWorkload,
-      virtualUsers = 20,
-      durationSeconds = 15,
-      targetRps = 250,
-      pattern = 'SPIKE',
-    } = body;
+    // C7: strict numerics + pattern enum (no Number() coercion).
+    const config = kedaLoadSchema.parse(body);
 
-    const result = await executeSyntheticLoad({
-      targetWorkload: targetWorkload || 'nextcloud-worker',
-      virtualUsers: Number(virtualUsers),
-      durationSeconds: Number(durationSeconds),
-      targetRps: Number(targetRps),
-      pattern,
-    });
+    const result = await executeSyntheticLoad(config);
+    // C4/C8: an unknown workload is a miss, not a run against store[0].
+    if (!result) {
+      return apiError(404, `ScaledObject for workload ${config.targetWorkload} not found`);
+    }
 
     return NextResponse.json({ success: true, result });
   } catch (err) {
