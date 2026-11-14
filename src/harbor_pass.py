@@ -2,7 +2,7 @@
 # Python program to demonstrate
 # command line arguments
 import sys
-import random
+import secrets
 argumentList = sys.argv[1:]
 if len(argumentList) == 1:
     #print(argumentList)
@@ -10,7 +10,7 @@ if len(argumentList) == 1:
     ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     chars=[]
     for i in range(31):
-        chars.append(random.choice(ALPHABET))
+        chars.append(secrets.choice(ALPHABET))
     salt="".join(chars)
     plain_text_password = argumentList[0]
     #print(plain_text_password)
