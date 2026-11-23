@@ -17,13 +17,20 @@ interface DriftItem {
   resourceName: string;
   namespace: string;
   kind: string;
-  driftType: 'REPLICA_COUNT_DRIFT' | 'ENV_VAR_DRIFT' | 'IMAGE_TAG_DRIFT' | 'RESOURCE_LIMIT_DRIFT' | 'ORPHANED_RESOURCE';
+  driftType: 'REPLICA_COUNT_DRIFT' | 'ENV_VAR_DRIFT' | 'IMAGE_TAG_DRIFT' | 'RESOURCE_LIMIT_DRIFT' | 'ORPHANED_RESOURCE' | 'SPEC_DRIFT';
   gitFilePath: string;
   gitContent: string;
   liveContent: string;
   diffSummary: string;
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   driftDetectedAt: string;
+}
+
+interface ReverseCommitResult {
+  patch: string;
+  commitSha: string | null;
+  appliedResourceCount: number;
+  applied: boolean;
 }
 
 interface DriftReport {
@@ -41,6 +48,7 @@ export default function DriftDetectorPage() {
   const [selectedDrift, setSelectedDrift] = useState<DriftItem | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [reverseCommit, setReverseCommit] = useState<ReverseCommitResult | null>(null);
 
   const fetchDriftReport = async () => {
     setLoading(true);
@@ -104,7 +112,16 @@ export default function DriftDetectorPage() {
       if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
         setError(null);
-        setFeedback(`Git Commit generated: "${data.commitMessage}"`);
+        setReverseCommit({
+          patch: typeof data.patch === 'string' ? data.patch : '',
+          commitSha: typeof data.commitSha === 'string' ? data.commitSha : null,
+          appliedResourceCount:
+            typeof data.appliedResourceCount === 'number' ? data.appliedResourceCount : 0,
+          applied: data.applied === true,
+        });
+        setFeedback(
+          `Reverse-commit patch generated against ${typeof data.commitSha === 'string' ? data.commitSha.slice(0, 12) : 'unknown commit'} — nothing was committed.`
+        );
         fetchDriftReport();
       } else {
         setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
@@ -114,25 +131,6 @@ export default function DriftDetectorPage() {
       setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setActionInProgress(null);
-    }
-  };
-
-  const handleReset = async () => {
-    try {
-      const res = await fetch('/api/drift', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset' }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(apiErrorMessage(data));
-      }
-      setError(null);
-      fetchDriftReport();
-    } catch (err) {
-      console.error('Reset failed:', err);
-      setError(err instanceof Error ? err.message : 'Request failed');
     }
   };
 
@@ -159,14 +157,6 @@ export default function DriftDetectorPage() {
         </div>
 
         <div className="flex items-center space-x-3">
-          <button
-            onClick={handleReset}
-            className="flex items-center space-x-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-medium rounded-lg border border-slate-800 transition"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Demo</span>
-          </button>
-
           <button
             onClick={fetchDriftReport}
             disabled={loading}
@@ -333,6 +323,39 @@ export default function DriftDetectorPage() {
           )}
         </div>
       </div>
+
+      {/* Reverse-Commit Patch */}
+      {reverseCommit && (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <h3 className="text-base font-bold text-slate-100 flex items-center space-x-2">
+              <GitCommit className="w-4 h-4 text-emerald-400" />
+              <span>Reverse-Commit Patch</span>
+            </h3>
+            <button
+              onClick={() => setReverseCommit(null)}
+              className="text-slate-400 hover:text-slate-200 text-xs"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="text-xs text-slate-400 space-y-1 font-mono">
+            <div>
+              Generated against commit:{' '}
+              <span className="text-slate-200">{reverseCommit.commitSha ?? 'unknown'}</span>
+            </div>
+            <div>
+              Resources covered: <span className="text-slate-200">{reverseCommit.appliedResourceCount}</span>
+            </div>
+            <div className="text-amber-400">
+              Not committed — copy the patch and commit it to the repository yourself.
+            </div>
+          </div>
+          <pre className="p-4 bg-slate-950 border border-slate-800 rounded-xl overflow-x-auto text-xs font-mono text-slate-300 leading-relaxed whitespace-pre">
+            {reverseCommit.patch || '(no differences)'}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

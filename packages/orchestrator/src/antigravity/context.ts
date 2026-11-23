@@ -28,6 +28,10 @@ export async function buildClusterContext(root: string): Promise<{
     nodes: [],
     namespaces: [],
     ingresses: [],
+    k8sVersion: '',
+    cpuCapacityCores: 0,
+    memoryCapacityGb: 0,
+    server: '',
   };
 
   let pods: PodInfo[] = [];

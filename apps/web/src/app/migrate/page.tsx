@@ -27,11 +27,15 @@ interface DdlLintFinding {
   suggestedFix: string;
 }
 
-const SAMPLE_DDL = `-- Dangerous DDL: Locks table against reads and writes
-CREATE INDEX idx_users_email ON users (email);
+// Editable starting template for the linter sandbox below — a scratch
+// pad for pasting DDL to lint, not a migration file. Migration files
+// live under migrations/ at the project root; execute runs a file's own
+// DDL, never this textarea's content.
+const DEFAULT_DDL = `-- Template DDL for the linter sandbox (edit freely).
+-- CREATE INDEX CONCURRENTLY is the zero-downtime form: a plain
+-- CREATE INDEX takes an exclusive lock and trips a BLOCKER below.
 
--- Safe DDL Alternative:
--- CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
+CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
 
 ALTER TABLE orders ADD COLUMN status VARCHAR(32) DEFAULT 'pending';
 `;
@@ -40,7 +44,7 @@ export default function MigratePage() {
   const [migrations, setMigrations] = useState<MigrationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [ddlSql, setDdlSql] = useState(SAMPLE_DDL);
+  const [ddlSql, setDdlSql] = useState(DEFAULT_DDL);
   const [linting, setLinting] = useState(false);
   const [lintFindings, setLintFindings] = useState<DdlLintFinding[]>([]);
   const [executingVersion, setExecutingVersion] = useState<string | null>(null);
@@ -96,17 +100,23 @@ export default function MigratePage() {
       const res = await fetch('/api/migrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Execute lints the DDL server-side before applying it, so the
-        // lint textarea content travels with the request.
-        body: JSON.stringify({ action: 'execute', version, sql: ddlSql }),
+        // Studio wiring (Batch C): execute runs the migration file's
+        // own DDL — no SQL travels with the request. The lint textarea
+        // is only for the linter sandbox below.
+        body: JSON.stringify({ action: 'execute', version }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
         setError(null);
         setActionMessage(data.message);
         fetchMigrations();
       } else {
-        setActionMessage(data.error?.message || 'Migration execution failed');
+        // A failed execution surfaces in the rose error banner, never
+        // in the emerald success banner.
+        setError(
+          apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Migration execution failed')
+        );
       }
     } catch (err) {
       console.error('Execution failed:', err);
@@ -180,6 +190,7 @@ export default function MigratePage() {
             <tbody className="divide-y divide-slate-800/60">
               {migrations.map((m) => {
                 const isPending = m.status === 'PENDING';
+                const isFailed = m.status === 'FAILED';
                 return (
                   <tr key={m.version} className="hover:bg-slate-900/40 transition">
                     <td className="px-4 py-3 font-mono font-medium text-slate-200">{m.version}</td>
@@ -189,22 +200,28 @@ export default function MigratePage() {
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-                          isPending
-                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          isFailed
+                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                            : isPending
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         }`}
                       >
                         {m.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {isPending ? (
+                      {isPending || isFailed ? (
                         <button
                           onClick={() => handleExecute(m.version)}
                           disabled={executingVersion === m.version}
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded transition"
                         >
-                          {executingVersion === m.version ? 'Applying...' : 'Apply Safely'}
+                          {executingVersion === m.version
+                            ? 'Applying...'
+                            : isFailed
+                              ? 'Retry'
+                              : 'Apply Safely'}
                         </button>
                       ) : (
                         <span className="text-slate-500 text-[11px] font-mono">In-Sync</span>

@@ -8,6 +8,8 @@ const hoisted = vi.hoisted(() => ({
   root: '',
   togglePolicyRule: vi.fn(),
   evaluateManifest: vi.fn(),
+  listAdmissionPolicies: vi.fn(),
+  getAdmissionWebhookStatus: vi.fn(),
 }));
 
 vi.mock('@vow/orchestrator', async (importOriginal) => {
@@ -17,13 +19,21 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
     loadAuthzStore: () => hoisted.load,
     togglePolicyRule: hoisted.togglePolicyRule,
     evaluateManifest: hoisted.evaluateManifest,
+    listAdmissionPolicies: hoisted.listAdmissionPolicies,
+    getAdmissionWebhookStatus: hoisted.getAdmissionWebhookStatus,
   };
 });
 
 vi.mock('@/lib/project', () => ({ getProjectRoot: () => hoisted.root }));
 
-import { generatePrincipalToken, hashToken, InvalidManifestError, type Principal } from '@vow/orchestrator';
-import { POST } from './route';
+import {
+  generatePrincipalToken,
+  hashToken,
+  InvalidManifestError,
+  ClusterUnavailableError,
+  type Principal,
+} from '@vow/orchestrator';
+import { GET, POST } from './route';
 
 /** Gate tests for /api/guard POST (bug hunt B3). */
 
@@ -54,13 +64,30 @@ function postReq(body: unknown, token?: string) {
   });
 }
 
+function getReq(token?: string) {
+  return new Request('http://localhost:3000/api/guard', {
+    method: 'GET',
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
 beforeEach(() => {
   hoisted.load = { status: 'disabled' };
   hoisted.root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-guard-'));
   hoisted.togglePolicyRule.mockReset();
   hoisted.evaluateManifest.mockReset();
+  hoisted.listAdmissionPolicies.mockReset();
+  hoisted.getAdmissionWebhookStatus.mockReset();
   hoisted.togglePolicyRule.mockReturnValue({ rule: 'x', enabled: false });
   hoisted.evaluateManifest.mockReturnValue({ violations: [] });
+  hoisted.listAdmissionPolicies.mockResolvedValue([]);
+  hoisted.getAdmissionWebhookStatus.mockResolvedValue({
+    installed: false,
+    validating: [],
+    mutating: [],
+  });
 });
 
 afterEach(() => {
@@ -108,5 +135,53 @@ describe('POST /api/guard validation (C7) + invalid YAML (C3)', () => {
     );
     expect(res.status).toBe(400);
     expect(hoisted.togglePolicyRule).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/guard (Phase 1 wiring)', () => {
+  it('returns policies and live webhook status to a viewer', async () => {
+    readyStore();
+    const policies = [{ id: 'r1', enabled: true }];
+    hoisted.listAdmissionPolicies.mockResolvedValue(policies);
+    hoisted.getAdmissionWebhookStatus.mockResolvedValue({
+      installed: true,
+      validating: ['kyverno-validating'],
+      mutating: [],
+    });
+    const res = await GET(getReq(viewerToken));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.policies).toEqual(policies);
+    expect(body.webhookStatus.installed).toBe(true);
+    expect(body.webhookStatus.validating).toEqual(['kyverno-validating']);
+  });
+
+  it('maps ClusterUnavailableError to 503 with code cluster_unavailable', async () => {
+    readyStore();
+    hoisted.listAdmissionPolicies.mockRejectedValue(new ClusterUnavailableError());
+    const res = await GET(getReq(viewerToken));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error.code).toBe('cluster_unavailable');
+  });
+});
+
+describe('POST /api/guard toggle not-found + no-cluster (Phase 1 wiring)', () => {
+  it('returns 404 for an unknown rule id', async () => {
+    readyStore();
+    hoisted.togglePolicyRule.mockResolvedValue(null);
+    const res = await POST(
+      postReq({ action: 'toggle', ruleId: 'no-such-rule', enabled: true }, ownerToken)
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('maps ClusterUnavailableError to 503 with code cluster_unavailable', async () => {
+    readyStore();
+    hoisted.togglePolicyRule.mockRejectedValue(new ClusterUnavailableError());
+    const res = await POST(
+      postReq({ action: 'toggle', ruleId: 'x', enabled: true }, ownerToken)
+    );
+    expect(res.status).toBe(503);
+    expect((await res.json()).error.code).toBe('cluster_unavailable');
   });
 });

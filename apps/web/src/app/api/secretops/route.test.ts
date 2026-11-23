@@ -6,6 +6,10 @@ import * as path from 'node:path';
 const hoisted = vi.hoisted(() => ({
   load: { status: 'disabled' } as import('@vow/orchestrator').AuthzStoreLoad,
   root: '',
+  // The wired audit/rotate hit the real cluster; route tests stub them
+  // (the sealed-secret function stays real — it must throw).
+  audit: vi.fn() as import('vitest').Mock,
+  rotate: vi.fn() as import('vitest').Mock,
 }));
 
 vi.mock('@vow/orchestrator', async (importOriginal) => {
@@ -13,12 +17,19 @@ vi.mock('@vow/orchestrator', async (importOriginal) => {
   return {
     ...actual,
     loadAuthzStore: () => hoisted.load,
+    auditSecretsAndLeaks: hoisted.audit,
+    rotateSecretCredential: hoisted.rotate,
   };
 });
 
 vi.mock('@/lib/project', () => ({ getProjectRoot: () => hoisted.root }));
 
-import { generatePrincipalToken, hashToken, type Principal } from '@vow/orchestrator';
+import {
+  generatePrincipalToken,
+  hashToken,
+  ClusterUnavailableError,
+  type Principal,
+} from '@vow/orchestrator';
 import { GET, POST } from './route';
 
 /**
@@ -69,7 +80,17 @@ function postReq(body: unknown, token?: string) {
 beforeEach(() => {
   hoisted.load = { status: 'disabled' };
   hoisted.root = fs.mkdtempSync(path.join(os.tmpdir(), 'vow-secretops-'));
+  hoisted.audit.mockReset();
+  hoisted.rotate.mockReset();
 });
+
+const cannedReport = {
+  totalSecrets: 1,
+  leaksDetected: [],
+  hygieneRecords: [],
+  staleSecretCount: 0,
+  externalVaultConnected: false,
+};
 
 afterEach(() => {
   fs.rmSync(hoisted.root, { recursive: true, force: true });
@@ -121,6 +142,11 @@ describe('POST /api/secretops — manage gate (B4)', () => {
 
   it('allows the owner to rotate', async () => {
     readyStore();
+    hoisted.rotate.mockResolvedValue({
+      success: true,
+      newVersion: '12345',
+      message: 'Rotated key.',
+    });
     const res = await POST(postReq(
       { action: 'rotate', secretName: 'x', namespace: 'default' }, ownerToken
     ));
@@ -129,9 +155,50 @@ describe('POST /api/secretops — manage gate (B4)', () => {
   });
 });
 
+describe('POST /api/secretops — rotate result mapping (C8)', () => {
+  it('maps an unknown secret to 404', async () => {
+    readyStore();
+    hoisted.rotate.mockResolvedValue({
+      success: false,
+      newVersion: '',
+      message: 'Secret x not found in namespace default.',
+      reason: 'not_found',
+    });
+    const res = await POST(postReq(
+      { action: 'rotate', secretName: 'x', namespace: 'default' }, ownerToken
+    ));
+    expect(res.status).toBe(404);
+  });
+
+  it('maps an un-rotatable secret to 400', async () => {
+    readyStore();
+    hoisted.rotate.mockResolvedValue({
+      success: false,
+      newVersion: '',
+      message: 'Secret x is immutable and cannot be rotated in place.',
+      reason: 'not_rotatable',
+    });
+    const res = await POST(postReq(
+      { action: 'rotate', secretName: 'x', namespace: 'default' }, ownerToken
+    ));
+    expect(res.status).toBe(400);
+  });
+
+  it('maps a missing cluster to 503 (cluster_unavailable)', async () => {
+    readyStore();
+    hoisted.rotate.mockRejectedValue(new ClusterUnavailableError());
+    const res = await POST(postReq(
+      { action: 'rotate', secretName: 'x', namespace: 'default' }, ownerToken
+    ));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error.code).toBe('cluster_unavailable');
+  });
+});
+
 describe('GET /api/secretops — read gate unchanged', () => {
   it('serves the audit report to an admin (secrets:read) and denies a viewer', async () => {
     readyStore();
+    hoisted.audit.mockResolvedValue(cannedReport);
     const ok = await GET(new Request('http://localhost:3000/api/secretops', {
       headers: { authorization: `Bearer ${adminToken}` },
     }));
@@ -141,6 +208,16 @@ describe('GET /api/secretops — read gate unchanged', () => {
       headers: { authorization: `Bearer ${viewerToken}` },
     }));
     expect(denied.status).toBe(403);
+  });
+
+  it('maps a missing cluster to 503 (cluster_unavailable)', async () => {
+    readyStore();
+    hoisted.audit.mockRejectedValue(new ClusterUnavailableError());
+    const res = await GET(new Request('http://localhost:3000/api/secretops', {
+      headers: { authorization: `Bearer ${adminToken}` },
+    }));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error.code).toBe('cluster_unavailable');
   });
 });
 

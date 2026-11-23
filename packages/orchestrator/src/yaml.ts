@@ -58,6 +58,27 @@ export function parseYaml<T = unknown>(yamlString: string): T {
 }
 
 /**
+ * Parses a multi-document YAML string (documents separated by `---`)
+ * into one JS value per document. Empty documents are dropped. A
+ * document with a syntax error throws — a broken git manifest must
+ * surface, never silently parse as an empty object.
+ * `uniqueKeys: false` matches the yq-tolerant parsing used elsewhere
+ * (flux.ts): duplicate map keys resolve last-wins.
+ */
+export function parseYamlDocuments<T = unknown>(yamlString: string): T[] {
+  const docs = YAML.parseAllDocuments(yamlString, { uniqueKeys: false });
+  const out: T[] = [];
+  for (const doc of docs) {
+    if (doc.errors.length > 0) {
+      throw new Error(`Invalid YAML: ${doc.errors.map((e) => e.message).join('; ')}`);
+    }
+    const value = doc.toJS() as T;
+    if (value !== null && value !== undefined) out.push(value);
+  }
+  return out;
+}
+
+/**
  * Serializes a JS object into a YAML string.
  */
 export function stringifyYaml(data: unknown): string {

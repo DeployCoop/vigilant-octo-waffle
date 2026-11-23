@@ -100,10 +100,13 @@ export const migrateLintSchema = z.object({
   sql: nonEmptyString('sql'),
 });
 
-/** POST /api/migrate — execute branch (after the data:migrate gate). */
+/** POST /api/migrate — execute branch (after the data:migrate gate).
+ * Studio wiring (Batch C): the migration file's own DDL is what runs,
+ * so no caller-supplied `sql` travels with the request — the recorded
+ * checksum always matches what actually ran. Linting happens inside
+ * `executeZeroDowntimeMigration` on the file's DDL. */
 export const migrateExecuteSchema = z.object({
   version: nonEmptyString('version'),
-  sql: nonEmptyString('sql'),
 });
 
 /** POST /api/postmortem — generate a report. */
