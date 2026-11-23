@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { listCatalogApps, renderAppManifest } from '../app-deployer.js';
 import { renderInitializerManifests } from '../initializer.js';
-import { APP_CATALOG } from '../registry.js';
+import { APP_CATALOG, DEPLOYMENT_PRESETS } from '../registry.js';
 import { findProjectRoot } from '../config.js';
 import { parseYaml } from '../yaml.js';
 
@@ -49,6 +49,12 @@ describe('Multica catalog app', () => {
     assert.strictEqual(multica.initPath, 'init/pre-multica');
     assert.strictEqual(multica.subdomain, 'multica');
     assert.strictEqual(multica.port, 3000);
+  });
+
+  it('is included in the AI & Machine Learning deployment preset', () => {
+    const ai = DEPLOYMENT_PRESETS.find((p) => p.id === 'ai');
+    assert.ok(ai, 'AI preset must exist');
+    assert.ok(ai.apps.includes('multica'), 'AI preset must deploy multica');
   });
 
   it('ships no secret values in the ArgoCD manifest', () => {

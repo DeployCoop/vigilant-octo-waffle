@@ -95,8 +95,14 @@ control plane only.
 
 ## Teardown
 
+Delete the ArgoCD Application — automated prune removes the chart
+resources (including the Postgres and uploads PVCs):
+
 ```
-helm -n ${THIS_NAMESPACE} uninstall multica   # keeps PVCs and the Secret
-kubectl delete namespace ${THIS_NAMESPACE}    # wipes everything (only if
-                                              # the namespace holds nothing else)
+kubectl -n argocd delete application multica-${THIS_NAMESPACE}
 ```
+
+The pre-step Secret is outside the Argo app, so it survives: delete it
+explicitly if wiping (`kubectl -n ${THIS_NAMESPACE} delete secret
+multica-secrets`). Deleting the namespace wipes everything in it, but
+only if the namespace holds nothing else.

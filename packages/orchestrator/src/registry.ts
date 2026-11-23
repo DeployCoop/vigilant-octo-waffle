@@ -622,9 +622,9 @@ export const DEPLOYMENT_PRESETS: DeploymentPreset[] = [
   {
     id: 'ai',
     name: 'AI & Machine Learning',
-    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery, Ollama, vLLM',
-    estimatedMemoryMb: 12288,
-    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery', 'ollama', 'vllm'],
+    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery, Ollama, vLLM, Multica',
+    estimatedMemoryMb: 13312,
+    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery', 'ollama', 'vllm', 'multica'],
   },
   {
     id: 'collaboration',
