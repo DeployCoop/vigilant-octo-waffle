@@ -1,4 +1,4 @@
-import { createMongoAbility, type MongoAbility, type RawRuleOf } from '@casl/ability';
+import { createMongoAbility, subject, type MongoAbility, type RawRuleOf } from '@casl/ability';
 
 /**
  * Client-side mirror of the orchestrator's ability model. The server
@@ -50,7 +50,10 @@ export function subjectFor(target?: {
   appId?: string;
   namespace?: string;
 }): Record<string, unknown> {
-  return { ...(target ?? {}), __caslSubjectType__: SUBJECT_TYPE };
+  // @casl/ability 7.1 trusts a subject type only when set through the
+  // subject() helper (see orchestrator authzSubject); a plain spread of
+  // __caslSubjectType__ throws "Untrusted subject type value" since 7.1.3.
+  return subject(SUBJECT_TYPE, { ...(target ?? {}) });
 }
 
 /** An ability that permits everything (authz disabled / local board). */

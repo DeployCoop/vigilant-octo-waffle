@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { AbilityBuilder, createMongoAbility, type MongoAbility } from '@casl/ability';
+import { AbilityBuilder, createMongoAbility, subject, type MongoAbility } from '@casl/ability';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { z } from 'zod';
 
@@ -474,7 +474,13 @@ export const AUTHZ_SUBJECT_TYPE = 'AuthzTarget';
 
 /** Tags a target object so CASL can match it against AuthzTarget rules. */
 export function authzSubject(target?: AuthzTarget): Record<string, unknown> {
-  return { ...(target ?? {}), __caslSubjectType__: AUTHZ_SUBJECT_TYPE };
+  // @casl/ability 7.1 trusts a subject type only when it is set through
+  // the subject() helper, which stamps the type under both the
+  // __caslSubjectType__ key and a non-enumerable symbol CASL checks on
+  // every can() call. A plain spread of __caslSubjectType__ throws
+  // "Untrusted subject type value" since 7.1.3 (Dependabot rollup
+  // 2026-11-23). The helper mutates its argument, so pass a fresh copy.
+  return subject(AUTHZ_SUBJECT_TYPE, { ...(target ?? {}) });
 }
 
 function scopeIsEmpty(scope?: GrantScope): boolean {
