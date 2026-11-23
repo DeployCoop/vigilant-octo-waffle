@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/airflow
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://airflow.apache.org
+    chart: airflow
+    targetRevision: 1.22.0
     helm:
       values: |
         # Provide a name to substitute for the full names of resources

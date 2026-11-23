@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/openldap
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://jp-gouin.github.io/helm-openldap/
+    chart: openldap
+    targetRevision: 2.0.4
     helm:
       values: |
         global:

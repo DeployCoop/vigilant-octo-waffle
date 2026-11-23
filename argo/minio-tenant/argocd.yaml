@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/minio/tenant
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://operator.min.io
+    chart: tenant
+    targetRevision: 7.1.1
     helm:
       values: |
         # Root key for MinIO Tenant Chart
