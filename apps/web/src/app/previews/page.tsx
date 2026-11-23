@@ -35,7 +35,23 @@ interface PreviewEnvironment {
     cpu: string;
     memory: string;
   };
+  provisioningStage?: 'namespace' | 'deploy' | 'ingress' | 'verifying';
+  provisionError?: string;
 }
+
+interface CatalogTemplate {
+  id: string;
+  name: string;
+  category: string;
+  deployable?: boolean;
+}
+
+const PROVISION_STAGES = [
+  { key: 'namespace', label: 'Namespace created' },
+  { key: 'deploy', label: 'App deployed' },
+  { key: 'ingress', label: 'Ingress created' },
+  { key: 'verifying', label: 'Readiness verified' },
+] as const;
 
 export default function PreviewsStudioPage() {
   const [previews, setPreviews] = useState<PreviewEnvironment[]>([]);
@@ -43,11 +59,15 @@ export default function PreviewsStudioPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<CatalogTemplate[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [destroyingIds, setDestroyingIds] = useState<Set<string>>(new Set());
 
-  // Form state
-  const [prNumber, setPrNumber] = useState('104');
-  const [branch, setBranch] = useState('feat/enterprise-oauth2');
-  const [appName, setAppName] = useState('keycloak');
+  // Form state — empty by default; the old '104' / 'feat/enterprise-oauth2'
+  // / 'keycloak' values were hardcoded demo content, not real defaults.
+  const [prNumber, setPrNumber] = useState('');
+  const [branch, setBranch] = useState('');
+  const [appName, setAppName] = useState('');
   const [ttlMinutes, setTtlMinutes] = useState(120);
   const [creating, setCreating] = useState(false);
 
@@ -67,8 +87,26 @@ export default function PreviewsStudioPage() {
     }
   };
 
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch('/api/apps');
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
+      const deployable = ((data.apps || []) as CatalogTemplate[]).filter((a) => a.deployable);
+      setTemplates(deployable);
+      setCatalogError(null);
+      // Default the template to the first deployable app (only when
+      // the user has not picked one yet).
+      setAppName((current) => (current === '' && deployable.length > 0 ? deployable[0].id : current));
+    } catch (err) {
+      console.error('Failed to fetch app catalog:', err);
+      setCatalogError(err instanceof Error ? err.message : 'Request failed');
+    }
+  };
+
   useEffect(() => {
     fetchPreviews();
+    fetchTemplates();
     const interval = setInterval(fetchPreviews, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -91,7 +129,16 @@ export default function PreviewsStudioPage() {
       if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
         setError(null);
-        setActionMessage(`Provisioned preview environment for PR #${prNumber}`);
+        // The record reports its real status: a fresh preview is
+        // `provisioning` until the cluster verifies it — never claim
+        // "Provisioned" up front.
+        const preview = data.preview as PreviewEnvironment | undefined;
+        const status = preview?.status ?? 'provisioning';
+        setActionMessage(
+          status === 'ready'
+            ? `Preview environment for PR #${prNumber} is ready at ${preview?.previewUrl ?? ''}`
+            : `Preview environment for PR #${prNumber} is ${status} — namespace, deploy and ingress are being verified`
+        );
         setShowCreateModal(false);
         fetchPreviews();
       } else {
@@ -128,6 +175,7 @@ export default function PreviewsStudioPage() {
   };
 
   const handleDestroy = async (id: string) => {
+    setDestroyingIds((current) => new Set(current).add(id));
     try {
       const res = await fetch(`/api/previews?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
@@ -144,6 +192,12 @@ export default function PreviewsStudioPage() {
     } catch (err) {
       console.error('Failed to destroy preview:', err);
       setError(err instanceof Error ? err.message : 'Request failed');
+    } finally {
+      setDestroyingIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -228,6 +282,11 @@ export default function PreviewsStudioPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {previews.map((preview) => {
           const isExpired = preview.status === 'expired' || preview.remainingMinutes <= 0;
+          const isProvisioning = preview.status === 'provisioning';
+          const isTerminating = destroyingIds.has(preview.id) || preview.status === 'terminating';
+          const stageIndex = isProvisioning
+            ? PROVISION_STAGES.findIndex((s) => s.key === (preview.provisioningStage ?? 'verifying'))
+            : PROVISION_STAGES.length;
           return (
             <div
               key={preview.id}
@@ -242,10 +301,14 @@ export default function PreviewsStudioPage() {
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                         isExpired
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          : isTerminating
+                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                            : isProvisioning
+                              ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                       }`}
                     >
-                      {isExpired ? 'Expired' : 'Active Preview'}
+                      {isExpired ? 'Expired' : isTerminating ? 'Terminating…' : isProvisioning ? 'Provisioning' : 'Ready'}
                     </span>
                     <span className="font-mono text-xs text-slate-400">PR #{preview.prNumber}</span>
                   </div>
@@ -265,9 +328,26 @@ export default function PreviewsStudioPage() {
                     <GitBranch className="w-3.5 h-3.5 text-slate-500" />
                     <span className="font-mono text-slate-300">{preview.branch}</span>
                     <span className="text-slate-600">•</span>
-                    <span className="font-mono text-indigo-300">{preview.commitSha}</span>
+                    <span className="font-mono text-indigo-300">{preview.commitSha || '—'}</span>
                   </div>
                 </div>
+
+                {isProvisioning && (
+                  <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl text-xs space-y-1.5">
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider">Provisioning progress</div>
+                    {PROVISION_STAGES.map((stage, i) => (
+                      <div key={stage.key} className="flex items-center space-x-2 text-slate-400">
+                        <span className={i < stageIndex ? 'text-emerald-400' : i === stageIndex ? 'text-indigo-300' : 'text-slate-600'}>
+                          {i < stageIndex ? '✓' : i === stageIndex ? '◌' : '○'}
+                        </span>
+                        <span className={i <= stageIndex ? 'text-slate-300' : ''}>{stage.label}</span>
+                      </div>
+                    ))}
+                    {preview.provisionError && (
+                      <div className="text-rose-400 pt-1">{preview.provisionError}</div>
+                    )}
+                  </div>
+                )}
 
                 <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
                   <div className="truncate mr-2">
@@ -285,9 +365,18 @@ export default function PreviewsStudioPage() {
                   <div className="text-right shrink-0">
                     <div className="text-[10px] text-slate-500 uppercase tracking-wider">Quota</div>
                     <div className="font-mono text-slate-300 text-[11px]">
-                      {preview.resourceLimits.cpu} / {preview.resourceLimits.memory}
+                      {preview.resourceLimits.cpu || '—'} / {preview.resourceLimits.memory || '—'}
                     </div>
                   </div>
+                </div>
+
+                <div className="flex items-center space-x-4 text-xs text-slate-400">
+                  <span>
+                    Replicas: <span className="font-mono text-slate-300">{preview.replicas}</span>
+                  </span>
+                  <span className="truncate">
+                    Image: <span className="font-mono text-slate-300">{preview.imageTag || '—'}</span>
+                  </span>
                 </div>
               </div>
 
@@ -334,6 +423,7 @@ export default function PreviewsStudioPage() {
                   type="number"
                   value={prNumber}
                   onChange={(e) => setPrNumber(e.target.value)}
+                  placeholder="e.g. 104"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 font-mono outline-none focus:border-indigo-500"
                   required
                 />
@@ -345,6 +435,7 @@ export default function PreviewsStudioPage() {
                   type="text"
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
+                  placeholder="e.g. feat/enterprise-oauth2"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 font-mono outline-none focus:border-indigo-500"
                   required
                 />
@@ -352,17 +443,33 @@ export default function PreviewsStudioPage() {
 
               <div>
                 <label className="block text-slate-400 mb-1 font-medium">Base Application Template</label>
-                <select
-                  value={appName}
-                  onChange={(e) => setAppName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 outline-none focus:border-indigo-500"
-                >
-                  <option value="keycloak">Keycloak SSO</option>
-                  <option value="nextcloud">Nextcloud Storage</option>
-                  <option value="postgres">PostgreSQL Cluster</option>
-                  <option value="minio">MinIO Object Store</option>
-                  <option value="custom-app">Custom Microservice</option>
-                </select>
+                {catalogError ? (
+                  <>
+                    <input
+                      type="text"
+                      value={appName}
+                      onChange={(e) => setAppName(e.target.value)}
+                      placeholder="Catalog failed to load — type an app id"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 outline-none focus:border-indigo-500"
+                      required
+                    />
+                    <p className="text-rose-400 mt-1">Could not load the app catalog: {catalogError}</p>
+                  </>
+                ) : (
+                  <select
+                    value={appName}
+                    onChange={(e) => setAppName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 outline-none focus:border-indigo-500"
+                    required
+                  >
+                    {templates.length === 0 && <option value="">Loading catalog…</option>}
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.category})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>

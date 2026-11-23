@@ -6,6 +6,7 @@ import { calculateBurnRates } from '../slo.js';
 import { deployWasmMicroservice } from '../wasm.js';
 import { compareSnapshotWithLive } from '../rewind.js';
 import { broadcastApplication } from '../fleet.js';
+import { stubFleetDeps } from './fleet-stub.js';
 
 /** Batch C, C4: unknown ids are misses, never store[0] fallbacks. */
 
@@ -68,10 +69,13 @@ describe('studio store[0] fallbacks (C4)', () => {
   });
 
   it('fleet: broadcasting to zero matching clusters returns success:false', async () => {
-    const result = await broadcastApplication('my-app', ['no-such-cluster']);
+    // Fleet is wired now (Phase 1): the old seeded ids are gone, so the
+    // broadcast runs against a one-context stub client via the deps seam.
+    const result = await broadcastApplication('my-app', ['no-such-cluster'], stubFleetDeps());
     assert.equal(result.success, false);
     assert.deepEqual(result.deployedClusters, []);
-    const known = await broadcastApplication('my-app', ['cluster-kind-local']);
+    assert.deepEqual(result.results, []);
+    const known = await broadcastApplication('my-app', ['kind-local'], stubFleetDeps());
     assert.equal(known.success, true);
     assert.equal(known.deployedClusters.length, 1);
   });

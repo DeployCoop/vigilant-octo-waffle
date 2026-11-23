@@ -11,6 +11,9 @@ import { apiError, routeError } from '@/lib/route-error';
 
 export const dynamic = 'force-dynamic';
 
+// Wired studios throw ClusterUnavailableError when the cluster is
+// absent; routeError maps it to the 503 no-cluster contract (F1).
+
 export async function GET(req: Request) {
   const denied = await authorizeRequest(req, 'secrets:read');
   if (denied) return denied;
@@ -41,6 +44,13 @@ export async function POST(req: Request) {
       // for the namespace).
       const { secretName, namespace } = secretopsRotateSchema.parse(body);
       const result = await rotateSecretCredential(secretName, namespace);
+      // C8: a failed rotation is not a 200 — unknown secret is a 404,
+      // an un-rotatable secret (immutable, structured type, no keys)
+      // is a 400.
+      if (!result.success) {
+        if (result.reason === 'not_found') return apiError(404, result.message);
+        return apiError(400, result.message);
+      }
       return NextResponse.json(result);
     } else if (action === 'generate_sealed') {
       const { secretName, namespace } = secretopsSealedSchema.parse(body);

@@ -49,9 +49,14 @@ export default function SecretOpsPage() {
   const [rotatingSecret, setRotatingSecret] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  // Sealed secret form
+  // Sealed secret form — real key/value inputs. The values are sent to
+  // the server only for the (refused) sealed generation; the server
+  // never returns them, and the old hardcoded demo literal is gone.
   const [targetSecret, setTargetSecret] = useState('app-api-token');
   const [targetNamespace, setTargetNamespace] = useState('default');
+  const [sealPairs, setSealPairs] = useState<{ key: string; value: string }[]>([
+    { key: 'api_token', value: '' },
+  ]);
   const [generatedSealedYaml, setGeneratedSealedYaml] = useState<string | null>(null);
   const [sealedError, setSealedError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -88,7 +93,14 @@ export default function SecretOpsPage() {
       if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       if (data.success) {
         setError(null);
-        setActionMessage(data.message);
+        // Read-back: the rotation result carries the secret's real new
+        // resourceVersion, proving the patch landed; the message names
+        // the workloads whose restart was verified.
+        setActionMessage(
+          typeof data.newVersion === 'string' && data.newVersion
+            ? `${data.message} (new version ${data.newVersion})`
+            : data.message
+        );
         fetchReport();
       } else {
         setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
@@ -102,6 +114,15 @@ export default function SecretOpsPage() {
   };
 
   const handleGenerateSealed = async () => {
+    const keyValues: Record<string, string> = {};
+    for (const pair of sealPairs) {
+      if (pair.key.trim()) keyValues[pair.key.trim()] = pair.value;
+    }
+    if (Object.keys(keyValues).length === 0) {
+      setGeneratedSealedYaml(null);
+      setSealedError('Enter at least one key/value pair to seal.');
+      return;
+    }
     try {
       const res = await fetch('/api/secretops', {
         method: 'POST',
@@ -110,7 +131,7 @@ export default function SecretOpsPage() {
           action: 'generate_sealed',
           secretName: targetSecret,
           namespace: targetNamespace,
-          keyValues: { api_token: 'secret_live_token_992' },
+          keyValues,
         }),
       });
       const data = await res.json();
@@ -205,8 +226,16 @@ export default function SecretOpsPage() {
 
           <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-xl">
             <div className="text-xs text-slate-400 mb-1">External Secrets Operator</div>
-            <div className="text-2xl font-bold text-emerald-400">Vault Connected</div>
-            <div className="text-[11px] text-slate-500 mt-1">HashiCorp Vault backend sync</div>
+            <div
+              className={`text-2xl font-bold ${report.externalVaultConnected ? 'text-emerald-400' : 'text-slate-400'}`}
+            >
+              {report.externalVaultConnected ? 'Vault Connected' : 'Not Connected'}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">
+              {report.externalVaultConnected
+                ? 'HashiCorp Vault backend sync'
+                : 'No ExternalSecret store is syncing'}
+            </div>
           </div>
         </div>
       )}
@@ -353,6 +382,48 @@ export default function SecretOpsPage() {
               Generate SealedSecret YAML
             </button>
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-[11px] font-medium text-slate-400">Key / Value Pairs</div>
+          {sealPairs.map((pair, i) => (
+            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+              <input
+                type="text"
+                value={pair.key}
+                placeholder="key"
+                aria-label={`Sealed secret key ${i + 1}`}
+                onChange={(e) =>
+                  setSealPairs(sealPairs.map((p, j) => (j === i ? { ...p, key: e.target.value } : p)))
+                }
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono outline-none focus:border-sky-500"
+              />
+              <input
+                type="password"
+                value={pair.value}
+                placeholder="value"
+                aria-label={`Sealed secret value ${i + 1}`}
+                autoComplete="off"
+                onChange={(e) =>
+                  setSealPairs(sealPairs.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))
+                }
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono outline-none focus:border-sky-500"
+              />
+              <button
+                onClick={() => setSealPairs(sealPairs.filter((_, j) => j !== i))}
+                disabled={sealPairs.length === 1}
+                className="px-2 py-1 text-xs text-slate-400 hover:text-rose-300 disabled:opacity-30 transition"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={() => setSealPairs([...sealPairs, { key: '', value: '' }])}
+            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 text-xs rounded border border-slate-700 transition"
+          >
+            Add Key
+          </button>
         </div>
 
         {sealedError && (
