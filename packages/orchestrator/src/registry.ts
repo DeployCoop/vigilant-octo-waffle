@@ -541,6 +541,20 @@ export const APP_CATALOG: AppDefinition[] = [
     icon: 'Cpu',
     estimatedMemoryMb: 4096,
   },
+  {
+    id: 'multica',
+    name: 'Multica',
+    category: 'AI, ML & GPU',
+    description: 'AI-native task management where AI agents are first-class assignees; Go API, Next.js UI, and bundled Postgres',
+    enablerVar: 'MULTICA_ENABLED',
+    argoPath: 'argo/multica',
+    initPath: 'init/pre-multica',
+    subdomain: 'multica',
+    port: 3000,
+    docsUrl: 'https://github.com/multica-ai/multica/blob/main/SELF_HOSTING.md',
+    icon: 'Bot',
+    estimatedMemoryMb: 1024,
+  },
 
   // Messaging & IoT
   {

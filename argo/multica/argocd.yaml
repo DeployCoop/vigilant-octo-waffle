@@ -1,0 +1,51 @@
+metadata:
+  name: multica-${THIS_NAMESPACE}
+  namespace: argocd
+spec:
+  destination:
+    namespace: ${THIS_NAMESPACE}
+    server: https://kubernetes.default.svc
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=false
+  source:
+    repoURL: oci://ghcr.io/multica-ai/charts/multica
+    chart: multica
+    targetRevision: 0.11.1
+    helm:
+      releaseName: multica
+      values: |
+        # The chart reads all secrets from the pre-created Secret
+        # (init/pre-multica/secret.yaml); no secret value lives here.
+        existingSecret: multica-secrets
+        postgres:
+          persistence:
+            storageClass: "${THIS_STORAGECLASS}"
+        backend:
+          uploads:
+            persistence:
+              storageClass: "${THIS_STORAGECLASS}"
+          config:
+            appUrl: https://${THIS_MULTICA_HOST}.${THIS_DOMAIN}
+            frontendOrigin: https://${THIS_MULTICA_HOST}.${THIS_DOMAIN}
+            googleRedirectUri: https://${THIS_MULTICA_HOST}.${THIS_DOMAIN}/auth/callback
+            localUploadBaseUrl: https://api.${THIS_MULTICA_HOST}.${THIS_DOMAIN}
+            # First-party anonymous deployment telemetry OFF (VOW is localhost-only).
+            doNotTrack: "1"
+        ingress:
+          className: ${THIS_CLUSTER_INGRESS}
+          annotations:
+            cert-manager.io/cluster-issuer: ${THIS_CLUSTER_ISSUER}
+          frontend:
+            host: ${THIS_MULTICA_HOST}.${THIS_DOMAIN}
+          backend:
+            host: api.${THIS_MULTICA_HOST}.${THIS_DOMAIN}
+          tls:
+            - secretName: multica-tls
+              hosts:
+                - ${THIS_MULTICA_HOST}.${THIS_DOMAIN}
+                - api.${THIS_MULTICA_HOST}.${THIS_DOMAIN}
