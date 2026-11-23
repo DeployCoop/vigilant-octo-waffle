@@ -733,6 +733,16 @@ export class ProcessManager {
     options: RunCommandOptions
   ): Promise<CommandWaitResult> {
     const task = this.runCommand(command, args, options);
+    return this.waitForTask(task);
+  }
+
+  /**
+   * Resolve with the terminal result of a TaskRun launched elsewhere
+   * (e.g. `ArgoManager.syncApp`), using the same close-wait as
+   * `runCommandAndWait`. Resolves — never rejects — on a non-zero exit;
+   * callers check `code` / `assertCommandSuccess`.
+   */
+  public async waitForTask(task: TaskRun): Promise<CommandWaitResult> {
     if (task.status !== 'running') {
       // Already finalized (synchronous spawn failure): 'close' was
       // emitted before runCommand returned, so no listener would fire.

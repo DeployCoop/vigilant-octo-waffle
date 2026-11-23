@@ -86,12 +86,61 @@ describe('POST /api/previews validation (C7)', () => {
   it('creates with ttlMinutes defaulting to 120', async () => {
     const res = await POST(postReq(base));
     expect(res.status).toBe(200);
-    expect(hoisted.createPreviewEnvironment).toHaveBeenCalledWith({
-      prNumber: 12,
-      branch: 'main',
-      appName: 'app',
-      ttlMinutes: 120,
-    });
+    expect(hoisted.createPreviewEnvironment).toHaveBeenCalledWith(
+      {
+        prNumber: 12,
+        branch: 'main',
+        appName: 'app',
+        ttlMinutes: 120,
+      },
+      { projectRoot: hoisted.root }
+    );
+  });
+});
+
+describe('POST /api/previews wired error mapping (Batch C)', () => {
+  const base = { prNumber: 12, branch: 'main', appName: 'app' };
+
+  it('maps ClusterUnavailableError to 503 cluster_unavailable', async () => {
+    const { ClusterUnavailableError } = await import('@vow/orchestrator');
+    hoisted.createPreviewEnvironment.mockRejectedValue(new ClusterUnavailableError());
+    const res = await POST(postReq(base));
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error.code).toBe('cluster_unavailable');
+  });
+
+  it('maps PreviewConflictError to 409 conflict', async () => {
+    const { PreviewConflictError } = await import('@vow/orchestrator');
+    hoisted.createPreviewEnvironment.mockRejectedValue(
+      new PreviewConflictError('Preview environment prev-pr-12-app already exists')
+    );
+    const res = await POST(postReq(base));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.code).toBe('conflict');
+  });
+
+  it('maps PreviewAppNotFoundError to 404 not_found', async () => {
+    const { PreviewAppNotFoundError } = await import('@vow/orchestrator');
+    hoisted.createPreviewEnvironment.mockRejectedValue(
+      new PreviewAppNotFoundError("Application 'app' is not a deployable catalog app")
+    );
+    const res = await POST(postReq(base));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('not_found');
+  });
+
+  it('maps ClusterUnavailableError to 503 on DELETE', async () => {
+    const { ClusterUnavailableError } = await import('@vow/orchestrator');
+    hoisted.destroyPreviewEnvironment.mockRejectedValue(new ClusterUnavailableError());
+    const res = await DELETE(
+      new Request('http://localhost:3000/api/previews?id=prev-pr-12-app', { method: 'DELETE' })
+    );
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error.code).toBe('cluster_unavailable');
   });
 });
 

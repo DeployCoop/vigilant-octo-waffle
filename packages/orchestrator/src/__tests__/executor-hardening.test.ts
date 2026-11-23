@@ -336,6 +336,16 @@ describe('runCommandAndWait + input + persist (Plan III Q8)', () => {
     assert.doesNotThrow(() => assertCommandSuccess(result, 'echo hi'));
   });
 
+  it('waitForTask resolves a TaskRun launched elsewhere (fleet sync path)', async () => {
+    const pm = new ProcessManager();
+    const task = pm.runCommand('echo', ['waited'], { cwd: workDir });
+    const result = await pm.waitForTask(task);
+    assert.equal(result.code, 0);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.stdout, 'waited\n');
+    assert.ok(result.taskId.startsWith('task_'));
+  });
+
   it('pipes input to stdin (kubectl apply -f -)', async () => {
     const pm = new ProcessManager();
     const manifest = 'apiVersion: v1\nkind: ConfigMap\n';

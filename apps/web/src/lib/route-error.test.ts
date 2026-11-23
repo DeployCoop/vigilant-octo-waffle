@@ -160,4 +160,17 @@ describe('routeError 503 mapping', () => {
     expect(body.error.code).toBe('cluster_unavailable');
     expect(body.error.message).toBe('Cluster unavailable');
   });
+
+  it('a ClusterUnavailableError maps to 503 cluster_unavailable (drift wiring)', async () => {
+    const err = new Error('Kubernetes cluster is unavailable');
+    err.name = 'ClusterUnavailableError';
+    const res = routeError(err, {
+      route: 'GET /api/drift',
+      fallbackMessage: 'Failed to scan cluster drift',
+    });
+    expect(res.status).toBe(503);
+    const body = await bodyOf(res);
+    expect(body.error.code).toBe('cluster_unavailable');
+    expect(body.error.message).toBe('Kubernetes cluster is unavailable');
+  });
 });
