@@ -120,7 +120,7 @@ export function listCatalogApps(projectRoot: string = findProjectRoot()): Catalo
       category = 'Operators & Hardware';
     } else if (['keycloak', 'openldap', 'bao', 'openbao'].some((s) => appId.includes(s))) {
       category = 'Identity & Security';
-    } else if (['ollama', 'vllm', 'cvat', 'kubeflow'].some((s) => appId.includes(s))) {
+    } else if (['ollama', 'vllm', 'cvat', 'kubeflow', 'multica'].some((s) => appId.includes(s))) {
       category = 'AI / ML Platforms';
     }
 

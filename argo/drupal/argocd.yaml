@@ -84,7 +84,7 @@ spec:
           ## User of the application
           ##
           username: coopadmin
-          password: "0?w64/Hrf`Ii|~)<I+9kpII+H1(4?/Jm5"
+          password: "${THIS_DRUPAL_PASSWORD}"
         
           ## Application password
           ##
@@ -356,8 +356,8 @@ spec:
             starttls: true
             auth:
               enabled: true
-              user: "admin@example.com"
-              password: "POmF$ON=XXcp@5p=Zc"
+              user: "townhall@bokbot.com"
+              password: "${THIS_SMTP_PASSWORD}"
               # Note: sSMTP only supports LOGIN and CRAM-MD5
               method: LOGIN
         
@@ -803,9 +803,9 @@ spec:
             tag: 14.3.0-debian-11-r3
           auth:
             enablePostgresUser: true
-            postgresPassword: "thahm7xu9Ohvaicu5aeS5beb6Pha1owie"
+            postgresPassword: "${THIS_POSTGRES_PASSWORD}"
             user: townhalluser
-            password: "thahm7xu9Ohvaicu5aeS5beb6Pha1owie"
+            password: "${THIS_POSTGRES_PASSWORD}"
             database: townhalldb
           primary:
             persistence:

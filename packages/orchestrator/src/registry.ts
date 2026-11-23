@@ -541,6 +541,20 @@ export const APP_CATALOG: AppDefinition[] = [
     icon: 'Cpu',
     estimatedMemoryMb: 4096,
   },
+  {
+    id: 'multica',
+    name: 'Multica',
+    category: 'AI, ML & GPU',
+    description: 'AI-native task management where AI agents are first-class assignees; Go API, Next.js UI, and bundled Postgres',
+    enablerVar: 'MULTICA_ENABLED',
+    argoPath: 'argo/multica',
+    initPath: 'init/pre-multica',
+    subdomain: 'multica',
+    port: 3000,
+    docsUrl: 'https://github.com/multica-ai/multica/blob/main/SELF_HOSTING.md',
+    icon: 'Bot',
+    estimatedMemoryMb: 1024,
+  },
 
   // Messaging & IoT
   {
@@ -608,9 +622,9 @@ export const DEPLOYMENT_PRESETS: DeploymentPreset[] = [
   {
     id: 'ai',
     name: 'AI & Machine Learning',
-    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery, Ollama, vLLM',
-    estimatedMemoryMb: 12288,
-    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery', 'ollama', 'vllm'],
+    description: 'Core + Kubeflow, CVAT, NVIDIA GPU Operator, Node Feature Discovery, Ollama, vLLM, Multica',
+    estimatedMemoryMb: 13312,
+    apps: ['argocd', 'certmanager', 'kubegres', 'kubeflow', 'cvat', 'gpu-operator', 'node-feature-discovery', 'ollama', 'vllm', 'multica'],
   },
   {
     id: 'collaboration',
