@@ -182,8 +182,11 @@ describe('studio-validation (C7)', () => {
     assert.equal(driftRemediateSchema.safeParse({ driftId: '' }).success, false);
     assert.equal(rewindActionSchema.safeParse({ snapshotId: '' }).success, false);
     assert.equal(migrateLintSchema.safeParse({ sql: '' }).success, false);
-    assert.equal(migrateExecuteSchema.safeParse({ version: 'v1', sql: '' }).success, false);
-    assert.equal(migrateExecuteSchema.safeParse({ version: '', sql: 'SELECT 1' }).success, false);
+    // Studio wiring (Batch C): execute takes version only — the file's
+    // own DDL runs, so no caller SQL travels with the request.
+    assert.equal(migrateExecuteSchema.safeParse({ version: 'v1' }).success, true);
+    assert.equal(migrateExecuteSchema.safeParse({ version: '' }).success, false);
+    assert.equal(migrateExecuteSchema.safeParse({}).success, false);
     assert.equal(guardEvaluateSchema.safeParse({ yaml: '' }).success, false);
   });
 

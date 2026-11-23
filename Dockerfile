@@ -63,6 +63,11 @@ COPY apps/ ./apps/
 # src/ at runtime and locates the workspace root via src/default.env;
 # the tree must ship in the image (Plan III §8.4 runtime contents).
 COPY src/ ./src/
+# The migrate studio reads migration files from migrations/ at the
+# project root at runtime; the directory must ship in the image too
+# (Phase 0 lesson: root-level content is not in the image unless
+# copied — the same trap tsconfig.base.json fell into).
+COPY migrations/ ./migrations/
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm build

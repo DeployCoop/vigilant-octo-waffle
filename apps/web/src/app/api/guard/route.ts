@@ -3,6 +3,7 @@ import {
   listAdmissionPolicies,
   evaluateManifest,
   togglePolicyRule,
+  getAdmissionWebhookStatus,
   InvalidManifestError,
   guardToggleSchema,
   guardEvaluateSchema,
@@ -17,8 +18,11 @@ export async function GET(req: Request) {
   if (denied) return denied;
 
   try {
-    const policies = await listAdmissionPolicies();
-    return NextResponse.json({ policies });
+    const [policies, webhookStatus] = await Promise.all([
+      listAdmissionPolicies(),
+      getAdmissionWebhookStatus(),
+    ]);
+    return NextResponse.json({ policies, webhookStatus });
   } catch (err) {
     return routeError(err, {
       route: 'GET /api/guard',
@@ -42,8 +46,19 @@ export async function POST(req: Request) {
       if (denied) return denied;
       // C7: enabled must be a real boolean when present (no Boolean() coercion).
       const { ruleId, enabled } = guardToggleSchema.parse(body);
-      const updated = await togglePolicyRule(ruleId, enabled);
-      return NextResponse.json({ success: true, rule: updated });
+      try {
+        // Wired (Batch C): the toggle persists to the ConfigMap in the
+        // cluster. With no cluster it throws ClusterUnavailableError,
+        // mapped to 503 by routeError — never a silent in-memory flip.
+        const updated = await togglePolicyRule(ruleId, enabled);
+        if (!updated) return apiError(404, `Unknown admission policy rule: ${ruleId}`);
+        return NextResponse.json({ success: true, rule: updated });
+      } catch (err) {
+        return routeError(err, {
+          route: 'POST /api/guard',
+          fallbackMessage: 'Failed to toggle policy rule',
+        });
+      }
     }
 
     const denied = await authorizeRequest(req, 'security:read');
@@ -52,16 +67,25 @@ export async function POST(req: Request) {
     // C7: yaml must be a non-empty string.
     const { yaml } = guardEvaluateSchema.parse(body);
 
-    const evaluation = await evaluateManifest(yaml);
-    return NextResponse.json({ success: true, evaluation });
-  } catch (err) {
-    // C3: unparseable YAML is a client error, not a 500.
-    if (err instanceof InvalidManifestError) {
-      return apiError(400, 'Invalid YAML: could not parse manifest');
+    try {
+      const evaluation = await evaluateManifest(yaml);
+      return NextResponse.json({ success: true, evaluation });
+    } catch (err) {
+      // C3: unparseable YAML is a client error, not a 500.
+      if (err instanceof InvalidManifestError) {
+        return apiError(400, 'Invalid YAML: could not parse manifest');
+      }
+      return routeError(err, {
+        route: 'POST /api/guard',
+        fallbackMessage: 'Failed to evaluate manifest',
+      });
     }
+  } catch (err) {
+    // Body parse / zod validation failures land here (zod is classified
+    // as 400 by routeError; a malformed JSON body gets the fallback).
     return routeError(err, {
       route: 'POST /api/guard',
-      fallbackMessage: 'Failed to evaluate manifest',
+      fallbackMessage: 'Invalid request body',
     });
   }
 }

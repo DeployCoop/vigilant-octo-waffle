@@ -8,7 +8,7 @@
  * (non-thrown) errors such as validation failures and not-founds.
  */
 import { NextResponse } from 'next/server';
-import { AuthzInvariantError } from '@vow/orchestrator';
+import { AuthzInvariantError, ClusterUnavailableError } from '@vow/orchestrator';
 import { AuthzError } from './authz';
 import { codeForStatus, errorBody } from './envelope';
 import { log } from './log';
@@ -70,6 +70,19 @@ export function routeError(err: unknown, opts: RouteErrorOptions): NextResponse 
     status = 409;
     code = opts.code ?? 'conflict';
     reason = 'authz_invariant';
+    message = err.message;
+  } else if (
+    err instanceof ClusterUnavailableError ||
+    (err instanceof Error && err.name === 'ClusterUnavailableError')
+  ) {
+    // Studio wiring (Batch C): a wired operation needs the cluster and
+    // it is unreachable. 503 with the Phase 0 F1 code. The message is
+    // the error's fixed benign string, never cluster internals.
+    // The name check is deliberate: the web imports the orchestrator's
+    // compiled dist, so class identity can break across module copies;
+    // a structurally identical error must still 503, never 500.
+    status = 503;
+    code = opts.code ?? 'cluster_unavailable';
     message = err.message;
   } else if (isZodError(err)) {
     status = 400;

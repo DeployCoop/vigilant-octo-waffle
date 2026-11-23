@@ -49,24 +49,22 @@ export async function POST(req: Request) {
       const lintResult = await lintDdlScript(sql);
       return NextResponse.json({ success: true, lintResult });
     } else if (action === 'execute') {
-      // C7: version + sql validated inside the branch, after the data:migrate gate.
-      const { version, sql } = migrateExecuteSchema.parse(body);
+      // C7: version validated inside the branch, after the data:migrate gate.
+      const { version } = migrateExecuteSchema.parse(body);
       // BUG FIX (bug hunt B6): a migration may not execute without a
-      // clean lint. The store keeps no DDL per version, so the caller
-      // must supply the DDL being applied; it is linted here and any
-      // BLOCKER finding rejects the execution (the dashboard now sends
-      // the lint textarea content with execute).
-      const lintResult = await lintDdlScript(sql);
-      const blockers = lintResult.findings.filter((f) => f.severity === 'BLOCKER');
-      if (blockers.length > 0) {
-        return apiError(
-          400,
-          `Migration blocked: ${blockers.length} BLOCKER lint finding(s): ${blockers.map((f) => f.message).join('; ')}`
-        );
-      }
+      // clean lint. Studio wiring (Batch C): the lint now runs inside
+      // executeZeroDowntimeMigration on the migration file's own DDL —
+      // the caller sends no SQL, so the recorded checksum always
+      // matches what actually ran. A BLOCKER finding rejects the
+      // execution before any snapshot or DDL runs.
       const execResult = await executeZeroDowntimeMigration(version);
-      // C8: an unknown version 404s instead of returning success:false.
-      if (!execResult.success) return apiError(404, execResult.message);
+      // C8: failures map to their own status instead of collapsing to
+      // one code — unknown version 404, blocked 400, failed 500.
+      if (!execResult.success) {
+        const status =
+          execResult.errorKind === 'not_found' ? 404 : execResult.errorKind === 'blocked' ? 400 : 500;
+        return apiError(status, execResult.message);
+      }
       return NextResponse.json(execResult);
     } else {
       return apiError(400, `Unknown action: ${action}`);

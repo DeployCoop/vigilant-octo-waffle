@@ -18,6 +18,22 @@ export interface QueryResult {
   executionTimeMs: number;
 }
 
+/**
+ * Thrown when no PostgreSQL pod can be found anywhere in the cluster.
+ * Studio wiring (Batch C): callers that need a live database — migrate
+ * in particular — catch this and rethrow `ClusterUnavailableError`
+ * instead of falling back to fabricated rows. The old simulated
+ * fallback (hardcoded tables / "No active PostgreSQL pod" notice row)
+ * is gone: under the wire decision a missing database is an error,
+ * not demo data.
+ */
+export class PostgresUnavailableError extends Error {
+  constructor(message = 'No PostgreSQL pod found in the cluster') {
+    super(message);
+    this.name = 'PostgresUnavailableError';
+  }
+}
+
 export async function listS3Buckets(): Promise<{ buckets: S3BucketInfo[]; status: string }> {
   try {
     // Check if minio pod or mc client is accessible
@@ -119,28 +135,14 @@ export async function executePostgresQuery(
 
   if (!ns) ns = 'default';
   if (!podName) {
-    // If no live DB pod found, simulate response for demonstration / offline cluster
-    const latency = Date.now() - start;
-    if (upper.includes('TABLES') || upper.includes('\\DT') || upper.includes('INFORMATION_SCHEMA')) {
-      return {
-        columns: ['table_schema', 'table_name', 'table_type'],
-        rows: [
-          ['public', 'users', 'BASE TABLE'],
-          ['public', 'auth_tokens', 'BASE TABLE'],
-          ['public', 'app_settings', 'BASE TABLE'],
-          ['public', 'activity_logs', 'BASE TABLE'],
-        ],
-        rowCount: 4,
-        executionTimeMs: latency,
-      };
-    }
-
-    return {
-      columns: ['status', 'message'],
-      rows: [['Notice', 'No active PostgreSQL pod currently running in cluster. Start cluster or Kubegres.']],
-      rowCount: 1,
-      executionTimeMs: latency,
-    };
+    // Studio wiring (Batch C): no live DB pod is an error, not a
+    // simulated response. The old fallback returned hardcoded tables
+    // for INFORMATION_SCHEMA queries and a "Notice" row otherwise —
+    // fabricated data presented as a query result. Callers that need
+    // a database (migrate) translate this into ClusterUnavailableError.
+    throw new PostgresUnavailableError(
+      'No PostgreSQL pod found in the cluster (checked labels app=postgres, app.kubernetes.io/component=postgres, app.kubernetes.io/name=postgresql). Start the cluster or Kubegres.'
+    );
   }
 
   const db = options?.database || 'postgres';

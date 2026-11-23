@@ -44,6 +44,13 @@ interface EvaluationResult {
   mutatedYaml?: string;
 }
 
+interface AdmissionWebhookStatus {
+  installed: boolean;
+  validating: string[];
+  mutating: string[];
+  error?: string;
+}
+
 const SAMPLE_VULNERABLE_YAML = `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -95,8 +102,10 @@ spec:
 
 export default function GuardStudioPage() {
   const [policies, setPolicies] = useState<AdmissionPolicyRule[]>([]);
+  const [webhookStatus, setWebhookStatus] = useState<AdmissionWebhookStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [togglingRuleId, setTogglingRuleId] = useState<string | null>(null);
   const [yamlInput, setYamlInput] = useState(SAMPLE_VULNERABLE_YAML);
   const [evaluating, setEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
@@ -110,6 +119,7 @@ export default function GuardStudioPage() {
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(apiErrorMessage(data));
       setPolicies(data.policies || []);
+      setWebhookStatus(data.webhookStatus ?? null);
     } catch (err) {
       console.error('Failed to load admission policies:', err);
       setError(err instanceof Error ? err.message : 'Request failed');
@@ -147,6 +157,13 @@ export default function GuardStudioPage() {
   };
 
   const handleToggle = async (ruleId: string, currentEnabled: boolean) => {
+    // Optimistic update: flip the switch immediately, roll back to the
+    // pre-toggle snapshot on any failure. One toggle at a time, so the
+    // snapshot can never be clobbered by an interleaved toggle.
+    if (togglingRuleId) return;
+    const previous = policies;
+    setPolicies(policies.map((r) => (r.id === ruleId ? { ...r, enabled: !currentEnabled } : r)));
+    setTogglingRuleId(ruleId);
     try {
       const res = await fetch('/api/guard', {
         method: 'POST',
@@ -159,13 +176,37 @@ export default function GuardStudioPage() {
         setError(null);
         fetchPolicies();
       } else {
+        setPolicies(previous);
         setError(apiErrorMessage(data, typeof data.message === 'string' ? data.message : 'Action failed'));
       }
     } catch (err) {
       console.error('Toggle failed:', err);
+      setPolicies(previous);
       setError(err instanceof Error ? err.message : 'Request failed');
+    } finally {
+      setTogglingRuleId(null);
     }
   };
+
+  // Banner values from the live webhook probe (GET /api/guard). Before
+  // the first load, show a placeholder rather than a wrong claim; the
+  // sandbox card below is a local feature, so it stays "Ready".
+  const enforcement = !webhookStatus
+    ? { value: '—', sub: 'Checking cluster…' }
+    : webhookStatus.error
+      ? { value: 'Unknown', sub: 'Could not list admission webhooks' }
+      : webhookStatus.validating.length > 0
+        ? { value: 'Webhook', sub: `Validating: ${webhookStatus.validating.join(', ')}` }
+        : webhookStatus.installed
+          ? { value: 'Mutating only', sub: 'No validating webhook installed' }
+          : { value: 'Sandbox only', sub: 'No admission webhook installed' };
+  const mutating = !webhookStatus
+    ? { value: '—', sub: 'Checking cluster…' }
+    : webhookStatus.error
+      ? { value: 'Unknown', sub: 'Could not list admission webhooks' }
+      : webhookStatus.mutating.length > 0
+        ? { value: 'Enabled', sub: `Mutating: ${webhookStatus.mutating.join(', ')}` }
+        : { value: 'Not installed', sub: 'No mutating webhook in cluster' };
 
   const handleCopy = () => {
     if (evaluation?.mutatedYaml) {
@@ -217,14 +258,14 @@ export default function GuardStudioPage() {
 
         <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-xl">
           <div className="text-xs text-slate-400 mb-1">Enforcement Mode</div>
-          <div className="text-2xl font-bold text-sky-400">Strict Webhook</div>
-          <div className="text-[11px] text-slate-500 mt-1">Intercepts kubectl & Helm</div>
+          <div className="text-2xl font-bold text-sky-400">{enforcement.value}</div>
+          <div className="text-[11px] text-slate-500 mt-1">{enforcement.sub}</div>
         </div>
 
         <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-xl">
           <div className="text-xs text-slate-400 mb-1">Auto-Mutating Webhooks</div>
-          <div className="text-2xl font-bold text-violet-400">Enabled</div>
-          <div className="text-[11px] text-slate-500 mt-1">Auto-injects labels & rootfs</div>
+          <div className="text-2xl font-bold text-violet-400">{mutating.value}</div>
+          <div className="text-[11px] text-slate-500 mt-1">{mutating.sub}</div>
         </div>
 
         <div className="bg-slate-900/60 border border-slate-800 p-5 rounded-xl">
@@ -398,7 +439,8 @@ export default function GuardStudioPage() {
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => handleToggle(rule.id, rule.enabled)}
-                      className={`px-2.5 py-1 rounded text-xs font-medium transition ${
+                      disabled={togglingRuleId === rule.id}
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition disabled:opacity-50 ${
                         rule.enabled
                           ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
                           : 'bg-slate-800 text-slate-400 border border-slate-700'

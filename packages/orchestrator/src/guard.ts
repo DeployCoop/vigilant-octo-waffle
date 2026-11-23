@@ -1,4 +1,12 @@
 import { parseYaml, stringifyYaml } from './yaml.js';
+import { K8sClient } from './k8s.js';
+import {
+  processManager,
+  assertCommandSuccess,
+  type CommandWaitResult,
+} from './executor.js';
+import { requireFound } from './studio-store.js';
+import { ClusterUnavailableError } from './errors.js';
 
 export interface AdmissionPolicyRule {
   id: string;
@@ -40,7 +48,52 @@ export class InvalidManifestError extends Error {
   }
 }
 
-const policyRules: AdmissionPolicyRule[] = [
+/**
+ * Toggle persistence (studio wiring, Phase 1): the rule set lives in a
+ * ConfigMap in the cluster, not only in this process's memory. The
+ * ConfigMap is the source of truth; the module-level `policyRules` is a
+ * working copy synced from it. Namespace `default`: there is no
+ * guard-specific namespace configured anywhere in the repo, and the
+ * policies are cluster-scoped admission rules, not per-app config.
+ */
+export const GUARD_POLICIES_CONFIGMAP = 'vow-guard-policies';
+export const GUARD_POLICIES_NAMESPACE = 'default';
+const GUARD_POLICIES_DATA_KEY = 'rules.json';
+
+/**
+ * Injectable seams for the cluster-backed operations (Batch C wiring).
+ * The defaults hit the real cluster; tests pass fakes. Mirrors the
+ * `deps` pattern in ebpf.ts.
+ */
+export interface GuardDeps {
+  /** Reachability probe — defaults to the cached `getTelemetry()` check. */
+  probeCluster?: () => Promise<boolean>;
+  /** kubectl invocation — defaults to `processManager.runCommandAndWait`. */
+  runKubectl?: (args: string[], input?: string) => Promise<CommandWaitResult>;
+}
+
+async function defaultProbeCluster(): Promise<boolean> {
+  // Constructing the client applies the k3s.yaml KUBECONFIG fallback
+  // (k8s.ts), which the kubectl calls below then inherit — probe first,
+  // then kubectl, in that order.
+  return (await new K8sClient().getTelemetry()).isConnected;
+}
+
+async function defaultRunKubectl(args: string[], input?: string): Promise<CommandWaitResult> {
+  return processManager.runCommandAndWait('kubectl', args, {
+    cwd: process.cwd(),
+    ...(input !== undefined ? { input } : {}),
+  });
+}
+
+/**
+ * The built-in rule set. `policyRules` below is a mutable working copy
+ * synced from the ConfigMap; this array is never mutated, so a stored
+ * rule set can always be merged back onto the true defaults (a rule
+ * deleted from the ConfigMap reverts to its default, it does not keep
+ * a stale synced value).
+ */
+const DEFAULT_POLICY_RULES: AdmissionPolicyRule[] = [
   {
     id: 'disallow-privileged-containers',
     name: 'Disallow Privileged Containers',
@@ -106,15 +159,227 @@ const policyRules: AdmissionPolicyRule[] = [
   },
 ];
 
-export async function listAdmissionPolicies(): Promise<AdmissionPolicyRule[]> {
-  return [...policyRules];
+/** Working copy of the rule set, synced from the ConfigMap (see above). */
+const policyRules: AdmissionPolicyRule[] = DEFAULT_POLICY_RULES.map((r) => ({ ...r }));
+
+type PoliciesReadResult =
+  | { status: 'ok'; rules: AdmissionPolicyRule[] }
+  | { status: 'not-found' };
+
+/**
+ * Merge a stored rule set onto the built-in defaults. Only the `enabled`
+ * flag is persisted — the rest of each rule is content defined here.
+ * Stored entries for unknown ids are ignored (only rules this dashboard
+ * knows are ever evaluated); known rules missing from the store keep
+ * their default. Malformed entries fail loudly: a hand-edited ConfigMap
+ * must not silently evaluate with the wrong rule set.
+ */
+function mergeStoredRules(stored: unknown): AdmissionPolicyRule[] {
+  if (!Array.isArray(stored)) {
+    throw new Error('Guard policy ConfigMap is malformed: rules.json is not an array');
+  }
+  const enabledById = new Map<string, boolean>();
+  for (const entry of stored) {
+    const rec = asRecord(entry);
+    if (!rec || typeof rec.id !== 'string' || typeof rec.enabled !== 'boolean') {
+      throw new Error(
+        'Guard policy ConfigMap is malformed: each rule needs a string id and boolean enabled'
+      );
+    }
+    enabledById.set(rec.id, rec.enabled);
+  }
+  return DEFAULT_POLICY_RULES.map((r) =>
+    enabledById.has(r.id) ? { ...r, enabled: enabledById.get(r.id) as boolean } : { ...r }
+  );
 }
 
-export async function togglePolicyRule(ruleId: string, enabled: boolean): Promise<AdmissionPolicyRule | null> {
-  const rule = policyRules.find((r) => r.id === ruleId);
+/**
+ * Read the persisted rule set from the cluster. `not-found` covers both
+ * a missing ConfigMap and a ConfigMap with no `rules.json` key — no
+ * persisted state yet, so the in-memory defaults stand. Any other
+ * non-zero exit (API down, RBAC, missing binary) is a real failure,
+ * never silently treated as absent: kubectl reports a missing object
+ * as a NotFound error on stderr, and only that is a not-found.
+ */
+async function readPoliciesFromCluster(deps: GuardDeps): Promise<PoliciesReadResult> {
+  const runKubectl = deps.runKubectl ?? defaultRunKubectl;
+  const result = await runKubectl([
+    'get',
+    'configmap',
+    GUARD_POLICIES_CONFIGMAP,
+    '-n',
+    GUARD_POLICIES_NAMESPACE,
+    '-o',
+    'json',
+  ]);
+  if (result.code !== 0) {
+    if (result.stderr.includes('NotFound')) return { status: 'not-found' };
+    throw new Error('Failed to read guard policies ConfigMap');
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(result.stdout);
+  } catch {
+    throw new Error('Guard policy ConfigMap is malformed: not valid JSON');
+  }
+  const raw = asRecord(asRecord(doc)?.data)?.[GUARD_POLICIES_DATA_KEY];
+  if (raw === undefined) return { status: 'not-found' };
+  if (typeof raw !== 'string') {
+    throw new Error('Guard policy ConfigMap is malformed: rules.json is not a string');
+  }
+  let stored: unknown;
+  try {
+    stored = JSON.parse(raw);
+  } catch {
+    throw new Error('Guard policy ConfigMap is malformed: rules.json is not valid JSON');
+  }
+  return { status: 'ok', rules: mergeStoredRules(stored) };
+}
+
+/**
+ * Replace the working copy with the persisted rule set (no-op when
+ * absent). Probes first: with no cluster there is nothing to sync, and
+ * skipping the kubectl call keeps the best-effort evaluation sync cheap
+ * offline. Callers that must distinguish "no cluster" from "no stored
+ * state" (list, toggle) probe themselves and throw first.
+ */
+async function syncPoliciesFromCluster(deps: GuardDeps): Promise<void> {
+  const probeCluster = deps.probeCluster ?? defaultProbeCluster;
+  if (!(await probeCluster())) return;
+  const read = await readPoliciesFromCluster(deps);
+  if (read.status === 'ok') {
+    policyRules.splice(0, policyRules.length, ...read.rules);
+  }
+}
+
+/** Build the ConfigMap manifest holding a rule set, as YAML (C6: objects, never interpolation). */
+function buildPoliciesConfigMapManifest(rules: AdmissionPolicyRule[]): string {
+  return stringifyYaml({
+    apiVersion: 'v1',
+    kind: 'ConfigMap',
+    metadata: {
+      name: GUARD_POLICIES_CONFIGMAP,
+      namespace: GUARD_POLICIES_NAMESPACE,
+      labels: { 'app.kubernetes.io/managed-by': 'vigilant-octo-waffle' },
+    },
+    data: { [GUARD_POLICIES_DATA_KEY]: JSON.stringify(rules) },
+  });
+}
+
+/**
+ * List the admission policies, synced from the cluster. The persisted
+ * state is unreadable with no cluster, so this errors (503
+ * `cluster_unavailable` at the route) instead of returning the
+ * in-memory defaults — the `enabled` flags in those defaults may not
+ * match what an operator persisted.
+ */
+export async function listAdmissionPolicies(deps: GuardDeps = {}): Promise<AdmissionPolicyRule[]> {
+  const probeCluster = deps.probeCluster ?? defaultProbeCluster;
+  if (!(await probeCluster())) {
+    throw new ClusterUnavailableError();
+  }
+  await syncPoliciesFromCluster(deps);
+  return policyRules.map((r) => ({ ...r }));
+}
+
+/**
+ * Toggle a rule and persist the change to the ConfigMap. The cluster is
+ * probed first: with no cluster the toggle errors (503
+ * `cluster_unavailable` at the route), never silently succeeds
+ * in-memory. The persisted state is read before writing, so a toggle
+ * never clobbers a rule changed by another replica or an operator, and
+ * the write is verified by reading the ConfigMap back — if the toggle
+ * did not land, this throws instead of reporting success. Unknown ids
+ * return null (the route maps that to 404); nothing is written.
+ */
+export async function togglePolicyRule(
+  ruleId: string,
+  enabled: boolean,
+  deps: GuardDeps = {}
+): Promise<AdmissionPolicyRule | null> {
+  const probeCluster = deps.probeCluster ?? defaultProbeCluster;
+  if (!(await probeCluster())) {
+    throw new ClusterUnavailableError();
+  }
+  await syncPoliciesFromCluster(deps);
+  const rule = requireFound(policyRules, (r) => r.id === ruleId);
   if (!rule) return null;
-  rule.enabled = enabled;
-  return { ...rule };
+  const updated = policyRules.map((r) => (r.id === ruleId ? { ...r, enabled } : { ...r }));
+  const manifest = buildPoliciesConfigMapManifest(updated);
+  const applied = await (deps.runKubectl ?? defaultRunKubectl)(['apply', '-f', '-'], manifest);
+  assertCommandSuccess(applied, 'kubectl apply -f - (guard policies ConfigMap)');
+  const readBack = await readPoliciesFromCluster(deps);
+  if (readBack.status !== 'ok') {
+    throw new Error('Guard policy ConfigMap could not be read back after apply');
+  }
+  policyRules.splice(0, policyRules.length, ...readBack.rules);
+  const verified = requireFound(policyRules, (r) => r.id === ruleId);
+  if (!verified || verified.enabled !== enabled) {
+    throw new Error('Guard policy toggle was not persisted');
+  }
+  return { ...verified };
+}
+
+/**
+ * Live admission-webhook presence, for the guard page banner. Lists the
+ * cluster's ValidatingWebhookConfiguration and MutatingWebhookConfiguration
+ * objects — no such object exists in a cluster without an admission
+ * controller installed, and the page must not claim enforcement that
+ * isn't there. A failed listing degrades to `error` (the page renders
+ * Unknown) rather than masquerading as "no webhook installed", while
+ * the policies list still loads.
+ */
+export interface AdmissionWebhookStatus {
+  installed: boolean;
+  validating: string[];
+  mutating: string[];
+  error?: string;
+}
+
+async function listWebhookConfigurationNames(
+  runKubectl: NonNullable<GuardDeps['runKubectl']>,
+  kind: 'validatingwebhookconfiguration' | 'mutatingwebhookconfiguration'
+): Promise<string[]> {
+  const result = await runKubectl(['get', kind, '-o', 'json']);
+  if (result.code !== 0) {
+    throw new Error(`Failed to list ${kind}`);
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(result.stdout);
+  } catch {
+    throw new Error(`Failed to list ${kind}: not valid JSON`);
+  }
+  const items = asRecord(doc)?.items;
+  if (!Array.isArray(items)) return [];
+  const names = items
+    .map((item) => asRecord(asRecord(item)?.metadata)?.name)
+    .filter((name): name is string => typeof name === 'string');
+  return [...names].sort();
+}
+
+export async function getAdmissionWebhookStatus(
+  deps: GuardDeps = {}
+): Promise<AdmissionWebhookStatus> {
+  const probeCluster = deps.probeCluster ?? defaultProbeCluster;
+  if (!(await probeCluster())) {
+    throw new ClusterUnavailableError();
+  }
+  const runKubectl = deps.runKubectl ?? defaultRunKubectl;
+  try {
+    const [validating, mutating] = await Promise.all([
+      listWebhookConfigurationNames(runKubectl, 'validatingwebhookconfiguration'),
+      listWebhookConfigurationNames(runKubectl, 'mutatingwebhookconfiguration'),
+    ]);
+    return { installed: validating.length + mutating.length > 0, validating, mutating };
+  } catch {
+    return {
+      installed: false,
+      validating: [],
+      mutating: [],
+      error: 'Could not list admission webhooks',
+    };
+  }
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -182,7 +447,17 @@ function imageIsPinned(image: unknown): boolean {
  * The mutated YAML is always produced from the parsed object, regardless
  * of which rules are enabled.
  */
-export async function evaluateManifest(yamlContent: string): Promise<EvaluationResult> {
+export async function evaluateManifest(
+  yamlContent: string,
+  deps: GuardDeps = {}
+): Promise<EvaluationResult> {
+  // Best-effort sync: evaluation is a pure-compute sandbox that works
+  // offline, so a failed sync (no cluster, no ConfigMap yet) keeps the
+  // in-memory rules and never throws. When the cluster is reachable,
+  // the persisted enabled flags apply — a rule disabled in the cluster
+  // must not reject a manifest evaluated here.
+  await syncPoliciesFromCluster(deps).catch(() => undefined);
+
   let doc: unknown;
   try {
     doc = parseYaml(yamlContent);
