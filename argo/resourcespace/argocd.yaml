@@ -13,11 +13,18 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/resourcespace
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://joshuacox.github.io/resourcespace_docker/
+    chart: resourcespace
+    targetRevision: 0.1.6
     helm:
       values: |
+        # The chart's mariadb Service template gates on .Values.service.enabled,
+        # but chart 0.1.6 ships no `service` key at all — without it the
+        # template dereferences nil and `helm template` fails. The template
+        # reads only `.enabled`, so this minimal block is all it needs.
+        service:
+          enabled: true
+
         # mariadb configuration
         mariadb:
           # key: mariadb.repository

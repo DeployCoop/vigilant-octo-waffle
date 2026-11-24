@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/sloth
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://slok.github.io/sloth
+    chart: sloth
+    targetRevision: 0.16.0
     helm:
       skipCrds: false
       values: |

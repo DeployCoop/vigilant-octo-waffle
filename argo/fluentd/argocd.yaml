@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/fluentd
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://fluent.github.io/helm-charts
+    chart: fluentd
+    targetRevision: 0.6.0
     helm:
       values: |
         nameOverride: ""

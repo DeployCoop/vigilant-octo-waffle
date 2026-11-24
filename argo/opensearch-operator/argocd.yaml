@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/opensearch-operator
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://opensearch-project.github.io/opensearch-k8s-operator/
+    chart: opensearch-operator
+    targetRevision: 3.0.14
     helm:
       values: |
         manager:
