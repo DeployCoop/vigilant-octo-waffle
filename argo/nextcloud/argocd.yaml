@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=true
   source:
-    path: charts/nextcloud
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://nextcloud.github.io/helm/
+    chart: nextcloud
+    targetRevision: 9.4.5
     helm:
       values: |
         ## Official nextcloud image version

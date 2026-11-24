@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/mosquitto
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://charts.ar80.eu
+    chart: mosquitto
+    targetRevision: 2.7.4
     helm:
       values: |
         replicaCount: ${THIS_AR80_MOSQUITTO_REPLICAS}

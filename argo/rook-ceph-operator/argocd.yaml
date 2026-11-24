@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/rook-ceph
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://charts.rook.io/release
+    chart: rook-ceph
+    targetRevision: 1.21.2
     helm:
       values: |
         monitoring:

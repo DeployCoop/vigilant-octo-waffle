@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/velero
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://vmware-tanzu.github.io/helm-charts
+    chart: velero
+    targetRevision: 12.2.5
     helm:
       values: |
         configuration:
@@ -153,17 +153,15 @@ spec:
           features:
           # Configures the timeout for provisioning the volume created from the CSI snapshot. Default: 30m
           dataMoverPrepareTimeout:
-          # Resource requests/limits to specify for the repository-maintenance job. Optional.
-          # https://velero.io/docs/v1.14/repository-maintenance/#resource-limitation
+          # Repository-maintenance job settings now live in a ConfigMap
+          # managed by the chart (repositoryConfigData). The old
+          # requests/limits keys were empty (no-op) and latestJobsCount: 3
+          # is preserved here as keepLatestMaintenanceJobs: 3.
+          # https://velero.io/docs/main/repository-maintenance/
           repositoryMaintenanceJob:
-            requests:
-            #   cpu: 500m
-            #   memory: 512Mi
-            limits:
-            #   cpu: 1000m
-            #   memory: 1024Mi
-            # Number of latest maintenance jobs to keep for each repository
-            latestJobsCount: 3
+            repositoryConfigData:
+              global:
+                keepLatestMaintenanceJobs: 3
           # `velero server` default: velero
           namespace:
           # additional command-line arguments that will be passed to the `velero server`

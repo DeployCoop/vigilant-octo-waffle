@@ -13,6 +13,6 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/mariadb-operator-crds
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://helm.mariadb.com/mariadb-operator
+    chart: mariadb-operator-crds
+    targetRevision: 26.10.2

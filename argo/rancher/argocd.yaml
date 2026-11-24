@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/rancher
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://releases.rancher.com/server-charts/latest
+    chart: rancher
+    targetRevision: 2.15.3
     helm:
       values: |
         # Additional Trusted CAs.

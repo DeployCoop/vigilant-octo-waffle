@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/opensearch-dashboards
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://opensearch-project.github.io/helm-charts/
+    chart: opensearch-dashboards
+    targetRevision: 3.10.0
     helm:
       values: |
         opensearchHosts: "${THIS_OPENSEARCH_SVC_HOST}"

@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/trino
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://trinodb.github.io/charts/
+    chart: trino
+    targetRevision: 1.45.0
     helm:
       values: |
         # Default values for trino.
