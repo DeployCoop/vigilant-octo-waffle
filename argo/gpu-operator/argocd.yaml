@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/gpu-operator
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://helm.ngc.nvidia.com/nvidia
+    chart: gpu-operator
+    targetRevision: v26.7.3
     helm:
       values: |
         # Default values for gpu-operator.

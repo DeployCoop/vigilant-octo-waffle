@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/opensearch
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://opensearch-project.github.io/helm-charts/
+    chart: opensearch
+    targetRevision: 3.10.0
     helm:
       values: |
         ---

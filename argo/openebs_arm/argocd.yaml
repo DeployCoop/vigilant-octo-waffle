@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/openebs
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://openebs.github.io/openebs
+    chart: openebs
+    targetRevision: 4.6.2
     helm:
       values: |
         openebs-crds:

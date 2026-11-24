@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/fluent-bit
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://fluent.github.io/helm-charts
+    chart: fluent-bit
+    targetRevision: 0.58.3
     helm:
       values: |
         # Default values for fluent-bit.

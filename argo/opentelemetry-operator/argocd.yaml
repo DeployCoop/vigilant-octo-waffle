@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/opentelemetry-operator
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-operator
+    targetRevision: 0.129.1
     helm:
       values: |
         # Default values for opentelemetry-operator.
@@ -110,8 +110,9 @@ spec:
           # Prefix a gate with '-' to disable support.
           # Prefixing a gate with '+' or no prefix will enable support.
           # A full list of valid identifiers can be found here: https://github.com/open-telemetry/opentelemetry-operator/blob/main/pkg/featuregate/featuregate.go
-          # NOTE: the featureGates value is deprecated and will be replaced by featureGatesMap in the future.
-          featureGates: ""
+          # NOTE: the featureGates value was removed with the kube-rbac-proxy
+          # era chart; featureGatesMap below is its replacement (empty here,
+          # matching the old empty featureGates: "").
           # The featureGatesMap will enable or disable specific feature gates in the operator as well as deploy any prerequisites for the feature gate.
           # If this property is not an empty map, the featureGates property will be ignored.
           featureGatesMap: {}
@@ -242,39 +243,6 @@ spec:
               minReplicas: 2
           # Enable manager pod automatically rolling
           rolling: false
-        
-          ## Container specific securityContext
-          ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            runAsNonRoot: true
-            seccompProfile:
-              type: RuntimeDefault
-        
-        ## Provide OpenTelemetry Operator kube-rbac-proxy container image.
-        ##
-        kubeRBACProxy:
-          enabled: true
-          image:
-            repository: quay.io/brancz/kube-rbac-proxy
-            tag: v0.19.1
-          ports:
-            proxyPort: 8443
-          resources: {}
-          # resources:
-          #   limits:
-          #     cpu: 500m
-          #     memory: 128Mi
-          #   requests:
-          #     cpu: 5m
-          #     memory: 64Mi
-        
-          ## List of additional cli arguments to configure the kube-rbac-proxy
-          ## for example: --tls-cipher-suites, --tls-min-version, etc.
-          extraArgs: []
         
           ## Container specific securityContext
           ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container

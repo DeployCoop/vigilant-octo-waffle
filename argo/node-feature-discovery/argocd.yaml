@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/node-feature-discovery
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://kubernetes-sigs.github.io/node-feature-discovery/charts
+    chart: node-feature-discovery
+    targetRevision: 0.20.1
     helm:
       values: |
         image:

@@ -1,13 +1,11 @@
 apiVersion: source.toolkit.fluxcd.io/v1
-kind: GitRepository
+kind: HelmRepository
 metadata:
   name: nextcloud-repo
   namespace: ${THIS_FLUX_NAMESPACE}
 spec:
   interval: ${THIS_FLUX_INTERVAL}
-  url: ${THIS_REPO_URL}
-  ref:
-    branch: ${THIS_FLUX_BRANCH}
+  url: https://nextcloud.github.io/helm/
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -19,9 +17,10 @@ spec:
   targetNamespace: ${THIS_NAMESPACE}
   chart:
     spec:
-      chart: charts/nextcloud
+      chart: nextcloud
+      version: 9.4.5
       sourceRef:
-        kind: GitRepository
+        kind: HelmRepository
         name: nextcloud-repo
         namespace: ${THIS_FLUX_NAMESPACE}
   values:

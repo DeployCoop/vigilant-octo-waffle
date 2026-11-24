@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/harbor
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://helm.goharbor.io
+    chart: harbor
+    targetRevision: 1.19.4
     helm:
       values: |
         expose:

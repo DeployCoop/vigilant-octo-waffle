@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/csi-driver-nfs
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
+    chart: csi-driver-nfs
+    targetRevision: 4.13.6
     helm:
       values: |
         customLabels: {}
