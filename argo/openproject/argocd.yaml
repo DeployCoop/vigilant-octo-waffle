@@ -18,7 +18,7 @@ spec:
     targetRevision: 14.0.0
     helm:
       values: |
-        develop: "${THIS_OPENPROJECT_DEV}"
+        develop: ${THIS_OPENPROJECT_DEV}
         ingress:
           enabled: true
           ingressClassName: "${THIS_CLUSTER_INGRESS}"
