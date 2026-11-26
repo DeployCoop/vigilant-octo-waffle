@@ -13,9 +13,9 @@ spec:
     syncOptions:
     - ServerSideApply=false
   source:
-    path: charts/openproject
-    repoURL: ${THIS_REPO_URL}
-    targetRevision: HEAD
+    repoURL: https://charts.openproject.org
+    chart: openproject
+    targetRevision: 14.0.0
     helm:
       values: |
         develop: "${THIS_OPENPROJECT_DEV}"
